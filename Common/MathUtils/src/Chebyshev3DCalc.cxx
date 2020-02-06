@@ -1,15 +1,25 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /// \file Cheb3DCalc.cxx
 /// \brief Implementation of the Cheb3DCalc class
 /// \author ruben.shahoyan@cern.ch 09/09/2006
 
 #include "MathUtils/Chebyshev3DCalc.h"
-#include <TSystem.h>  // for TSystem, gSystem
-#include "TNamed.h"   // for TNamed
-#include "TString.h"  // for TString, TString::EStripType::kBoth
+#include <TSystem.h> // for TSystem, gSystem
+#include "TNamed.h"  // for TNamed
+#include "TString.h" // for TString, TString::EStripType::kBoth
 
-using namespace AliceO2::MathUtils;
+using namespace o2::math_utils;
 
-ClassImp(Chebyshev3DCalc)
+ClassImp(Chebyshev3DCalc);
 
 Chebyshev3DCalc::Chebyshev3DCalc()
   : mNumberOfCoefficients(0),
@@ -17,30 +27,30 @@ Chebyshev3DCalc::Chebyshev3DCalc()
     mNumberOfColumns(0),
     mNumberOfElementsBound2D(0),
     mPrecision(0),
-    mNumberOfColumnsAtRow(0),
-    mColumnAtRowBeginning(0),
-    mCoefficientBound2D0(0),
-    mCoefficientBound2D1(0),
-    mCoefficients(0),
-    mTemporaryCoefficients2D(0),
-    mTemporaryCoefficients1D(0)
+    mNumberOfColumnsAtRow(nullptr),
+    mColumnAtRowBeginning(nullptr),
+    mCoefficientBound2D0(nullptr),
+    mCoefficientBound2D1(nullptr),
+    mCoefficients(nullptr),
+    mTemporaryCoefficients2D(nullptr),
+    mTemporaryCoefficients1D(nullptr)
 {
 }
 
-Chebyshev3DCalc::Chebyshev3DCalc(const Chebyshev3DCalc &src)
+Chebyshev3DCalc::Chebyshev3DCalc(const Chebyshev3DCalc& src)
   : TNamed(src),
     mNumberOfCoefficients(src.mNumberOfCoefficients),
     mNumberOfRows(src.mNumberOfRows),
     mNumberOfColumns(src.mNumberOfColumns),
     mNumberOfElementsBound2D(src.mNumberOfElementsBound2D),
     mPrecision(src.mPrecision),
-    mNumberOfColumnsAtRow(0),
-    mColumnAtRowBeginning(0),
-    mCoefficientBound2D0(0),
-    mCoefficientBound2D1(0),
-    mCoefficients(0),
-    mTemporaryCoefficients2D(0),
-    mTemporaryCoefficients1D(0)
+    mNumberOfColumnsAtRow(nullptr),
+    mColumnAtRowBeginning(nullptr),
+    mCoefficientBound2D0(nullptr),
+    mCoefficientBound2D1(nullptr),
+    mCoefficients(nullptr),
+    mTemporaryCoefficients2D(nullptr),
+    mTemporaryCoefficients1D(nullptr)
 {
   if (src.mNumberOfColumnsAtRow) {
     mNumberOfColumnsAtRow = new UShort_t[mNumberOfRows];
@@ -80,24 +90,24 @@ Chebyshev3DCalc::Chebyshev3DCalc(const Chebyshev3DCalc &src)
   }
 }
 
-Chebyshev3DCalc::Chebyshev3DCalc(FILE *stream)
+Chebyshev3DCalc::Chebyshev3DCalc(FILE* stream)
   : mNumberOfCoefficients(0),
     mNumberOfRows(0),
     mNumberOfColumns(0),
     mNumberOfElementsBound2D(0),
     mPrecision(0),
-    mNumberOfColumnsAtRow(0),
-    mColumnAtRowBeginning(0),
-    mCoefficientBound2D0(0),
-    mCoefficientBound2D1(0),
-    mCoefficients(0),
-    mTemporaryCoefficients2D(0),
-    mTemporaryCoefficients1D(0)
+    mNumberOfColumnsAtRow(nullptr),
+    mColumnAtRowBeginning(nullptr),
+    mCoefficientBound2D0(nullptr),
+    mCoefficientBound2D1(nullptr),
+    mCoefficients(nullptr),
+    mTemporaryCoefficients2D(nullptr),
+    mTemporaryCoefficients1D(nullptr)
 {
   loadData(stream);
 }
 
-Chebyshev3DCalc &Chebyshev3DCalc::operator=(const Chebyshev3DCalc &rhs)
+Chebyshev3DCalc& Chebyshev3DCalc::operator=(const Chebyshev3DCalc& rhs)
 {
   if (this != &rhs) {
     Clear();
@@ -147,39 +157,39 @@ Chebyshev3DCalc &Chebyshev3DCalc::operator=(const Chebyshev3DCalc &rhs)
   return *this;
 }
 
-void Chebyshev3DCalc::Clear(const Option_t *)
+void Chebyshev3DCalc::Clear(const Option_t*)
 {
   if (mTemporaryCoefficients2D) {
     delete[] mTemporaryCoefficients2D;
-    mTemporaryCoefficients2D = 0;
+    mTemporaryCoefficients2D = nullptr;
   }
   if (mTemporaryCoefficients1D) {
     delete[] mTemporaryCoefficients1D;
-    mTemporaryCoefficients1D = 0;
+    mTemporaryCoefficients1D = nullptr;
   }
   if (mCoefficients) {
     delete[] mCoefficients;
-    mCoefficients = 0;
+    mCoefficients = nullptr;
   }
   if (mCoefficientBound2D0) {
     delete[] mCoefficientBound2D0;
-    mCoefficientBound2D0 = 0;
+    mCoefficientBound2D0 = nullptr;
   }
   if (mCoefficientBound2D1) {
     delete[] mCoefficientBound2D1;
-    mCoefficientBound2D1 = 0;
+    mCoefficientBound2D1 = nullptr;
   }
   if (mNumberOfColumnsAtRow) {
     delete[] mNumberOfColumnsAtRow;
-    mNumberOfColumnsAtRow = 0;
+    mNumberOfColumnsAtRow = nullptr;
   }
   if (mColumnAtRowBeginning) {
     delete[] mColumnAtRowBeginning;
-    mColumnAtRowBeginning = 0;
+    mColumnAtRowBeginning = nullptr;
   }
 }
 
-void Chebyshev3DCalc::Print(const Option_t *) const
+void Chebyshev3DCalc::Print(const Option_t*) const
 {
   printf("Chebyshev parameterization data %s for 3D->1 function, precision: %e\n",
          GetName(), mPrecision);
@@ -192,7 +202,7 @@ void Chebyshev3DCalc::Print(const Option_t *) const
   printf("%d coefficients in %dx%dx%d matrix\n", mNumberOfCoefficients, mNumberOfRows, mNumberOfColumns, nmax3d);
 }
 
-Float_t Chebyshev3DCalc::evaluateDerivative(int dim, const Float_t *par) const
+Float_t Chebyshev3DCalc::evaluateDerivative(int dim, const Float_t* par) const
 {
   int ncfRC;
   for (int id0 = mNumberOfRows; id0--;) {
@@ -226,7 +236,7 @@ Float_t Chebyshev3DCalc::evaluateDerivative(int dim, const Float_t *par) const
                     : chebyshevEvaluation1D(par[0], mTemporaryCoefficients1D, mNumberOfRows);
 }
 
-Float_t Chebyshev3DCalc::evaluateDerivative2(int dim1, int dim2, const Float_t *par) const
+Float_t Chebyshev3DCalc::evaluateDerivative2(int dim1, int dim2, const Float_t* par) const
 {
   Bool_t same = dim1 == dim2;
   int ncfRC;
@@ -259,9 +269,9 @@ Float_t Chebyshev3DCalc::evaluateDerivative2(int dim1, int dim2, const Float_t *
     }
   }
   return (dim1 == 0 || dim2 == 0)
-         ? (same ? chebyshevEvaluation1Derivative2(par[0], mTemporaryCoefficients1D, mNumberOfRows)
-                 : chebyshevEvaluation1Derivative(par[0], mTemporaryCoefficients1D, mNumberOfRows))
-         : chebyshevEvaluation1D(par[0], mTemporaryCoefficients1D, mNumberOfRows);
+           ? (same ? chebyshevEvaluation1Derivative2(par[0], mTemporaryCoefficients1D, mNumberOfRows)
+                   : chebyshevEvaluation1Derivative(par[0], mTemporaryCoefficients1D, mNumberOfRows))
+           : chebyshevEvaluation1D(par[0], mTemporaryCoefficients1D, mNumberOfRows);
 }
 
 #ifdef _INC_CREATION_Chebyshev3D_
@@ -295,14 +305,14 @@ void Chebyshev3DCalc::saveData(FILE* stream) const
   for (int i = 0; i < mNumberOfCoefficients; i++) {
     fprintf(stream, "%+.8e\n", mCoefficients[i]);
   }
-  fprintf(stream,"# Precision\n");
-  fprintf(stream,"%+.8e\n",mPrecision);
+  fprintf(stream, "# Precision\n");
+  fprintf(stream, "%+.8e\n", mPrecision);
   //
   fprintf(stream, "END %s\n", GetName());
 }
 #endif
 
-void Chebyshev3DCalc::loadData(FILE *stream)
+void Chebyshev3DCalc::loadData(FILE* stream)
 {
   if (!stream) {
     Error("LoadData", "No stream provided.\nStop");
@@ -371,7 +381,7 @@ void Chebyshev3DCalc::loadData(FILE *stream)
   }
 }
 
-void Chebyshev3DCalc::readLine(TString &str, FILE *stream)
+void Chebyshev3DCalc::readLine(TString& str, FILE* stream)
 {
   while (str.Gets(stream)) {
     str = str.Strip(TString::kBoth, ' ');
@@ -388,15 +398,15 @@ void Chebyshev3DCalc::initializeRows(int nr)
 {
   if (mNumberOfColumnsAtRow) {
     delete[] mNumberOfColumnsAtRow;
-    mNumberOfColumnsAtRow = 0;
+    mNumberOfColumnsAtRow = nullptr;
   }
   if (mColumnAtRowBeginning) {
     delete[] mColumnAtRowBeginning;
-    mColumnAtRowBeginning = 0;
+    mColumnAtRowBeginning = nullptr;
   }
   if (mTemporaryCoefficients1D) {
     delete[] mTemporaryCoefficients1D;
-    mTemporaryCoefficients1D = 0;
+    mTemporaryCoefficients1D = nullptr;
   }
   mNumberOfRows = nr;
   if (mNumberOfRows) {
@@ -414,20 +424,22 @@ void Chebyshev3DCalc::initializeColumns(int nc)
   mNumberOfColumns = nc;
   if (mTemporaryCoefficients2D) {
     delete[] mTemporaryCoefficients2D;
-    mTemporaryCoefficients2D = 0;
+    mTemporaryCoefficients2D = nullptr;
   }
-  if (mNumberOfColumns) { mTemporaryCoefficients2D = new Float_t[mNumberOfColumns]; }
+  if (mNumberOfColumns) {
+    mTemporaryCoefficients2D = new Float_t[mNumberOfColumns];
+  }
 }
 
 void Chebyshev3DCalc::initializeElementBound2D(int ne)
 {
   if (mCoefficientBound2D0) {
     delete[] mCoefficientBound2D0;
-    mCoefficientBound2D0 = 0;
+    mCoefficientBound2D0 = nullptr;
   }
   if (mCoefficientBound2D1) {
     delete[] mCoefficientBound2D1;
-    mCoefficientBound2D1 = 0;
+    mCoefficientBound2D1 = nullptr;
   }
   mNumberOfElementsBound2D = ne;
   if (mNumberOfElementsBound2D) {
@@ -443,7 +455,7 @@ void Chebyshev3DCalc::initializeCoefficients(int nc)
 {
   if (mCoefficients) {
     delete[] mCoefficients;
-    mCoefficients = 0;
+    mCoefficients = nullptr;
   }
   mNumberOfCoefficients = nc;
   if (mNumberOfCoefficients) {
@@ -454,7 +466,7 @@ void Chebyshev3DCalc::initializeCoefficients(int nc)
   }
 }
 
-Float_t Chebyshev3DCalc::chebyshevEvaluation1Derivative(Float_t x, const Float_t *array, int ncf)
+Float_t Chebyshev3DCalc::chebyshevEvaluation1Derivative(Float_t x, const Float_t* array, int ncf)
 {
   if (--ncf < 1) {
     return 0;
@@ -480,7 +492,7 @@ Float_t Chebyshev3DCalc::chebyshevEvaluation1Derivative(Float_t x, const Float_t
   return b0 - x * b1 - dcf0 / 2;
 }
 
-Float_t Chebyshev3DCalc::chebyshevEvaluation1Derivative2(Float_t x, const Float_t *array, int ncf)
+Float_t Chebyshev3DCalc::chebyshevEvaluation1Derivative2(Float_t x, const Float_t* array, int ncf)
 {
   if (--ncf < 2) {
     return 0;

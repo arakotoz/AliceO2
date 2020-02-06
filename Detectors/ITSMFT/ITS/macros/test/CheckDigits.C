@@ -1,92 +1,205 @@
 /// \file CheckDigits.C
 /// \brief Simple macro to check ITSU digits
 
-#if !defined(__CINT__) || defined(__MAKECINT__)
-  #include <TFile.h>
-  #include <TTree.h>
-  #include <TClonesArray.h>
-  #include <TH2F.h>
-  #include <TNtuple.h>
-  #include <TCanvas.h>
-  #include <TString.h>
+#if !defined(__CLING__) || defined(__ROOTCLING__)
+#include <TCanvas.h>
+#include <TFile.h>
+#include <TH2F.h>
+#include <TNtuple.h>
+#include <TString.h>
+#include <TTree.h>
 
-  #include "ITSMFTBase/SegmentationPixel.h"
-  #include "ITSMFTBase/Digit.h"
-  #include "ITSMFTSimulation/Point.h"
-  #include "ITSBase/GeometryTGeo.h"
+#include <vector>
+#include "ITSBase/GeometryTGeo.h"
+#include "DataFormatsITSMFT/Digit.h"
+#include "ITSMFTBase/SegmentationAlpide.h"
+#include "ITSMFTSimulation/Hit.h"
+#include "MathUtils/Utils.h"
+#include "SimulationDataFormat/MCTruthContainer.h"
+#include "SimulationDataFormat/MCCompLabel.h"
+#include "DetectorsBase/GeometryManager.h"
+
+#include "DataFormatsITSMFT/ROFRecord.h"
+
 #endif
 
-void CheckDigits(Int_t nEvents = 10, TString mcEngine = "TGeant3") {
-  using AliceO2::ITSMFT::SegmentationPixel;
-  using AliceO2::ITSMFT::Digit;
-  using AliceO2::ITSMFT::Point;
-  using namespace AliceO2::ITS;
+void CheckDigits(std::string digifile = "itsdigits.root", std::string hitfile = "o2sim.root", std::string inputGeom = "O2geometry.root", std::string paramfile = "o2sim_par.root")
+{
 
-  TFile *f=TFile::Open("CheckDigits.root","recreate");
-  TNtuple *nt=new TNtuple("ntd","digit ntuple","x:y:z:dx:dz");
+  using namespace o2::base;
+  using namespace o2::its;
 
-  char filename[100];
+  using o2::itsmft::Digit;
+  using o2::itsmft::Hit;
+
+  using o2::itsmft::SegmentationAlpide;
+
+  TFile* f = TFile::Open("CheckDigits.root", "recreate");
+
+  TNtuple* nt = new TNtuple("ntd", "digit ntuple", "id:x:y:z:rowD:colD:rowH:colH:xlH:zlH:xlcH:zlcH:dx:dz");
 
   // Geometry
-  sprintf(filename, "AliceO2_%s.params_%i.root", mcEngine.Data(), nEvents);
-  TFile *file = TFile::Open(filename);
-  gFile->Get("FairGeoParSet");
-  GeometryTGeo *gman = new GeometryTGeo(kTRUE);
-  SegmentationPixel *seg =
-    (SegmentationPixel*)gman->getSegmentationById(0);
+  o2::base::GeometryManager::loadGeometry(inputGeom, "FAIRGeom");
+  auto* gman = o2::its::GeometryTGeo::Instance();
+  gman->fillMatrixCache(o2::utils::bit2Mask(o2::TransformType::L2G));
+
+  SegmentationAlpide seg;
 
   // Hits
-  sprintf(filename, "AliceO2_%s.mc_%i_event.root", mcEngine.Data(), nEvents);
-  TFile *file0 = TFile::Open(filename);
-  TTree *hitTree=(TTree*)gFile->Get("cbmsim");
-  TClonesArray hitArr("AliceO2::ITSMFT::Point"), *phitArr(&hitArr);
-  hitTree->SetBranchAddress("ITSPoint",&phitArr);
+  TFile* hitFile = TFile::Open(hitfile.data());
+  TTree* hitTree = (TTree*)hitFile->Get("o2sim");
+  int nevH = hitTree->GetEntries(); // hits are stored as one event per entry
+  std::vector<std::vector<o2::itsmft::Hit>*> hitArray(nevH, nullptr);
+
+  std::vector<std::unordered_map<uint64_t, int>> mc2hitVec(nevH);
 
   // Digits
-  sprintf(filename, "AliceO2_%s.digi_%i_event.root", mcEngine.Data(), nEvents);
-  TFile *file1 = TFile::Open(filename);
-  TTree *digTree=(TTree*)gFile->Get("cbmsim");
-  TClonesArray digArr("AliceO2::ITSMFT::Digit"), *pdigArr(&digArr);
-  digTree->SetBranchAddress("ITSDigit",&pdigArr);
-  
-  Int_t nev=hitTree->GetEntries();
-  while (nev--) {
-    hitTree->GetEvent(nev);
-    Int_t nh=hitArr.GetEntriesFast();
-    digTree->GetEvent(nev);
-    Int_t nd=digArr.GetEntriesFast();
-    while(nd--) {
-      Digit *d=(Digit *)digArr.UncheckedAt(nd);
-      Int_t ix=d->getRow(), iz=d->getColumn();
-      Float_t x,z; 
-      seg->detectorToLocal(ix,iz,x,z);
-      const Double_t loc[3]={x,0.,z};
-      
-      Int_t chipID=d->getChipIndex();
-      Int_t lab=d->getLabel(0);
+  TFile* digFile = TFile::Open(digifile.data());
+  TTree* digTree = (TTree*)digFile->Get("o2sim");
 
-      Double_t glo[3]={0., 0., 0.}, dx=0., dz=0.;
-      gman->localToGlobal(chipID,loc,glo);
+  std::vector<o2::itsmft::Digit>* digArr = nullptr;
+  digTree->SetBranchAddress("ITSDigit", &digArr);
 
-      for (Int_t i=0; i<nh; i++) {
-        Point *p=(Point *)hitArr.UncheckedAt(i);
-	if (p->GetDetectorID() != chipID) continue; 
-	if (p->GetTrackID() != lab) continue;
-        Double_t x=0.5*(p->GetX() + p->GetStartX());
-        Double_t y=0.5*(p->GetY() + p->GetStartY());
-        Double_t z=0.5*(p->GetZ() + p->GetStartZ());
-        Double_t g[3]={x, y, z}, l[3];
-	gman->globalToLocal(chipID,g,l);
-        dx=l[0]-loc[0]; dz=l[2]-loc[2];
-	break;
-      }
-      
-      nt->Fill(glo[0],glo[1],glo[2],dx,dz);
+  o2::dataformats::MCTruthContainer<o2::MCCompLabel>* labels = nullptr;
+  digTree->SetBranchAddress("ITSDigitMCTruth", &labels);
 
+  int nevD = digTree->GetEntries(); // digits in cont. readout may be grouped as few events per entry
+
+  int lastReadHitEv = -1;
+
+  int nDigitRead = 0, nDigitFilled = 0;
+
+  // Get Read Out Frame arrays
+  std::vector<o2::itsmft::ROFRecord>* ROFRecordArrray = nullptr;
+  digTree->SetBranchAddress("ITSDigitROF", &ROFRecordArrray);
+  std::vector<o2::itsmft::ROFRecord>& ROFRecordArrrayRef = *ROFRecordArrray;
+
+  std::vector<o2::itsmft::MC2ROFRecord>* MC2ROFRecordArrray = nullptr;
+  digTree->SetBranchAddress("ITSDigitMC2ROF", &MC2ROFRecordArrray);
+  std::vector<o2::itsmft::MC2ROFRecord>& MC2ROFRecordArrrayRef = *MC2ROFRecordArrray;
+
+  digTree->GetEntry(0);
+
+  int nROFRec = (int)ROFRecordArrrayRef.size();
+  std::vector<int> mcEvMin(nROFRec, hitTree->GetEntries());
+  std::vector<int> mcEvMax(nROFRec, -1);
+
+  // >> build min and max MC events used by each ROF
+  for (int imc = MC2ROFRecordArrrayRef.size(); imc--;) {
+    const auto& mc2rof = MC2ROFRecordArrrayRef[imc];
+    printf("MCRecord: ");
+    mc2rof.print();
+
+    if (mc2rof.rofRecordID < 0) {
+      continue; // this MC event did not contribute to any ROF
     }
-  }
-  new TCanvas; nt->Draw("y:x");
-  new TCanvas; nt->Draw("dx:dz");
+
+    for (int irfd = mc2rof.maxROF - mc2rof.minROF + 1; irfd--;) {
+
+      int irof = mc2rof.rofRecordID + irfd;
+
+      if (irof >= nROFRec) {
+        LOG(ERROR) << "ROF=" << irof << " from MC2ROF record is >= N ROFs=" << nROFRec;
+      }
+      if (mcEvMin[irof] > imc) {
+        mcEvMin[irof] = imc;
+      }
+      if (mcEvMax[irof] < imc) {
+        mcEvMax[irof] = imc;
+      }
+    }
+  } // << build min and max MC events used by each ROF
+
+  unsigned int rofIndex = 0;
+  unsigned int rofNEntries = 0;
+
+  // LOOP on : ROFRecord array
+  for (unsigned int iROF = 0; iROF < ROFRecordArrrayRef.size(); iROF++) {
+
+    rofIndex = ROFRecordArrrayRef[iROF].getFirstEntry();
+    rofNEntries = ROFRecordArrrayRef[iROF].getNEntries();
+
+    // >> read and map MC events contributing to this ROF
+    for (int im = mcEvMin[iROF]; im <= mcEvMax[iROF]; im++) {
+
+      if (!hitArray[im]) {
+
+        hitTree->SetBranchAddress("ITSHit", &hitArray[im]);
+        hitTree->GetEntry(im);
+
+        auto& mc2hit = mc2hitVec[im];
+
+        for (int ih = hitArray[im]->size(); ih--;) {
+
+          const auto& hit = (*hitArray[im])[ih];
+          uint64_t key = (uint64_t(hit.GetTrackID()) << 32) + hit.GetDetectorID();
+          mc2hit.emplace(key, ih);
+        }
+      }
+    }
+
+    // LOOP on : digits array
+    for (unsigned int iDigit = rofIndex; iDigit < rofIndex + rofNEntries; iDigit++) {
+
+      Int_t ix = (*digArr)[iDigit].getRow(), iz = (*digArr)[iDigit].getColumn();
+      Float_t x = 0.f, z = 0.f;
+
+      seg.detectorToLocal(ix, iz, x, z);
+
+      const Point3D<float> locD(x, 0., z);
+
+      Int_t chipID = (*digArr)[iDigit].getChipIndex();
+      auto lab = (labels->getLabels(iDigit))[0];
+
+      int trID = lab.getTrackID();
+
+      if (lab.isValid()) { // not a noise
+
+        nDigitRead++;
+
+        const auto gloD = gman->getMatrixL2G(chipID)(locD); // convert to global
+        float dx = 0., dz = 0.;
+
+        std::unordered_map<uint64_t, int>* mc2hit = &mc2hitVec[lab.getEventID()];
+
+        // get MC info
+        uint64_t key = (uint64_t(trID) << 32) + chipID;
+        auto hitEntry = mc2hit->find(key);
+
+        if (hitEntry == mc2hit->end()) {
+
+          LOG(ERROR) << "Failed to find MC hit entry for Tr" << trID << " chipID" << chipID;
+          continue;
+        }
+
+        Hit& hit = (*hitArray[lab.getEventID()])[hitEntry->second];
+
+        auto locH = gman->getMatrixL2G(chipID) ^ (hit.GetPos()); // inverse conversion from global to local
+        auto locHsta = gman->getMatrixL2G(chipID) ^ (hit.GetPosStart());
+
+        locH.SetXYZ(0.5 * (locH.X() + locHsta.X()), 0.5 * (locH.Y() + locHsta.Y()), 0.5 * (locH.Z() + locHsta.Z()));
+
+        int row, col;
+        float xlc = 0., zlc = 0.;
+
+        seg.localToDetector(locH.X(), locH.Z(), row, col);
+        seg.detectorToLocal(row, col, xlc, zlc);
+
+        nt->Fill(chipID, gloD.X(), gloD.Y(), gloD.Z(), ix, iz, row, col, locH.X(), locH.Z(), xlc, zlc, locH.X() - locD.X(), locH.Z() - locD.Z());
+
+        nDigitFilled++;
+      }
+
+    } // end loop on digits array
+
+  } // end loop on ROFRecords array
+
+  new TCanvas;
+  nt->Draw("y:x");
+  new TCanvas;
+  nt->Draw("dx:dz", "abs(dx)<0.01 && abs(dz)<0.01");
+
   f->Write();
   f->Close();
+  printf("read %d filled %d\n", nDigitRead, nDigitFilled);
 }

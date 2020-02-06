@@ -1,0 +1,33 @@
+*******************************************
+*                                         *
+* Special Cuts to Optimize Tracking Speed *
+*                                         *
+*******************************************
+*  ---  CUTS: GAM   ELEC  NHAD  CHAD  MUON  EBREM MUHAB EDEL  MUDEL MUPA
+*  ---  PROCESSES: ANNI BREM COMP DCAY DRAY HADR LOSS MULS PAIR PHOT RAYL STRA
+*
+*
+* ZDC
+* ===
+*
+*   Med  GAM   ELEC  NHAD  CHAD  MUON  EBREM MUHAB EDEL  MUDEL MUPA ANNI BREM COMP DCAY DRAY HADR LOSS MULS PAIR PHOT RAYL STRA
+* W alloy
+ZDC  kWalloy   1e-3  1e-3  1e-2  1e-2
+* brass
+ZDC  kCuZn   1e-3  1e-3  1e-2  1e-2
+* Si02 (I)
+ZDC  kSiO2pmc   1e-3  1e-3  1e-3  1e-3  0.01  1e-3  1e-3  -1     -1  -1     0    0    0    0   0     0   1     0    0    0   0
+* Si02 (II)
+ZDC  kSiO2pmq   1e-3  1e-3  1e-3  1e-3  0.01  1e-3  1e-3  -1     -1  -1     0    0    0    0   0     0   1     0    0    0   0
+* Pb
+ZDC  kPb   1e-3  1e-3  1e-2  1e-2
+* Cu (to avoid too detailed showering in TDI)
+ZDC  kCu   .1  .1  1.  1.
+* Fe with energy loss and high thresholds (beam pipe)
+ZDC  kFe   .1  .1  1.  1.
+* Fe with energy loss and low threshold (recombination chamber)
+ZDC  kFeLowTh   1e-3  1e-3  1e-2  1e-2
+* Cu (luminometer)
+ZDC  kCuLumi   1e-3  1e-3  1e-2  1e-2
+* void with field
+ZDC  kVoidwField  1e-3  1e-3  1e-3  1e-3  0.01  1e-3  1e-3  -1     -1  -1     0    0    0    0   0     0   0     0    0    0   0

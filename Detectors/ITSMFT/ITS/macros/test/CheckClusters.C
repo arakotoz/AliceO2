@@ -1,89 +1,179 @@
 /// \file CheckDigits.C
 /// \brief Simple macro to check ITSU clusters
 
-#if !defined(__CINT__) || defined(__MAKECINT__)
-  #include <TFile.h>
-  #include <TTree.h>
-  #include <TClonesArray.h>
-  #include <TH2F.h>
-  #include <TNtuple.h>
-  #include <TCanvas.h>
-  #include <TString.h>
+#if !defined(__CLING__) || defined(__ROOTCLING__)
+#include <TCanvas.h>
+#include <TFile.h>
+#include <TH2F.h>
+#include <TNtuple.h>
+#include <TString.h>
+#include <TTree.h>
 
-  #include "ITSMFTSimulation/Point.h"
-  #include "ITSBase/GeometryTGeo.h"
-  #include "ITSReconstruction/Cluster.h"
+#include "ITSMFTBase/SegmentationAlpide.h"
+#include "ITSBase/GeometryTGeo.h"
+#include "DataFormatsITSMFT/Cluster.h"
+#include "ITSMFTSimulation/Hit.h"
+#include "DataFormatsITSMFT/ROFRecord.h"
+#include "MathUtils/Cartesian3D.h"
+#include "MathUtils/Utils.h"
+#include "SimulationDataFormat/MCCompLabel.h"
+#include "SimulationDataFormat/MCTruthContainer.h"
 #endif
 
+void CheckClusters(std::string clusfile = "o2clus_its.root", std::string hitfile = "o2sim.root", std::string inputGeom = "O2geometry.root", std::string paramfile = "o2sim_par.root")
+{
+  const int QEDSourceID = 99; // Clusters from this MC source correspond to QED electrons
 
-void CheckClusters(Int_t nEvents = 10, TString mcEngine = "TGeant3") {
-  using AliceO2::ITSMFT::Point;
-  using namespace AliceO2::ITS;
+  using namespace o2::base;
+  using namespace o2::its;
 
-  TFile *f=TFile::Open("CheckClusters.root","recreate");
-  TNtuple *nt=new TNtuple("ntc","cluster ntuple","x:y:z:dx:dz");
+  using Segmentation = o2::itsmft::SegmentationAlpide;
+  using o2::itsmft::Cluster;
+  using o2::itsmft::Hit;
+  using ROFRec = o2::itsmft::ROFRecord;
+  using MC2ROF = o2::itsmft::MC2ROFRecord;
+  using HitVec = std::vector<Hit>;
+  using MC2HITS_map = std::unordered_map<uint64_t, int>; // maps (track_ID<<16 + chip_ID) to entry in the hit vector
 
-  char filename[100];
+  std::vector<HitVec*> hitVecPool;
+  std::vector<MC2HITS_map> mc2hitVec;
+
+  TFile fout("CheckClusters.root", "recreate");
+  TNtuple nt("ntc", "cluster ntuple", "ev:lab:hlx:hlz:tx:tz:cgx:cgy:cgz:dx:dy:dz:rof:npx:id");
 
   // Geometry
-  sprintf(filename, "AliceO2_%s.params_%i.root", mcEngine.Data(), nEvents);
-  TFile *file = TFile::Open(filename);
-  gFile->Get("FairGeoParSet");
-  GeometryTGeo *gman = new GeometryTGeo(kTRUE);
+  o2::base::GeometryManager::loadGeometry(inputGeom, "FAIRGeom");
+  auto gman = o2::its::GeometryTGeo::Instance();
+  gman->fillMatrixCache(o2::utils::bit2Mask(o2::TransformType::T2L, o2::TransformType::T2GRot,
+                                            o2::TransformType::L2G)); // request cached transforms
 
-  Cluster::setGeom(gman);
-  
   // Hits
-  sprintf(filename, "AliceO2_%s.mc_%i_event.root", mcEngine.Data(), nEvents);
-  TFile *file0 = TFile::Open(filename);
-  TTree *hitTree=(TTree*)gFile->Get("cbmsim");
-  TClonesArray hitArr("AliceO2::ITSMFT::Point"), *phitArr(&hitArr);
-  hitTree->SetBranchAddress("ITSPoint",&phitArr);
+  TFile fileH(hitfile.data());
+  TTree* hitTree = (TTree*)fileH.Get("o2sim");
+  std::vector<o2::itsmft::Hit>* hitArray = nullptr;
+  hitTree->SetBranchAddress("ITSHit", &hitArray);
+  mc2hitVec.resize(hitTree->GetEntries());
+  hitVecPool.resize(hitTree->GetEntries(), nullptr);
 
   // Clusters
-  sprintf(filename, "AliceO2_%s.clus_%i_event.root", mcEngine.Data(), nEvents);
-  TFile *file1 = TFile::Open(filename);
-  TTree *clusTree=(TTree*)gFile->Get("cbmsim");
-  TClonesArray clusArr("AliceO2::ITS::Cluster"), *pclusArr(&clusArr);
-  clusTree->SetBranchAddress("ITSCluster",&pclusArr);
-  
-  Int_t nev=hitTree->GetEntries();
-  while (nev--) {
-    hitTree->GetEvent(nev);
-    Int_t nh=hitArr.GetEntriesFast();
-    clusTree->GetEvent(nev);
-    Int_t nc=clusArr.GetEntriesFast();
-    while(nc--) {
-      Cluster *c=static_cast<Cluster *>(clusArr.UncheckedAt(nc));
-      c->goToFrameLoc();
-      const Double_t loc[3]={c->getX(), 0., c->getZ()};
-      
-      Int_t chipID=c->getVolumeId();
-      Int_t lab=c->getLabel(0);
+  TFile fileC(clusfile.data());
+  TTree* clusTree = (TTree*)fileC.Get("o2sim");
+  std::vector<Cluster>* clusArr = nullptr;
+  clusTree->SetBranchAddress("ITSCluster", &clusArr);
 
-      Double_t glo[3]={0., 0., 0.}, dx=0., dz=0.;
-      gman->localToGlobal(chipID,loc,glo);
+  // ROFrecords
+  std::vector<ROFRec> rofRecVec, *rofRecVecP = &rofRecVec;
+  clusTree->SetBranchAddress("ITSClustersROF", &rofRecVecP);
 
-      for (Int_t i=0; i<nh; i++) {
-        Point *p=static_cast<Point *>(hitArr.UncheckedAt(i));
-	if (p->GetDetectorID() != chipID) continue; 
-	if (p->GetTrackID() != lab) continue;
-        Double_t x=0.5*(p->GetX() + p->GetStartX());
-        Double_t y=0.5*(p->GetY() + p->GetStartY());
-        Double_t z=0.5*(p->GetZ() + p->GetStartZ());
-        Double_t g[3]={x, y, z}, l[3];
-	gman->globalToLocal(chipID,g,l);
-        dx=l[0]-loc[0]; dz=l[2]-loc[2];
-        dx=loc[0]; dz=loc[2];
-	break;
+  // Cluster MC labels
+  o2::dataformats::MCTruthContainer<o2::MCCompLabel>* clusLabArr = nullptr;
+  std::vector<MC2ROF> mc2rofVec, *mc2rofVecP = &mc2rofVec;
+  if (hitTree && clusTree->GetBranch("ITSClusterMCTruth")) {
+    clusTree->SetBranchAddress("ITSClusterMCTruth", &clusLabArr);
+    clusTree->SetBranchAddress("ITSClustersMC2ROF", &mc2rofVecP);
+  }
+
+  clusTree->GetEntry(0);
+  int nROFRec = (int)rofRecVec.size();
+  std::vector<int> mcEvMin(nROFRec, hitTree->GetEntries());
+  std::vector<int> mcEvMax(nROFRec, -1);
+
+  // >> build min and max MC events used by each ROF
+  for (int imc = mc2rofVec.size(); imc--;) {
+    const auto& mc2rof = mc2rofVec[imc];
+    printf("MCRecord: ");
+    mc2rof.print();
+    if (mc2rof.rofRecordID < 0) {
+      continue; // this MC event did not contribute to any ROF
+    }
+    for (int irfd = mc2rof.maxROF - mc2rof.minROF + 1; irfd--;) {
+      int irof = mc2rof.rofRecordID + irfd;
+      if (irof >= nROFRec) {
+        LOG(ERROR) << "ROF=" << irof << " from MC2ROF record is >= N ROFs=" << nROFRec;
       }
-
-      nt->Fill(glo[0],glo[1],glo[2],dx,dz);
-
+      if (mcEvMin[irof] > imc) {
+        mcEvMin[irof] = imc;
+      }
+      if (mcEvMax[irof] < imc) {
+        mcEvMax[irof] = imc;
+      }
     }
   }
-  new TCanvas; nt->Draw("y:x");
-  new TCanvas; nt->Draw("dx:dz");
-  f->Write();
-  f->Close();
+  // << build min and max MC events used by each ROF
+
+  for (int irof = 0; irof < nROFRec; irof++) {
+    const auto& rofRec = rofRecVec[irof];
+
+    rofRec.print();
+
+    // >> read and map MC events contributing to this ROF
+    for (int im = mcEvMin[irof]; im <= mcEvMax[irof]; im++) {
+      if (!hitVecPool[im]) {
+        hitTree->SetBranchAddress("ITSHit", &hitVecPool[im]);
+        hitTree->GetEntry(im);
+        auto& mc2hit = mc2hitVec[im];
+        const auto* hitArray = hitVecPool[im];
+        for (int ih = hitArray->size(); ih--;) {
+          const auto& hit = (*hitArray)[ih];
+          uint64_t key = (uint64_t(hit.GetTrackID()) << 32) + hit.GetDetectorID();
+          mc2hit.emplace(key, ih);
+        }
+      }
+    }
+    // << cache MC events contributing to this ROF
+    for (int icl = 0; icl < rofRec.getNEntries(); icl++) {
+      int clEntry = rofRec.getFirstEntry() + icl; // entry of icl-th cluster of this ROF in the vector of clusters
+
+      const auto& cluster = (*clusArr)[clEntry];
+
+      int chipID = cluster.getSensorID();
+      const auto locC = cluster.getXYZLoc(*gman);    // convert from tracking to local frame
+      const auto gloC = cluster.getXYZGloRot(*gman); // convert from tracking to global frame
+      const auto& lab = (clusLabArr->getLabels(clEntry))[0];
+
+      if (!lab.isValid() || lab.getSourceID() == QEDSourceID)
+        continue;
+
+      // get MC info
+      int trID = lab.getTrackID();
+      const auto& mc2hit = mc2hitVec[lab.getEventID()];
+      const auto* hitArray = hitVecPool[lab.getEventID()];
+      uint64_t key = (uint64_t(trID) << 32) + chipID;
+      auto hitEntry = mc2hit.find(key);
+      if (hitEntry == mc2hit.end()) {
+        LOG(ERROR) << "Failed to find MC hit entry for Tr" << trID << " chipID" << chipID;
+        continue;
+      }
+      const auto& hit = (*hitArray)[hitEntry->second];
+      //
+      int npix = cluster.getNPix();
+      float dx = 0, dz = 0;
+      int ievH = lab.getEventID();
+      Point3D<float> locH, locHsta;
+
+      // mean local position of the hit
+      locH = gman->getMatrixL2G(chipID) ^ (hit.GetPos()); // inverse conversion from global to local
+      locHsta = gman->getMatrixL2G(chipID) ^ (hit.GetPosStart());
+      auto x0 = locHsta.X(), dltx = locH.X() - x0;
+      auto y0 = locHsta.Y(), dlty = locH.Y() - y0;
+      auto z0 = locHsta.Z(), dltz = locH.Z() - z0;
+      auto r = (0.5 * (Segmentation::SensorLayerThickness - Segmentation::SensorLayerThicknessEff) - y0) / dlty;
+      locH.SetXYZ(x0 + r * dltx, y0 + r * dlty, z0 + r * dltz);
+      //locH.SetXYZ(0.5 * (locH.X() + locHsta.X()), 0.5 * (locH.Y() + locHsta.Y()), 0.5 * (locH.Z() + locHsta.Z()));
+      nt.Fill(lab.getEventID(), trID,
+              locH.X(), locH.Z(), dltx / dlty, dltz / dlty,
+              gloC.X(), gloC.Y(), gloC.Z(),
+              locC.X() - locH.X(), locC.Y() - locH.Y(), locC.Z() - locH.Z(),
+              rofRec.getROFrame(), cluster.getNPix(), chipID);
+    }
+  }
+
+  new TCanvas;
+  nt.Draw("cgy:cgx");
+  new TCanvas;
+  nt.Draw("dz:dx", "abs(dz)<0.01 && abs(dx)<0.01");
+  new TCanvas;
+  nt.Draw("dz:tz", "abs(dz)<0.005 && abs(tz)<2");
+  fout.cd();
+  nt.Write();
 }

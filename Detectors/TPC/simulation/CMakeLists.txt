@@ -1,50 +1,65 @@
-set(MODULE_NAME "TPCSimulation")
+# Copyright CERN and copyright holders of ALICE O2. This software is distributed
+# under the terms of the GNU General Public License v3 (GPL Version 3), copied
+# verbatim in the file "COPYING".
+#
+# See http://alice-o2.web.cern.ch/license for full licensing information.
+#
+# In applying this license CERN does not waive the privileges and immunities
+# granted to it by virtue of its status as an Intergovernmental Organization or
+# submit itself to any jurisdiction.
 
-O2_SETUP(NAME ${MODULE_NAME})
+o2_add_library(TPCSimulation
+               SOURCES src/CommonMode.cxx
+                       src/Detector.cxx
+                       src/DigitMCMetaData.cxx
+                       src/DigitContainer.cxx
+                       src/DigitGlobalPad.cxx
+                       src/Digitizer.cxx
+                       src/DigitTime.cxx
+                       src/ElectronTransport.cxx
+                       src/GEMAmplification.cxx
+                       src/PadResponse.cxx
+                       src/Point.cxx
+                       src/SAMPAProcessing.cxx
+                       src/SpaceCharge.cxx
+               PUBLIC_LINK_LIBRARIES O2::DetectorsBase O2::SimulationDataFormat
+                                     O2::TPCBase O2::TPCSpaceChargeBase
+                                     ROOT::Physics)
 
-link_directories( ${LINK_DIRECTORIES})
+o2_target_root_dictionary(TPCSimulation
+                          HEADERS include/TPCSimulation/CommonMode.h
+                                  include/TPCSimulation/Detector.h
+                                  include/TPCSimulation/DigitMCMetaData.h
+                                  include/TPCSimulation/DigitContainer.h
+                                  include/TPCSimulation/DigitGlobalPad.h
+                                  include/TPCSimulation/Digitizer.h
+                                  include/TPCSimulation/DigitTime.h
+                                  include/TPCSimulation/ElectronTransport.h
+                                  include/TPCSimulation/GEMAmplification.h
+                                  include/TPCSimulation/PadResponse.h
+                                  include/TPCSimulation/Point.h
+                                  include/TPCSimulation/SAMPAProcessing.h
+                                  include/TPCSimulation/SpaceCharge.h)
 
-set(SRCS
-   src/Detector.cxx
-   src/Point.cxx
-   src/DigitizerTask.cxx
-   src/Digitizer.cxx
-   src/DigitContainer.cxx
-   src/DigitCRU.cxx
-   src/DigitRow.cxx
-   src/DigitPad.cxx
-   src/DigitTime.cxx
-   src/DigitADC.cxx
-   src/Digit.cxx
-   src/Cluster.cxx
-   src/BoxCluster.cxx
-   src/ClusterContainer.cxx
-   src/BoxClusterer.cxx
-   src/ClustererTask.cxx
-   src/PadResponse.cxx
-)
+o2_data_file(COPY files DESTINATION Detectors/TPC)
 
-set(HEADERS
-   include/${MODULE_NAME}/Detector.h
-   include/${MODULE_NAME}/Point.h
-   include/${MODULE_NAME}/DigitizerTask.h
-   include/${MODULE_NAME}/Digitizer.h
-   include/${MODULE_NAME}/DigitContainer.h
-   include/${MODULE_NAME}/DigitCRU.h
-   include/${MODULE_NAME}/DigitRow.h
-   include/${MODULE_NAME}/DigitPad.h
-   include/${MODULE_NAME}/DigitTime.h
-   include/${MODULE_NAME}/DigitADC.h
-   include/${MODULE_NAME}/Digit.h
-   include/${MODULE_NAME}/Cluster.h
-   include/${MODULE_NAME}/BoxCluster.h
-   include/${MODULE_NAME}/ClusterContainer.h
-   include/${MODULE_NAME}/BoxClusterer.h
-   include/${MODULE_NAME}/ClustererTask.h
-   include/${MODULE_NAME}/PadResponse.h
-)
-Set(LINKDEF src/TPCSimulationLinkDef.h)
-Set(LIBRARY_NAME ${MODULE_NAME})
-set(BUCKET_NAME tpc_simulation_bucket)
+if(BUILD_TESTING)
+  add_subdirectory(test)
 
-O2_GENERATE_LIBRARY()
+  o2_add_test_root_macro(macro/readMCtruth.C
+                         PUBLIC_LINK_LIBRARIES O2::TPCBase
+                                               O2::SimulationDataFormat
+                         LABELS tpc)
+
+  o2_add_test_root_macro(macro/createResidualDistortionObject.C
+          PUBLIC_LINK_LIBRARIES O2::TPCSpaceChargeBase
+                                O2::CommonUtils
+                                O2::CommonConstants
+                                O2::TPCSimulation
+          LABELS tpc)
+
+  o2_add_test_root_macro(macro/laserTrackGenerator.C
+                         PUBLIC_LINK_LIBRARIES FairRoot::Base
+                                               O2::DataFormatsTPC
+                         LABELS tpc)
+endif()

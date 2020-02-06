@@ -1,35 +1,20 @@
-set(MODULE_NAME "ITSReconstruction")
+# Copyright CERN and copyright holders of ALICE O2. This software is distributed
+# under the terms of the GNU General Public License v3 (GPL Version 3), copied
+# verbatim in the file "COPYING".
+#
+# See http://alice-o2.web.cern.ch/license for full licensing information.
+#
+# In applying this license CERN does not waive the privileges and immunities
+# granted to it by virtue of its status as an Intergovernmental Organization or
+# submit itself to any jurisdiction.
 
-O2_SETUP(NAME ${MODULE_NAME})
+o2_add_library(
+  ITSReconstruction
+  SOURCES src/ClustererTask.cxx src/CookedTracker.cxx src/RecoGeomHelper.cxx
+  PUBLIC_LINK_LIBRARIES O2::ITSBase O2::ITSMFTReconstruction O2::DataFormatsITS)
 
-set(SRCS
-    src/Cluster.cxx
-    src/TrivialClustererTask.cxx
-    src/CookedTrack.cxx
-    src/CookedTrackerTask.cxx
-    )
-set(HEADERS
-    include/${MODULE_NAME}/Cluster.h
-    include/${MODULE_NAME}/TrivialClustererTask.h
-    include/${MODULE_NAME}/CookedTrack.h
-    include/${MODULE_NAME}/CookedTrackerTask.h
-    )
-set(NO_DICT_SRCS # sources not for the dictionary
-    src/TrivialClusterer.cxx
-    src/CAaux.cxx
-    src/CATracker.cxx
-    src/CATrackingStation.cxx
-    src/CookedTracker.cxx
-    )
-set(NO_DICT_HEADERS # sources not for the dictionary
-    include/${MODULE_NAME}/TrivialClusterer.h
-    include/${MODULE_NAME}/CAaux.h
-    include/${MODULE_NAME}/CATracker.h
-    include/${MODULE_NAME}/CATrackingStation.h
-    include/${MODULE_NAME}/CookedTracker.h
-    )
-Set(LINKDEF src/ITSReconstructionLinkDef.h)
-Set(LIBRARY_NAME ${MODULE_NAME})
-Set(BUCKET_NAME its_reconstruction_bucket)
-O2_GENERATE_LIBRARY()
-
+o2_target_root_dictionary(
+  ITSReconstruction
+  HEADERS include/ITSReconstruction/ClustererTask.h
+          include/ITSReconstruction/CookedTracker.h
+          include/ITSReconstruction/RecoGeomHelper.h)

@@ -1,43 +1,30 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 #include "TPCSimulation/Point.h"
+#include <iostream>
 
 using std::cout;
 using std::endl;
 
-using namespace AliceO2::TPC;
+using namespace o2::tpc;
 
-// -----   Default constructor   -------------------------------------------
-Point::Point()
-  : FairMCPoint()
-{
-}
-// -------------------------------------------------------------------------
-
-// -----   Standard constructor   ------------------------------------------
-Point::Point(Int_t trackID, Int_t detID,
-                                   TVector3 pos, TVector3 mom,
-                                   Double_t tof, Double_t length,
-                                   Double_t eLoss)
-  : FairMCPoint(trackID, detID, pos, mom, tof, length, eLoss)
-{
-}
-// -------------------------------------------------------------------------
-
-// -----   Destructor   ----------------------------------------------------
-Point::~Point() { }
-// -------------------------------------------------------------------------
-
-// -----   Public method Print   -------------------------------------------
 void Point::Print(const Option_t* opt) const
 {
-  cout << "-I- Point: O2tpc point for track " << fTrackID
-       << " in detector " << fDetectorID << endl;
-  cout << "    Position (" << fX << ", " << fY << ", " << fZ
+  cout << "-I- Point: O2tpc point for track " << GetTrackID()
+       << " in detector " << GetDetectorID() << endl;
+  cout << "    Position (" << GetX() << ", " << GetY() << ", " << GetZ()
        << ") cm" << endl;
-  cout << "    Momentum (" << fPx << ", " << fPy << ", " << fPz
-       << ") GeV" << endl;
-  cout << "    Time " << fTime << " ns,  Length " << fLength
-       << " cm,  Energy loss " << fELoss*1.0e06 << " keV" << endl;
+  cout << "    Time " << GetTime() << " ns, n electrons " << GetEnergyLoss() << endl;
 }
-// -------------------------------------------------------------------------
 
-ClassImp(Point)
+ClassImp(Point);
+ClassImp(HitGroup);
+ClassImp(ElementalHit);

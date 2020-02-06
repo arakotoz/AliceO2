@@ -1,8 +1,18 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 //****************************************************************************
 //* This file is free software: you can redistribute it and/or modify        *
 //* it under the terms of the GNU General Public License as published by     *
-//* the Free Software Foundation, either version 3 of the License, or	     *
-//* (at your option) any later version.					     *
+//* the Free Software Foundation, either version 3 of the License, or        *
+//* (at your option) any later version.                                      *
 //*                                                                          *
 //* Primary Authors: Matthias Richter <richterm@scieq.net>                   *
 //*                                                                          *
@@ -16,9 +26,11 @@
 //  @brief  Sampler device for Alice HLT events in FairRoot/ALFA
 
 #include "aliceHLTwrapper/EventSampler.h"
-#include "FairMQLogger.h"
-#include "FairMQPoller.h"
+#include "O2Device/Compatibility.h"
+#include <FairMQLogger.h>
+#include <FairMQPoller.h>
 #include "aliceHLTwrapper/AliHLTDataTypes.h"
+#include <options/FairMQProgOptions.h>
 
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
@@ -41,26 +53,60 @@ using std::chrono::system_clock;
 typedef std::chrono::duration<int,std::ratio<60*60*24> > PeriodDay;
 const std::chrono::time_point<system_clock, PeriodDay> dayref=std::chrono::time_point_cast<PeriodDay>(system_clock::now());
 
-using namespace ALICE::HLT;
+using namespace o2::alice_hlt;
 
 EventSampler::EventSampler(int verbosity)
-  : mEventPeriod(1000)
-  , mInitialDelay(1000)
+  : mEventPeriod(-1)
+  , mInitialDelay(-1)
   , mNEvents(-1)
-  , mPollingTimeout(10)
+  , mPollingTimeout(-1)
   , mSkipProcessing(0)
   , mVerbosity(verbosity)
-  , mOutputFile()
+  , mLatencyLogFileName()
 {
 }
 
 EventSampler::~EventSampler()
+= default;
+
+constexpr const char* EventSampler::OptionKeys[];
+
+bpo::options_description EventSampler::GetOptionsDescription()
 {
+  // assemble the options for the device class and component
+  bpo::options_description od("EventSampler options");
+  // clang-format off
+  od.add_options()
+    (OptionKeys[OptionKeyEventPeriod],
+     bpo::value<int>()->default_value(1000),
+     "event period in us")
+    (OptionKeys[OptionKeyInitialDelay],
+     bpo::value<int>()->default_value(1000),
+     "initial delay before the first event in ms")
+    (OptionKeys[OptionKeyPollTimeout],
+     bpo::value<int>()->default_value(10),
+     "timeout for the input socket poller in ms")
+    ((std::string(OptionKeys[OptionKeyLatencyLog]) + ",l").c_str(),
+     bpo::value<std::string>()->default_value(""),
+     "output file name for logging of latency")
+    ((std::string(OptionKeys[OptionKeyDryRun]) + ",n").c_str(),
+     bpo::value<bool>()->zero_tokens()->default_value(false),
+     "skip component processing");
+  // clang-format on
+  return od;
 }
 
-void EventSampler::Init()
+void EventSampler::InitTask()
 {
   /// inherited from FairMQDevice
+  const auto * config = GetConfig();
+  if (config) {
+    mEventPeriod = config->GetValue<int>(OptionKeys[OptionKeyEventPeriod]);
+    mInitialDelay =  config->GetValue<int>(OptionKeys[OptionKeyInitialDelay]);
+    mPollingTimeout = config->GetValue<int>(OptionKeys[OptionKeyPollTimeout]);
+    mSkipProcessing = config->GetValue<bool>(OptionKeys[OptionKeyDryRun]);
+    mLatencyLogFileName = config->GetValue<std::string>(OptionKeys[OptionKeyLatencyLog]);
+  }
   mNEvents=0;
 }
 
@@ -87,9 +133,9 @@ void EventSampler::Run()
   vector<int> inputMessageCntPerSocket(numInputs, 0);
   int nReadCycles=0;
 
-  std::ofstream latencyLog(mOutputFile);
+  std::ofstream latencyLog(mLatencyLogFileName);
 
-  while (CheckCurrentState(RUNNING)) {
+  while (compatibility::FairMQ13<FairMQDevice>::IsRunning(this)) {
 
     // read input messages
     poller->Poll(mPollingTimeout);
@@ -161,71 +207,6 @@ void EventSampler::Run()
   samplerThread.join();
 }
 
-void EventSampler::Pause()
-{
-  /// inherited from FairMQDevice
-
-  // nothing to do
-  FairMQDevice::Pause();
-}
-
-void EventSampler::SetProperty(const int key, const string& value)
-{
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::SetProperty
-  switch (key) {
-  case OutputFile:
-    mOutputFile = value;
-    return;
-  }
-  return FairMQDevice::SetProperty(key, value);
-}
-
-string EventSampler::GetProperty(const int key, const string& default_)
-{
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::GetProperty
-  return FairMQDevice::GetProperty(key, default_);
-}
-
-void EventSampler::SetProperty(const int key, const int value)
-{
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::SetProperty
-  switch (key) {
-  case EventPeriod:
-    mEventPeriod = value;
-    return;
-  case InitialDelay:
-    mInitialDelay = value;
-    return;
-  case PollingTimeout:
-    mPollingTimeout = value;
-    return;
-  case SkipProcessing:
-    mSkipProcessing = value;
-    return;
-  }
-  return FairMQDevice::SetProperty(key, value);
-}
-
-int EventSampler::GetProperty(const int key, const int default_)
-{
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::GetProperty
-  switch (key) {
-  case EventPeriod:
-    return mEventPeriod;
-  case InitialDelay:
-    return mInitialDelay;
-  case PollingTimeout:
-    return mPollingTimeout;
-  case SkipProcessing:
-    return mSkipProcessing;
-  }
-  return FairMQDevice::GetProperty(key, default_);
-}
-
 void EventSampler::samplerLoop()
 {
   /// sampler loop
@@ -252,7 +233,7 @@ void EventSampler::samplerLoop()
   int numOutputs = (fChannels.find("data-out") == fChannels.end() ? 0 : fChannels["data-out"].size());
 
   LOG(INFO) << "starting sampler loop, period " << mEventPeriod << " us";
-  while (CheckCurrentState(RUNNING)) {
+  while (compatibility::FairMQ13<FairMQDevice>::IsRunning(this)) {
     msg->Rebuild(sizeof(AliHLTComponentEventData));
     evtData = reinterpret_cast<AliHLTComponentEventData*>(msg->GetData());
     memset(evtData, 0, sizeof(AliHLTComponentEventData));

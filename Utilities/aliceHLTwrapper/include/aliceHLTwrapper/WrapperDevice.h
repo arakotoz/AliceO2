@@ -1,12 +1,20 @@
-//-*- Mode: C++ -*-
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
 
 #ifndef WRAPPERDEVICE_H
 #define WRAPPERDEVICE_H
 //****************************************************************************
 //* This file is free software: you can redistribute it and/or modify        *
 //* it under the terms of the GNU General Public License as published by     *
-//* the Free Software Foundation, either version 3 of the License, or	     *
-//* (at your option) any later version.					     *
+//* the Free Software Foundation, either version 3 of the License, or        *
+//* (at your option) any later version.                                      *
 //*                                                                          *
 //* Primary Authors: Matthias Richter <richterm@scieq.net>                   *
 //*                                                                          *
@@ -19,13 +27,18 @@
 //  @since  2014-05-08
 //  @brief  FairRoot/ALFA device running ALICE HLT code
 
-#include "FairMQDevice.h"
+#include <FairMQDevice.h>
 #include <vector>
+#include <boost/program_options.hpp>
+
+namespace bpo = boost::program_options;
 
 class FairMQMessage;
 
-namespace ALICE {
-namespace HLT {
+namespace o2
+{
+namespace alice_hlt
+{
 class Component;
 
 /// @class WrapperDevice
@@ -35,44 +48,38 @@ class Component;
 /// The device class implements the interface functions of FairMQ, and it
 /// receives and send messages. The data of the messages are processed
 /// using the Component class.
-class WrapperDevice : public FairMQDevice {
-public:
+class WrapperDevice : public FairMQDevice
+{
+ public:
   /// default constructor
-  WrapperDevice(int argc, char** argv, int verbosity = 0);
+  WrapperDevice(int verbosity = 0);
   /// destructor
-  ~WrapperDevice();
+  ~WrapperDevice() override;
+
+  /// get description of options
+  static bpo::options_description GetOptionsDescription();
+
+  enum /*class*/ OptionKeyIds /*: int*/ {
+    OptionKeyPollPeriod = 0,
+    OptionKeyDryRun,
+    OptionKeyLast
+  };
+
+  constexpr static const char* OptionKeys[] = {
+    "poll-period",
+    "dry-run",
+    nullptr};
 
   /////////////////////////////////////////////////////////////////
   // the FairMQDevice interface
 
   /// inherited from FairMQDevice
-  virtual void Init();
+  void InitTask() override;
   /// inherited from FairMQDevice
-  virtual void InitTask();
-  /// inherited from FairMQDevice
-  virtual void Run();
-  /// inherited from FairMQDevice
-  virtual void Pause();
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::SetProperty
-  virtual void SetProperty(const int key, const std::string& value);
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::GetProperty
-  virtual std::string GetProperty(const int key, const std::string& default_ = "");
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::SetProperty
-  virtual void SetProperty(const int key, const int value);
-  /// inherited from FairMQDevice
-  /// handle device specific properties and forward to FairMQDevice::GetProperty
-  virtual int GetProperty(const int key, const int default_ = 0);
+  void Run() override;
 
-  /////////////////////////////////////////////////////////////////
-  // device property identifier
-  enum { Id = FairMQDevice::Last, PollingPeriod, SkipProcessing, Last };
-
-protected:
-
-private:
+ protected:
+ private:
   // copy constructor prohibited
   WrapperDevice(const WrapperDevice&);
   // assignment operator prohibited
@@ -81,9 +88,8 @@ private:
   /// create a new message with data buffer of specified size
   unsigned char* createMessageBuffer(unsigned size);
 
-  Component* mComponent;     // component instance
-  std::vector<char*> mArgv;       // array of arguments for the component
-  std::vector<std::unique_ptr<FairMQMessage>> mMessages; // array of output messages
+  Component* mComponent;                   // component instance
+  std::vector<FairMQMessagePtr> mMessages; // array of output messages
 
   int mPollingPeriod;        // period of polling on input sockets in ms
   int mSkipProcessing;       // skip component processing
@@ -97,6 +103,6 @@ private:
   int mVerbosity;            // verbosity level
 };
 
-} // namespace hlt
-} // namespace alice
+} // namespace alice_hlt
+} // namespace o2
 #endif // WRAPPERDEVICE_H

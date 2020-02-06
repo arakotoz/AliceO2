@@ -1,22 +1,31 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /// \file MagF.cxx
 /// \brief Implementation of the MagF class
 /// \author ruben.shahoyan@cern.ch
 
 #include "Field/MagneticField.h"
-#include <TFile.h>                     // for TFile
-#include <TPRegexp.h>                  // for TPRegexp
-#include <TSystem.h>                   // for TSystem, gSystem
-#include "FairLogger.h"                // for FairLogger, MESSAGE_ORIGIN
+#include <TFile.h>      // for TFile
+#include <TPRegexp.h>   // for TPRegexp
+#include <TSystem.h>    // for TSystem, gSystem
+#include "FairLogger.h" // for FairLogger
 #include "FairParamList.h"
 #include "FairRun.h"
 #include "FairRuntimeDb.h"
 
-using namespace AliceO2::Field;
+using namespace o2::field;
 
-ClassImp(MagneticField)
+ClassImp(MagneticField);
 
-  const
-Double_t MagneticField::sSolenoidToDipoleZ = -700.;
+const Double_t MagneticField::sSolenoidToDipoleZ = -700.;
 
 /// Explanation for polarity conventions: these are the mapping between the
 /// current signs and main field components in L3 (Bz) and Dipole (Bx) (in Alice frame)
@@ -55,6 +64,7 @@ const UShort_t MagneticField::sPolarityConvention = MagneticField::kConvLHC;
 MagneticField::MagneticField()
   : FairField(),
     mMeasuredMap(nullptr),
+    mFastField(nullptr),
     mMapType(MagFieldParam::k5kG),
     mSolenoid(0),
     mBeamType(MagFieldParam::kNoBeamField),
@@ -70,17 +80,20 @@ MagneticField::MagneticField()
     mCompensatorField2C(0),
     mCompensatorField1A(0),
     mCompensatorField2A(0),
-    mParameterNames("", ""),
-    mLogger(FairLogger::GetLogger())
+    mParameterNames("", "")
 {
-    fType = 2; // flag non-constant field 
+  /*
+   * Default constructor
+   */
+  fType = 2; // flag non-constant field
 }
 
-MagneticField::MagneticField(const char *name, const char *title, Double_t factorSol, Double_t factorDip,
-                             MagFieldParam::BMap_t maptype, MagFieldParam::BeamType_t bt,
-			     Double_t be, Int_t integ, Double_t fmax,const std::string path)
-  : FairField(name,title),
+MagneticField::MagneticField(const char* name, const char* title, Double_t factorSol, Double_t factorDip,
+                             MagFieldParam::BMap_t maptype, MagFieldParam::BeamType_t bt, Double_t be, Int_t integ,
+                             Double_t fmax, const std::string path)
+  : FairField(name, title),
     mMeasuredMap(nullptr),
+    mFastField(nullptr),
     mMapType(maptype),
     mSolenoid(0),
     mBeamType(bt),
@@ -96,16 +109,20 @@ MagneticField::MagneticField(const char *name, const char *title, Double_t facto
     mCompensatorField2C(0),
     mCompensatorField1A(0),
     mCompensatorField2A(0),
-    mParameterNames("", ""),
-    mLogger(FairLogger::GetLogger())
+    mParameterNames("", "")
 {
+  /*
+   * Constructor for human readable params
+   */
+
   setDataFileName(path.c_str());
   CreateField();
 }
 
 MagneticField::MagneticField(const MagFieldParam& param)
-  : FairField(param.GetName(),param.GetTitle()),
+  : FairField(param.GetName(), param.GetTitle()),
     mMeasuredMap(nullptr),
+    mFastField(nullptr),
     mMapType(param.GetMapType()),
     mSolenoid(0),
     mBeamType(param.GetBeamType()),
@@ -113,7 +130,7 @@ MagneticField::MagneticField(const MagFieldParam& param)
     mDefaultIntegration(param.GetDefInt()),
     mPrecisionInteg(1),
     mMultipicativeFactorSolenoid(param.GetFactorSol()), // temporary
-    mMultipicativeFactorDipole(param.GetFactorDip()), // temporary
+    mMultipicativeFactorDipole(param.GetFactorDip()),   // temporary
     mMaxField(param.GetMaxField()),
     mDipoleOnOffFlag(param.GetFactorDip() == 0.),
     mQuadrupoleGradient(0),
@@ -121,35 +138,45 @@ MagneticField::MagneticField(const MagFieldParam& param)
     mCompensatorField2C(0),
     mCompensatorField1A(0),
     mCompensatorField2A(0),
-    mParameterNames("", ""),
-    mLogger(FairLogger::GetLogger())
+    mParameterNames("", "")
 {
+  /*
+   * Constructor for FairParam derived params
+   */
+
   setDataFileName(param.GetMapPath());
   CreateField();
 }
 
 void MagneticField::CreateField()
 {
-  fType = 2; // flag non-constant field 
+  /*
+   * field initialization
+   */
+
+  fType = 2; // flag non-constant field
 
   // does real creation of the field
   if (mDefaultIntegration < 0 || mDefaultIntegration > 2) {
-    mLogger->Warning(MESSAGE_ORIGIN, "Invalid magnetic field flag: %5d; Helix tracking chosen instead",
-		     mDefaultIntegration);
+    LOG(WARNING) << "MagneticField::CreateField: Invalid magnetic field flag: " << mDefaultIntegration
+                 << "; Helix tracking chosen instead";
     mDefaultIntegration = 2;
   }
-  if (mDefaultIntegration == 0) mPrecisionInteg = 0;
+  if (mDefaultIntegration == 0)
+    mPrecisionInteg = 0;
 
   if (mBeamEnergy <= 0 && mBeamType != MagFieldParam::kNoBeamField) {
-    if (mBeamType == MagFieldParam::kBeamTypepp) mBeamEnergy = 7000.; // max proton energy
-    else if (mBeamType == MagFieldParam::kBeamTypeAA) mBeamEnergy = 2760; // max PbPb energy
-    else if (mBeamType == MagFieldParam::kBeamTypepA || mBeamType == MagFieldParam::kBeamTypeAp) 
+    if (mBeamType == MagFieldParam::kBeamTypepp)
+      mBeamEnergy = 7000.; // max proton energy
+    else if (mBeamType == MagFieldParam::kBeamTypeAA)
+      mBeamEnergy = 2760; // max PbPb energy
+    else if (mBeamType == MagFieldParam::kBeamTypepA || mBeamType == MagFieldParam::kBeamTypeAp)
       mBeamEnergy = 2760; // same rigitiy max PbPb energy
     //
-    FairLogger::GetLogger()->Info(MESSAGE_ORIGIN, "Maximim possible beam energy for requested beam is assumed");
+    LOG(INFO) << "MagneticField::CreateField: Maximim possible beam energy for requested beam is assumed";
   }
 
-  const char *parname = 0;
+  const char* parname = nullptr;
 
   if (mMapType == MagFieldParam::k2kG) {
     parname = mDipoleOnOffFlag ? "Sol12_Dip0_Hole" : "Sol12_Dip6_Hole";
@@ -158,7 +185,7 @@ void MagneticField::CreateField()
   } else if (mMapType == MagFieldParam::k5kGUniform) {
     parname = "Sol30_Dip6_Uniform";
   } else {
-    mLogger->Fatal(MESSAGE_ORIGIN, "Unknown field identifier %d is requested\n", mMapType);
+    LOG(FATAL) << "MagneticField::CreateField: Unknown field identifier " << mMapType << " is requested\n";
   }
 
   setParameterName(parname);
@@ -166,68 +193,50 @@ void MagneticField::CreateField()
   loadParameterization();
   initializeMachineField(mBeamType, mBeamEnergy);
   setFactorSolenoid(mMultipicativeFactorSolenoid);
-  setFactorDipole(mMultipicativeFactorDipole); 
+  setFactorDipole(mMultipicativeFactorDipole);
   double xyz[3] = {0., 0., 0.};
   mSolenoid = getBz(xyz);
   Print("a");
   //
 }
 
-/*
-  RS: not needed, FairField has no copy c-tor implemented
-MagneticField::MagneticField(const MagneticField &src)
-  : FairField(src),
-    mMeasuredMap(nullptr),
-    mMapType(src.mMapType),
-    mSolenoid(src.mSolenoid),
-    mBeamType(src.mBeamType),
-    mBeamEnergy(src.mBeamEnergy),
-    mDefaultIntegration(src.mDefaultIntegration),
-    mPrecisionInteg(src.mPrecisionInteg),
-    mMultipicativeFactorSolenoid(src.mMultipicativeFactorSolenoid),
-    mMultipicativeFactorDipole(src.mMultipicativeFactorDipole),
-    mMaxField(src.mMaxField),
-    mDipoleOnOffFlag(src.mDipoleOnOffFlag),
-    mQuadrupoleGradient(src.mQuadrupoleGradient),
-    mDipoleField(src.mDipoleField),
-    mCompensatorField2C(src.mCompensatorField2C),
-    mCompensatorField1A(src.mCompensatorField1A),
-    mCompensatorField2A(src.mCompensatorField2A),
-    mParameterNames(src.mParameterNames),
-    mLogger(FairLogger::GetLogger())
-{
-  if (src.mMeasuredMap) {
-    mMeasuredMap(new MagneticWrapperChebyshev(*src.mMeasuredMap));
-  }
-}
-*/
-
-
 Bool_t MagneticField::loadParameterization()
 {
+  /*
+   * load parametrization for measured field
+   */
+
   if (mMeasuredMap) {
-    mLogger->Fatal(MESSAGE_ORIGIN, "Field data %s are already loaded from %s\n", getParameterName(), getDataFileName());
+    LOG(FATAL) << "MagneticField::loadParameterization: Field data " << getParameterName()
+               << " are already loaded from " << getDataFileName() << "\n";
   }
-
-  char *fname = gSystem->ExpandPathName(getDataFileName());
-  TFile *file = TFile::Open(fname);
+  const char* fname = gSystem->ExpandPathName(getDataFileName());
+  TFile* file = TFile::Open(fname);
   if (!file) {
-    mLogger->Fatal(MESSAGE_ORIGIN, "Failed to open magnetic field data file %s\n", fname);
+    LOG(FATAL) << "MagneticField::loadParameterization: Failed to open magnetic field data file " << fname << "\n";
   }
 
-  mMeasuredMap = std::unique_ptr<MagneticWrapperChebyshev>
-    (dynamic_cast<MagneticWrapperChebyshev *>(file->Get(getParameterName())));
+  mMeasuredMap =
+    std::unique_ptr<MagneticWrapperChebyshev>(dynamic_cast<MagneticWrapperChebyshev*>(file->Get(getParameterName())));
   if (!mMeasuredMap) {
-    mLogger->Fatal(MESSAGE_ORIGIN, "Did not find field %s in %s\n", getParameterName(), fname);
+    LOG(FATAL) << "MagneticField::loadParameterization: Did not find field " << getParameterName() << " in " << fname
+               << "%s\n";
   }
   file->Close();
   delete file;
   return kTRUE;
 }
 
-void MagneticField::GetFieldValue(const Double_t *xyz, Double_t *b)
+void MagneticField::Field(const Double_t* __restrict__ xyz, Double_t* __restrict__ b)
 {
+  /*
+   * query field value at point
+   */
+
   //  b[0]=b[1]=b[2]=0.0;
+  if (mFastField && mFastField->Field(xyz, b))
+    return;
+
   if (mMeasuredMap && xyz[2] > mMeasuredMap->getMinZ() && xyz[2] < mMeasuredMap->getMaxZ()) {
     mMeasuredMap->Field(xyz, b);
     if (xyz[2] > sSolenoidToDipoleZ || mDipoleOnOffFlag) {
@@ -244,8 +253,17 @@ void MagneticField::GetFieldValue(const Double_t *xyz, Double_t *b)
   }
 }
 
-Double_t MagneticField::getBz(const Double_t *xyz) const
+Double_t MagneticField::getBz(const Double_t* xyz) const
 {
+  /*
+   * query field Bz component at point
+   */
+
+  if (mFastField) {
+    double bz = 0;
+    if (mFastField->GetBz(xyz, bz))
+      return bz;
+  }
   if (mMeasuredMap && xyz[2] > mMeasuredMap->getMinZ() && xyz[2] < mMeasuredMap->getMaxZ()) {
     double bz = mMeasuredMap->getBz(xyz);
     return (xyz[2] > sSolenoidToDipoleZ || mDipoleOnOffFlag) ? bz * mMultipicativeFactorSolenoid
@@ -255,8 +273,12 @@ Double_t MagneticField::getBz(const Double_t *xyz) const
   }
 }
 
-MagneticField &MagneticField::operator=(const MagneticField &src)
+MagneticField& MagneticField::operator=(const MagneticField& src)
 {
+  /*
+   * assignment operator
+   */
+
   if (this != &src) {
     if (src.mMeasuredMap) {
       mMeasuredMap.reset(new MagneticWrapperChebyshev(*src.getMeasuredMap()));
@@ -272,6 +294,7 @@ MagneticField &MagneticField::operator=(const MagneticField &src)
     mMaxField = src.mMaxField;
     mDipoleOnOffFlag = src.mDipoleOnOffFlag;
     mParameterNames = src.mParameterNames;
+    mFastField.reset(src.mFastField ? new MagFieldFast(*src.getFastField()) : nullptr);
   }
   return *this;
 }
@@ -301,7 +324,7 @@ void MagneticField::initializeMachineField(MagFieldParam::BeamType_t btype, Doub
   mCompensatorField2A = 11.7905;
 }
 
-void MagneticField::MachineField(const Double_t *x, Double_t *b) const
+void MagneticField::MachineField(const Double_t* __restrict__ x, Double_t* __restrict__ b) const
 {
   // ---- This is the ZDC part
   // Compansators for Alice Muon Arm Dipole
@@ -347,7 +370,7 @@ void MagneticField::MachineField(const Double_t *x, Double_t *b) const
     }
   }
 
-    // SIDE A
+  // SIDE A
   else {
     if (TMath::Abs(x[2] - kBComp1CZ) < kBComp1hDZ && rad2 < kBComp1SqR) {
       // Compensator magnet at z = 1075 m
@@ -379,7 +402,7 @@ void MagneticField::MachineField(const Double_t *x, Double_t *b) const
   }
 }
 
-void MagneticField::getTPCIntegral(const Double_t *xyz, Double_t *b) const
+void MagneticField::getTPCIntegral(const Double_t* xyz, Double_t* b) const
 {
   b[0] = b[1] = b[2] = 0.0;
   if (mMeasuredMap) {
@@ -390,7 +413,7 @@ void MagneticField::getTPCIntegral(const Double_t *xyz, Double_t *b) const
   }
 }
 
-void MagneticField::getTPCRatIntegral(const Double_t *xyz, Double_t *b) const
+void MagneticField::getTPCRatIntegral(const Double_t* xyz, Double_t* b) const
 {
   b[0] = b[1] = b[2] = 0.0;
   if (mMeasuredMap) {
@@ -399,7 +422,7 @@ void MagneticField::getTPCRatIntegral(const Double_t *xyz, Double_t *b) const
   }
 }
 
-void MagneticField::getTPCIntegralCylindrical(const Double_t *rphiz, Double_t *b) const
+void MagneticField::getTPCIntegralCylindrical(const Double_t* rphiz, Double_t* b) const
 {
   b[0] = b[1] = b[2] = 0.0;
   if (mMeasuredMap) {
@@ -410,7 +433,7 @@ void MagneticField::getTPCIntegralCylindrical(const Double_t *rphiz, Double_t *b
   }
 }
 
-void MagneticField::getTPCRatIntegralCylindrical(const Double_t *rphiz, Double_t *b) const
+void MagneticField::getTPCRatIntegralCylindrical(const Double_t* rphiz, Double_t* b) const
 {
   b[0] = b[1] = b[2] = 0.0;
   if (mMeasuredMap) {
@@ -432,6 +455,8 @@ void MagneticField::setFactorSolenoid(Float_t fc)
       mMultipicativeFactorSolenoid = fc;
       break; // case kConvMap2005: mMultipicativeFactorSolenoid =  fc; break;
   }
+  if (mFastField)
+    mFastField->setFactorSol(getFactorSolenoid());
 }
 
 void MagneticField::setFactorDipole(Float_t fc)
@@ -473,15 +498,15 @@ Double_t MagneticField::getFactorDipole() const
   }
 }
 
-MagneticField *MagneticField::createFieldMap(Float_t l3Cur, Float_t diCur, Int_t convention, Bool_t uniform,
-                                             Float_t beamenergy, const Char_t *beamtype, const std::string path)
+MagneticField* MagneticField::createFieldMap(Float_t l3Cur, Float_t diCur, Int_t convention, Bool_t uniform,
+                                             Float_t beamenergy, const Char_t* beamtype, const std::string path)
 {
   const Float_t l3NominalCurrent1 = 30000.f; // (A)
   const Float_t l3NominalCurrent2 = 12000.f; // (A)
   const Float_t diNominalCurrent = 6000.f;   // (A)
 
   const Float_t tolerance = 0.03; // relative current tolerance
-  const Float_t zero = 77.f;       // "zero" current (A)
+  const Float_t zero = 77.f;      // "zero" current (A)
 
   MagFieldParam::BMap_t map = MagFieldParam::k5kG;
   double sclL3, sclDip;
@@ -496,7 +521,7 @@ MagneticField *MagneticField::createFieldMap(Float_t l3Cur, Float_t diCur, Int_t
     if (diCur <= zero) {
       sclDip = 0.; // some small current.. -> Dipole OFF
     } else {
-      FairLogger::GetLogger()->Fatal(MESSAGE_ORIGIN, "Wrong dipole current (%f A)!", diCur);
+      LOG(FATAL) << "MagneticField::createFieldMap: Wrong dipole current (" << diCur << " A)!";
     }
   }
 
@@ -515,16 +540,16 @@ MagneticField *MagneticField::createFieldMap(Float_t l3Cur, Float_t diCur, Int_t
       sclDip = 0;
       map = MagFieldParam::k5kGUniform;
     } else {
-      FairLogger::GetLogger()->Fatal(MESSAGE_ORIGIN, "Wrong L3 current (%f A)!", l3Cur);
+      LOG(FATAL) << "MagneticField::createFieldMap: Wrong L3 current (" << l3Cur << "  A)!";
     }
   }
 
   if (sclDip != 0 && map != MagFieldParam::k5kGUniform) {
     if ((l3Cur <= zero) ||
         ((convention == kConvLHC && l3Pol != diPol) || (convention == kConvDCS2008 && l3Pol == diPol))) {
-      FairLogger::GetLogger()->Fatal(MESSAGE_ORIGIN,
-                                     "Wrong combination for L3/Dipole polarities (%c/%c) for convention %d",
-                                     l3Pol > 0 ? '+' : '-', diPol > 0 ? '+' : '-', getPolarityConvention());
+      LOG(FATAL) << "MagneticField::createFieldMap: Wrong combination for L3/Dipole polarities ("
+                 << (l3Pol > 0 ? '+' : '-') << "/" << (diPol > 0 ? '+' : '-') << ") for convention "
+                 << getPolarityConvention();
     }
   }
 
@@ -538,10 +563,10 @@ MagneticField *MagneticField::createFieldMap(Float_t l3Cur, Float_t diCur, Int_t
   MagFieldParam::BeamType_t btype = MagFieldParam::kNoBeamField;
   TString btypestr = beamtype;
   btypestr.ToLower();
-  TPRegexp protonBeam("(proton|p)\\s*-?\\s*\\1");
-  TPRegexp ionBeam("(lead|pb|ion|a|A)\\s*-?\\s*\\1");
-  TPRegexp protonionBeam("(proton|p)\\s*-?\\s*(lead|pb|ion|a|A)");
-  TPRegexp ionprotonBeam("(lead|pb|ion|a|A)\\s*-?\\s*(proton|p)");
+  TPRegexp protonBeam(R"((proton|p)\s*-?\s*\1)");
+  TPRegexp ionBeam(R"((lead|pb|ion|a|A)\s*-?\s*\1)");
+  TPRegexp protonionBeam(R"((proton|p)\s*-?\s*(lead|pb|ion|a|A))");
+  TPRegexp ionprotonBeam(R"((lead|pb|ion|a|A)\s*-?\s*(proton|p))");
   if (btypestr.Contains(ionBeam)) {
     btype = MagFieldParam::kBeamTypeAA;
   } else if (btypestr.Contains(protonBeam)) {
@@ -551,11 +576,11 @@ MagneticField *MagneticField::createFieldMap(Float_t l3Cur, Float_t diCur, Int_t
   } else if (btypestr.Contains(ionprotonBeam)) {
     btype = MagFieldParam::kBeamTypeAp;
   } else {
-    FairLogger::GetLogger()->Info(MESSAGE_ORIGIN, "Assume no LHC magnet field for the beam type %s,", beamtype);
+    LOG(INFO) << "Assume no LHC magnet field for the beam type " << beamtype;
   }
   char ttl[80];
-  snprintf(ttl, 79, "L3: %+5d Dip: %+4d kA; %s | Polarities in %s convention", (int) TMath::Sign(l3Cur, float(sclL3)),
-           (int) TMath::Sign(diCur, float(sclDip)), uniform ? " Constant" : "",
+  snprintf(ttl, 79, "L3: %+5d Dip: %+4d kA; %s | Polarities in %s convention", (int)TMath::Sign(l3Cur, float(sclL3)),
+           (int)TMath::Sign(diCur, float(sclDip)), uniform ? " Constant" : "",
            convention == kConvLHC ? "LHC" : "DCS2008");
   // LHC and DCS08 conventions have opposite dipole polarities
   if (getPolarityConvention() != convention) {
@@ -565,13 +590,13 @@ MagneticField *MagneticField::createFieldMap(Float_t l3Cur, Float_t diCur, Int_t
   return new MagneticField("MagneticFieldMap", ttl, sclL3, sclDip, map, btype, beamenergy, 2, 10., path);
 }
 
-const char *MagneticField::getBeamTypeText() const
+const char* MagneticField::getBeamTypeText() const
 {
-  const char *beamNA = "No Beam";
-  const char *beamPP = "p-p";
-  const char *beamPbPb = "A-A";
-  const char *beamPPb = "p-A";
-  const char *beamPbP = "A-p";
+  const char* beamNA = "No Beam";
+  const char* beamPP = "p-p";
+  const char* beamPbPb = "A-A";
+  const char* beamPPb = "p-A";
+  const char* beamPbP = "A-p";
   switch (mBeamType) {
     case MagFieldParam::kBeamTypepp:
       return beamPP;
@@ -587,19 +612,19 @@ const char *MagneticField::getBeamTypeText() const
   }
 }
 
-void MagneticField::Print(Option_t *opt) const
+void MagneticField::Print(Option_t* opt) const
 {
   TString opts = opt;
   opts.ToLower();
-  mLogger->Info(MESSAGE_ORIGIN, "%s:%s", GetName(), GetTitle());
-  mLogger->Info(MESSAGE_ORIGIN, "Solenoid (%+.2f*)%.0f kG, Dipole %s (%+.2f) %s", getFactorSolenoid(),
-                (mMapType == MagFieldParam::k5kG || mMapType == MagFieldParam::k5kGUniform) ? 5. : 2.,
-		mDipoleOnOffFlag ? "OFF" : "ON",
-                getFactorDipole(), mMapType == MagFieldParam::k5kGUniform ? " |Constant Field!" : "");
+  LOG(INFO) << "MagneticField::Print: " << GetName() << ":" << GetTitle();
+  LOG(INFO) << "MagneticField::Print: Solenoid (" << getFactorSolenoid() << "*)"
+            << ((mMapType == MagFieldParam::k5kG || mMapType == MagFieldParam::k5kGUniform) ? 5. : 2) << " kG, Dipole "
+            << (mDipoleOnOffFlag ? "OFF" : "ON") << " (" << getFactorDipole() << ") "
+            << (mMapType == MagFieldParam::k5kGUniform ? " |Constant Field!" : "");
   if (opts.Contains("a")) {
-    mLogger->Info(MESSAGE_ORIGIN, "Machine B fields for %s beam (%.0f GeV): QGrad: %.4f Dipole: %.4f",
-                  getBeamTypeText(), mBeamEnergy, mQuadrupoleGradient, mDipoleField);
-    mLogger->Info(MESSAGE_ORIGIN, "Uses %s of %s", getParameterName(), getDataFileName());
+    LOG(INFO) << "MagneticField::Print: Machine B fields for " << getBeamTypeText() << "  beam (" << mBeamEnergy
+              << " GeV): QGrad: " << mQuadrupoleGradient << " Dipole: " << mDipoleField;
+    LOG(INFO) << "MagneticField::Print: Uses " << getParameterName() << "  of " << getDataFileName();
   }
 }
 
@@ -613,3 +638,13 @@ void MagneticField::FillParContainer()
   par->setChanged();
 }
 
+//_____________________________________________________________________________
+void MagneticField::AllowFastField(bool v)
+{
+  if (v) {
+    if (!mFastField)
+      mFastField = std::make_unique<MagFieldFast>(getFactorSolenoid(), mMapType == MagFieldParam::k2kG ? 2 : 5);
+  } else {
+    mFastField.reset(nullptr);
+  }
+}

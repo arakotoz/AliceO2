@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /**
  * FLPSender.cxx
  *
@@ -8,70 +18,58 @@
 #include <cstdint> // UINT64_MAX
 #include <cassert>
 
-#include "FairMQLogger.h"
-#include "FairMQMessage.h"
-#include "FairMQTransportFactory.h"
-#include "FairMQProgOptions.h"
+#include <FairMQLogger.h>
+#include <FairMQMessage.h>
+#include <options/FairMQProgOptions.h>
 
 #include "FLP2EPNex_distributed/FLPSender.h"
+#include "O2Device/Compatibility.h"
 
 using namespace std;
 using namespace std::chrono;
-using namespace AliceO2::Devices;
+using namespace o2::devices;
 
 struct f2eHeader {
   uint16_t timeFrameId;
-  int      flpIndex;
+  int flpIndex;
 };
 
 FLPSender::FLPSender()
-  : fSTFBuffer()
-  , fArrivalTime()
-  , fNumEPNs(0)
-  , fIndex(0)
-  , fSendOffset(0)
-  , fSendDelay(8)
-  , fEventSize(10000)
-  , fTestMode(0)
-  , fTimeFrameId(0)
-  , fInChannelName()
-  , fOutChannelName()
+  : mSTFBuffer(), mArrivalTime(), mNumEPNs(0), mIndex(0), mSendOffset(0), mSendDelay(8), mEventSize(10000), mTestMode(0), mTimeFrameId(0), mInChannelName(), mOutChannelName()
 {
 }
 
-FLPSender::~FLPSender()
-{
-}
+FLPSender::~FLPSender() = default;
 
 void FLPSender::InitTask()
 {
-  fIndex = fConfig->GetValue<int>("flp-index");
-  fEventSize = fConfig->GetValue<int>("event-size");
-  fNumEPNs = fConfig->GetValue<int>("num-epns");
-  fTestMode = fConfig->GetValue<int>("test-mode");
-  fSendOffset = fConfig->GetValue<int>("send-offset");
-  fSendDelay = fConfig->GetValue<int>("send-delay");
-  fInChannelName = fConfig->GetValue<string>("in-chan-name");
-  fOutChannelName = fConfig->GetValue<string>("out-chan-name");
+  mIndex = GetConfig()->GetValue<int>("flp-index");
+  mEventSize = GetConfig()->GetValue<int>("event-size");
+  mNumEPNs = GetConfig()->GetValue<int>("num-epns");
+  mTestMode = GetConfig()->GetValue<int>("test-mode");
+  mSendOffset = GetConfig()->GetValue<int>("send-offset");
+  mSendDelay = GetConfig()->GetValue<int>("send-delay");
+  mInChannelName = GetConfig()->GetValue<string>("in-chan-name");
+  mOutChannelName = GetConfig()->GetValue<string>("out-chan-name");
 }
 
 void FLPSender::Run()
 {
   // base buffer, to be copied from for every timeframe body (zero-copy)
-  FairMQMessagePtr baseMsg(NewMessage(fEventSize));
+  FairMQMessagePtr baseMsg(NewMessage(mEventSize));
 
   // store the channel reference to avoid traversing the map on every loop iteration
-  FairMQChannel& dataInChannel = fChannels.at(fInChannelName).at(0);
+  FairMQChannel& dataInChannel = fChannels.at(mInChannelName).at(0);
 
-  while (CheckCurrentState(RUNNING)) {
+  while (compatibility::FairMQ13<FairMQDevice>::IsRunning(this)) {
     // initialize f2e header
-    f2eHeader* header = new f2eHeader;
-    if (fTestMode > 0) {
+    auto* header = new f2eHeader;
+    if (mTestMode > 0) {
       // test-mode: receive and store id part in the buffer.
       FairMQMessagePtr id(NewMessage());
       if (dataInChannel.Receive(id) > 0) {
         header->timeFrameId = *(static_cast<uint16_t*>(id->GetData()));
-        header->flpIndex = fIndex;
+        header->flpIndex = mIndex;
       } else {
         // if nothing was received, try again
         delete header;
@@ -79,30 +77,31 @@ void FLPSender::Run()
       }
     } else {
       // regular mode: use the id generated locally
-      header->timeFrameId = fTimeFrameId;
-      header->flpIndex = fIndex;
+      header->timeFrameId = mTimeFrameId;
+      header->flpIndex = mIndex;
 
-      if (++fTimeFrameId == UINT16_MAX - 1) {
-        fTimeFrameId = 0;
+      if (++mTimeFrameId == UINT16_MAX - 1) {
+        mTimeFrameId = 0;
       }
     }
 
     FairMQParts parts;
 
-    parts.AddPart(NewMessage(header, sizeof(f2eHeader), [](void* data, void* hint){ delete static_cast<f2eHeader*>(hint); }, header));
+    parts.AddPart(NewMessage(
+      header, sizeof(f2eHeader), [](void* data, void* hint) { delete static_cast<f2eHeader*>(hint); }, header));
     parts.AddPart(NewMessage());
 
     // save the arrival time of the message.
-    fArrivalTime.push(steady_clock::now());
+    mArrivalTime.push(steady_clock::now());
 
-    if (fTestMode > 0) {
+    if (mTestMode > 0) {
       // test-mode: initialize and store data part in the buffer.
-      parts.At(1)->Copy(baseMsg);
-      fSTFBuffer.push(move(parts));
+      parts.At(1)->Copy(*baseMsg);
+      mSTFBuffer.push(move(parts));
     } else {
       // regular mode: receive data part from input
       if (dataInChannel.Receive(parts.At(1)) >= 0) {
-        fSTFBuffer.push(move(parts));
+        mSTFBuffer.push(move(parts));
       } else {
         // if nothing was received, try again
         continue;
@@ -110,10 +109,10 @@ void FLPSender::Run()
     }
 
     // if offset is 0 - send data out without staggering.
-    if (fSendOffset == 0 && fSTFBuffer.size() > 0) {
+    if (mSendOffset == 0 && mSTFBuffer.size() > 0) {
       sendFrontData();
-    } else if (fSTFBuffer.size() > 0) {
-      if (duration_cast<milliseconds>(steady_clock::now() - fArrivalTime.front()).count() >= (fSendDelay * fSendOffset)) {
+    } else if (mSTFBuffer.size() > 0) {
+      if (duration_cast<milliseconds>(steady_clock::now() - mArrivalTime.front()).count() >= (mSendDelay * mSendOffset)) {
         sendFrontData();
       } else {
         // LOG(INFO) << "buffering...";
@@ -124,16 +123,16 @@ void FLPSender::Run()
 
 inline void FLPSender::sendFrontData()
 {
-  f2eHeader header = *(static_cast<f2eHeader*>(fSTFBuffer.front().At(0)->GetData()));
+  f2eHeader header = *(static_cast<f2eHeader*>(mSTFBuffer.front().At(0)->GetData()));
   uint16_t currentTimeframeId = header.timeFrameId;
 
   // for which EPN is the message?
-  int direction = currentTimeframeId % fNumEPNs;
+  int direction = currentTimeframeId % mNumEPNs;
   // LOG(INFO) << "Sending event " << currentTimeframeId << " to EPN#" << direction << "...";
 
-  if (Send(fSTFBuffer.front(), fOutChannelName, direction, 0) < 0) {
+  if (Send(mSTFBuffer.front(), mOutChannelName, direction, 0) < 0) {
     LOG(ERROR) << "Failed to queue sub-timeframe #" << currentTimeframeId << " to EPN[" << direction << "]";
   }
-  fSTFBuffer.pop();
-  fArrivalTime.pop();
+  mSTFBuffer.pop();
+  mArrivalTime.pop();
 }

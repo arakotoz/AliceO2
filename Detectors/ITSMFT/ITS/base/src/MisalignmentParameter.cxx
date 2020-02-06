@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /// \file MisalignmentParameter.cxx
 /// \brief Implementation of the MisalignmentParameter class
 
@@ -5,11 +15,11 @@
 
 #include "FairParamList.h"
 
-using namespace AliceO2::ITS;
+using namespace o2::its;
 
-ClassImp(AliceO2::ITS::MisalignmentParameter)
+ClassImp(o2::its::MisalignmentParameter);
 
-  MisalignmentParameter::MisalignmentParameter(const char* name, const char* title, const char* context)
+MisalignmentParameter::MisalignmentParameter(const char* name, const char* title, const char* context)
   : FairParGenericSet(name, title, context),
     mShiftX(),
     mShiftY(),
@@ -21,8 +31,8 @@ ClassImp(AliceO2::ITS::MisalignmentParameter)
 {
 }
 
-MisalignmentParameter::~MisalignmentParameter(void) {}
-void MisalignmentParameter::Clear(void) {}
+MisalignmentParameter::~MisalignmentParameter() = default;
+void MisalignmentParameter::Clear() {}
 void MisalignmentParameter::putParams(FairParamList* list)
 {
   if (!list) {

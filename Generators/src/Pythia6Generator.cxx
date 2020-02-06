@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /********************************************************************************
  *    Copyright (C) 2014 GSI Helmholtzzentrum fuer Schwerionenforschung GmbH    *
  *                                                                              *
@@ -22,49 +32,48 @@
 using std::cout;
 using std::endl;
 using std::max;
+namespace o2
+{
+namespace eventgen
+{
 
 // -----   Default constructor   ------------------------------------------
-Pythia6Generator::Pythia6Generator() {}
+Pythia6Generator::Pythia6Generator() = default;
 // ------------------------------------------------------------------------
 
-
-
 // -----   Standard constructor   -----------------------------------------
-Pythia6Generator::Pythia6Generator(const char* fileName) {
-  fFileName  = fileName;
-  fVerbose = 0;
-  cout << "-I Pythia6Generator: Opening input file " << fileName << endl;
-  if ((fInputFile = fopen(fFileName,"r"))==NULL)
-    //  fInputFile = new ifstream(fFileName);
-    //  if ( ! fInputFile->is_open() )
-    Fatal("Pythia6Generator","Cannot open input file.");
+Pythia6Generator::Pythia6Generator(const char* fileName)
+  : mFileName(fileName), mInputFile(nullptr), mVerbose(0)
+{
+  cout << "-I Pythia6Generator: Opening input file " << mFileName << endl;
+  if ((mInputFile = fopen(mFileName, "r")) == nullptr) {
+    Fatal("Pythia6Generator", "Cannot open input file.");
+  }
 
-  // fPDG=TDatabasePDG::Instance();
+  // mPDG=TDatabasePDG::Instance();
 }
 // ------------------------------------------------------------------------
 
-
-
 // -----   Destructor   ---------------------------------------------------
-Pythia6Generator::~Pythia6Generator() {
+Pythia6Generator::~Pythia6Generator()
+{
   CloseInput();
 }
 // ------------------------------------------------------------------------
 
-
-
 // -----   Public method ReadEvent   --------------------------------------
-Bool_t Pythia6Generator::ReadEvent(FairPrimaryGenerator* primGen) {
+Bool_t Pythia6Generator::ReadEvent(FairPrimaryGenerator* primGen)
+{
 
   // Check for input file
-  if (!fInputFile) {
-    // if ( ! fInputFile->is_open() ) {
+  if (!mInputFile) {
+    // if ( ! mInputFile->is_open() ) {
     cout << "-E Pythia6Generator: Input file not open!" << endl;
     return kFALSE;
   }
 
   // Define event variable to be read from file
-   Int_t ntracks = 0, eventID = 0, ncols = 0;
+  Int_t ntracks = 0, eventID = 0, ncols = 0;
 
   // Define track variables to be read from file
   Int_t nLev = 0, pdgID = 0, nM1 = -1, nM2 = -1, nDF = -1, nDL = -1;
@@ -76,30 +85,28 @@ Bool_t Pythia6Generator::ReadEvent(FairPrimaryGenerator* primGen) {
   Int_t max_nr = 0;
 
   Text_t buffer[200];
-  ncols = fscanf(fInputFile,"%d\t%d", &eventID, &ntracks);
+  ncols = fscanf(mInputFile, "%d\t%d", &eventID, &ntracks);
 
-  if (ncols && ntracks>0) {
+  if (ncols && ntracks > 0) {
 
-    if (fVerbose>0) cout << "Event number: " << eventID << "\tNtracks: " << ntracks << endl;
+    if (mVerbose > 0)
+      cout << "Event number: " << eventID << "\tNtracks: " << ntracks << endl;
 
-    for (Int_t ll=0; ll<ntracks; ll++)
-      {
-	ncols = fscanf(fInputFile,"%d %d %d %d %d %d %f %f %f %f %f %f %f %f %f", &nLev, &pdgID, &nM1, &nM2, &nDF, &nDL, &fPx, &fPy, &fPz, &fE, &fM, &fVx, &fVy, &fVz, &fT);
-	if (fVerbose>0) cout << nLev << "\t" << pdgID << "\t" << nM1 << "\t" << nM2 << "\t" << nDF << "\t" << nDL <<
-	  "\t" << fPx << "\t" << fPy << "\t" << fPz << "\t" << fE << "\t" << fM << "\t" << fVx << "\t" << fVy << "\t" << fVz << "\t" << fT <<  endl;
-	if (nLev==1)
-	  primGen->AddTrack(pdgID, fPx, fPy, fPz, fVx, fVy, fVz);
-      }
-  }
-  else {
+    for (Int_t ll = 0; ll < ntracks; ll++) {
+      ncols = fscanf(mInputFile, "%d %d %d %d %d %d %f %f %f %f %f %f %f %f %f", &nLev, &pdgID, &nM1, &nM2, &nDF, &nDL, &fPx, &fPy, &fPz, &fE, &fM, &fVx, &fVy, &fVz, &fT);
+      if (mVerbose > 0)
+        cout << nLev << "\t" << pdgID << "\t" << nM1 << "\t" << nM2 << "\t" << nDF << "\t" << nDL << "\t" << fPx << "\t" << fPy << "\t" << fPz << "\t" << fE << "\t" << fM << "\t" << fVx << "\t" << fVy << "\t" << fVz << "\t" << fT << endl;
+      if (nLev == 1)
+        primGen->AddTrack(pdgID, fPx, fPy, fPz, fVx, fVy, fVz);
+    }
+  } else {
     cout << "-I Pythia6Generator: End of input file reached " << endl;
     CloseInput();
     return kFALSE;
   }
 
-
   // If end of input file is reached : close it and abort run
-  if ( feof(fInputFile) ) {
+  if (feof(mInputFile)) {
     cout << "-I Pythia6Generator: End of input file reached " << endl;
     CloseInput();
     return kFALSE;
@@ -115,25 +122,25 @@ Bool_t Pythia6Generator::ReadEvent(FairPrimaryGenerator* primGen) {
 }
 // ------------------------------------------------------------------------
 
-
-
 // -----   Private method CloseInput   ------------------------------------
-void Pythia6Generator::CloseInput() {
-  if ( fInputFile ) {
-    //if ( fInputFile->is_open() ) {
+void Pythia6Generator::CloseInput()
+{
+  if (mInputFile) {
+    //if ( mInputFile->is_open() ) {
     {
       cout << "-I Pythia6Generator: Closing input file "
-	   << fFileName << endl;
-      //  fInputFile->close();
+           << mFileName << endl;
+      //  mInputFile->close();
 
-      fclose(fInputFile);
+      fclose(mInputFile);
     }
-    delete fInputFile;
-    fInputFile = NULL;
+    delete mInputFile;
+    mInputFile = nullptr;
   }
 }
 // ------------------------------------------------------------------------
 
+} // namespace eventgen
+} // namespace o2
 
-ClassImp(Pythia6Generator)
-
+ClassImp(o2::eventgen::Pythia6Generator);

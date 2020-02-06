@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /// \file MisalignmentParameter.h
 /// \brief Definition of the MisalignmentParameter class
 
@@ -12,9 +22,9 @@
 
 class FairParamList;
 
-namespace AliceO2
+namespace o2
 {
-namespace ITS
+namespace its
 {
 class MisalignmentParameter : public FairParGenericSet
 {
@@ -23,13 +33,13 @@ class MisalignmentParameter : public FairParGenericSet
                         const char* title = "Misalignment parameter for AliceO2ITSHitProducerIdealMisallign Parameters",
                         const char* context = "TestDefaultContext");
 
-  ~MisalignmentParameter(void);
+  ~MisalignmentParameter() override;
 
-  void Clear(void);
+  void Clear();
 
-  void putParams(FairParamList*);
+  void putParams(FairParamList*) override;
 
-  Bool_t getParams(FairParamList*);
+  Bool_t getParams(FairParamList*) override;
 
   TArrayD getShiftX() { return mShiftX; }
   TArrayD getShiftY() { return mShiftY; }
@@ -38,6 +48,7 @@ class MisalignmentParameter : public FairParGenericSet
   TArrayD getRotY() { return mRotY; }
   TArrayD getRotZ() { return mRotZ; }
   Int_t getNumberOfDetectors() { return mNumberOfDetectors; }
+
  private:
   TArrayD mShiftX;          ///< Array to hold the misalignment in x-direction
   TArrayD mShiftY;          ///< Array to hold the misalignment in y-direction
@@ -51,9 +62,9 @@ class MisalignmentParameter : public FairParGenericSet
 
   MisalignmentParameter& operator=(const MisalignmentParameter&);
 
-  ClassDef(MisalignmentParameter, 1)
+  ClassDefOverride(MisalignmentParameter, 1);
 };
-}
-}
+} // namespace its
+} // namespace o2
 
 #endif

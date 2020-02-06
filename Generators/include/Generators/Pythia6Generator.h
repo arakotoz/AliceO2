@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /********************************************************************************
  *    Copyright (C) 2014 GSI Helmholtzzentrum fuer Schwerionenforschung GmbH    *
  *                                                                              *
@@ -8,7 +18,6 @@
 // -------------------------------------------------------------------------
 // -----                  M. Al-Turany   June 2014                     -----
 // -------------------------------------------------------------------------
-
 
 // -------------------------------------------------------------------------
 // -----                Pythia6Generator header file                 -----
@@ -57,7 +66,6 @@
  Derived from FairGenerator.
 **/
 
-
 #ifndef PND_PYTHIAGENERATOR_H
 #define PND_PYTHIAGENERATOR_H
 
@@ -66,57 +74,55 @@
 #define _DLFCN_H
 #endif
 
-#include <stdio.h>          // for FILE
+#include <cstdio>           // for FILE
 #include "FairGenerator.h"  // for FairGenerator
 #include "Rtypes.h"         // for Int_t, Pythia6Generator::Class, Bool_t, etc
-class FairPrimaryGenerator;  // lines 68-68
+class FairPrimaryGenerator; // lines 68-68
 
-
-class Pythia6Generator : public FairGenerator  
+namespace o2
+{
+namespace eventgen
 {
 
- public: 
+class Pythia6Generator : public FairGenerator
+{
 
+ public:
   /** Default constructor without arguments should not be used. **/
   Pythia6Generator();
-
 
   /** Standard constructor. 
    ** @param fileName The input file name
    **/
   Pythia6Generator(const char* fileName);
 
-
   /** Destructor. **/
-  virtual ~Pythia6Generator();
+  ~Pythia6Generator() override;
 
-	
   /** Reads on event from the input file and pushes the tracks onto
    ** the stack. Abstract method in base class.
    ** @param primGen  pointer to the CbmrimaryGenerator
    **/
-  virtual Bool_t ReadEvent(FairPrimaryGenerator* primGen);
+  Bool_t ReadEvent(FairPrimaryGenerator* primGen) override;
 
-  void SetVerbose (Int_t verb) { fVerbose = verb; };
+  void SetVerbose(Int_t verb) { mVerbose = verb; };
 
  private:
-
-  //ifstream* fInputFile;               //! Input file stream
-  const Char_t * fFileName;           //! Input file Name
-  FILE *fInputFile;                   //! File
-  Int_t fVerbose;                     //! Verbose Level
+  const Char_t* mFileName; //! Input file Name
+  FILE* mInputFile;        //! File
+  Int_t mVerbose;          //! Verbose Level
 
   /** Private method CloseInput. Just for convenience. Closes the 
    ** input file properly. Called from destructor and from ReadEvent. **/
   void CloseInput();
-	
-	
+
   /** PDG data base */
-  
-//  TDatabasePDG *fPDG; //!
 
-  ClassDef(Pythia6Generator,1);
+  //  TDatabasePDG *mPDG; //!
 
+  ClassDefOverride(Pythia6Generator, 1);
 };
 
+} // namespace eventgen
+} // namespace o2
 #endif

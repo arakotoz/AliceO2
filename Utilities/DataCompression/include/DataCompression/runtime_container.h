@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 //-*- Mode: C++ -*-
 
 #ifndef RUNTIME_CONTAINER_H
@@ -19,6 +29,8 @@
 /// @since  2016-09-11
 /// @brief  A general runtime container for a compile time sequence
 /// This file is part of https://github.com/matthiasrichter/gNeric
+
+// clang-format off
 
 // A general runtime container for a compile time sequence
 // of types. A mixin class is used to represent a member of each data
@@ -565,5 +577,6 @@ struct create_rtc_types
 };
 
 };// namespace gNeric
+// clang-format on
 
 #endif

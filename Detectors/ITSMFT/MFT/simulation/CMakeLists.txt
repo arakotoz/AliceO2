@@ -1,53 +1,17 @@
-set(MODULE_NAME "MFTSimulation")
+# Copyright CERN and copyright holders of ALICE O2. This software is distributed
+# under the terms of the GNU General Public License v3 (GPL Version 3), copied
+# verbatim in the file "COPYING".
+#
+# See http://alice-o2.web.cern.ch/license for full licensing information.
+#
+# In applying this license CERN does not waive the privileges and immunities
+# granted to it by virtue of its status as an Intergovernmental Organization or
+# submit itself to any jurisdiction.
 
-O2_SETUP(NAME ${MODULE_NAME})
+o2_add_library(MFTSimulation
+               SOURCES src/Detector.cxx src/DigitizerTask.cxx
+               PUBLIC_LINK_LIBRARIES O2::MFTBase ROOT::Physics)
 
-set(SRCS
-  src/Detector.cxx
-  src/GeometryTGeo.cxx
-  src/Geometry.cxx
-  src/GeometryBuilder.cxx
-  src/VSegmentation.cxx
-  src/Segmentation.cxx
-  src/HalfSegmentation.cxx
-  src/HalfDiskSegmentation.cxx
-  src/LadderSegmentation.cxx
-  src/ChipSegmentation.cxx
-  src/HalfDetector.cxx
-  src/HalfDisk.cxx
-  src/Plane.cxx
-  src/Ladder.cxx
-  src/Flex.cxx
-  src/Chip.cxx
-  src/Support.cxx
-  src/HeatExchanger.cxx
-  src/Point.cxx
-)
-set(HEADERS
-  include/${MODULE_NAME}/Detector.h
-  include/${MODULE_NAME}/GeometryTGeo.h
-  include/${MODULE_NAME}/Geometry.h
-  include/${MODULE_NAME}/GeometryBuilder.h
-  include/${MODULE_NAME}/VSegmentation.h
-  include/${MODULE_NAME}/Segmentation.h
-  include/${MODULE_NAME}/HalfSegmentation.h
-  include/${MODULE_NAME}/HalfDiskSegmentation.h
-  include/${MODULE_NAME}/LadderSegmentation.h
-  include/${MODULE_NAME}/ChipSegmentation.h
-  include/${MODULE_NAME}/HalfDetector.h
-  include/${MODULE_NAME}/HalfDisk.h
-  include/${MODULE_NAME}/Plane.h
-  include/${MODULE_NAME}/Ladder.h
-  include/${MODULE_NAME}/Flex.h
-  include/${MODULE_NAME}/Chip.h
-  include/${MODULE_NAME}/Support.h
-  include/${MODULE_NAME}/HeatExchanger.h
-  include/${MODULE_NAME}/Point.h
-)
-
-Set(LINKDEF src/MFTSimulationLinkDef.h)
-Set(LIBRARY_NAME ${MODULE_NAME})
-set(BUCKET_NAME mft_simulation_bucket)
-
-O2_GENERATE_LIBRARY()
-
+o2_target_root_dictionary(MFTSimulation
+                          HEADERS include/MFTSimulation/Detector.h
+                                  include/MFTSimulation/DigitizerTask.h)

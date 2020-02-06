@@ -1,69 +1,84 @@
-void run_digi(Int_t nEvents = 10, TString mcEngine = "TGeant3"){
-        // Initialize logger
-        FairLogger *logger = FairLogger::GetLogger();
-        logger->SetLogVerbosityLevel("LOW");
-        logger->SetLogScreenLevel("INFO");
+#if !defined(__CLING__) || defined(__ROOTCLING__)
+#include <Rtypes.h>
+#include <TString.h>
+#include <TStopwatch.h>
+#include <TGeoManager.h>
 
-        // Input and output file name
-        std::stringstream inputfile, outputfile, paramfile;
-        inputfile << "AliceO2_" << mcEngine << ".mc_" << nEvents << "_event.root";
-        paramfile << "AliceO2_" << mcEngine << ".params_" << nEvents << ".root";
-        outputfile << "AliceO2_" << mcEngine << ".digi_" << nEvents << "_event.root";
+#include "FairLogger.h"
+#include "FairRunAna.h"
+#include "FairFileSource.h"
+#include "FairSystemInfo.h"
+#include "FairRuntimeDb.h"
+#include "FairParRootFileIo.h"
+#endif
 
-        // Setup timer
-        TStopwatch timer;
+void run_digi(Int_t nEvents = 2, TString mcEngine = "TGeant3")
+{
+  // Initialize logger
+  FairLogger* logger = FairLogger::GetLogger();
+  logger->SetLogVerbosityLevel("LOW");
+  logger->SetLogScreenLevel("DEBUG");
 
-        // Setup FairRoot analysis manager
-        FairRunAna * fRun = new FairRunAna();
-        FairFileSource *fFileSource = new FairFileSource(inputfile.str().c_str());
-        fRun->SetSource(fFileSource);
-        fRun->SetOutputFile(outputfile.str().c_str());
+  // Input and output file name
+  std::stringstream inputfile, outputfile, paramfile;
+  inputfile << "AliceO2_" << mcEngine << ".mc_" << nEvents << "_event.root";
+  paramfile << "AliceO2_" << mcEngine << ".params_" << nEvents << ".root";
+  outputfile << "AliceO2_" << mcEngine << ".digi_" << nEvents << "_event.root";
 
-        // Setup Runtime DB
-        FairRuntimeDb* rtdb = fRun->GetRuntimeDb();
-        FairParRootFileIo* parInput1 = new FairParRootFileIo();
-        parInput1->open(paramfile.str().c_str());
-        rtdb->setFirstInput(parInput1);
+  // Setup timer
+  TStopwatch timer;
 
-      //  TGeoManager::Import("geofile_full.root");
+  // Setup FairRoot analysis manager
+  FairRunAna* fRun = new FairRunAna();
+  FairFileSource* fFileSource = new FairFileSource(inputfile.str().c_str());
+  fRun->SetSource(fFileSource);
+  fRun->SetOutputFile(outputfile.str().c_str());
 
-        // Setup digitizer
-        AliceO2::ITS::DigitizerTask *digi = new AliceO2::ITS::DigitizerTask;
-        fRun->AddTask(digi);
+  // Setup Runtime DB
+  FairRuntimeDb* rtdb = fRun->GetRuntimeDb();
+  FairParRootFileIo* parInput1 = new FairParRootFileIo();
+  parInput1->open(paramfile.str().c_str());
+  rtdb->setFirstInput(parInput1);
 
-        AliceO2::TPC::DigitizerTask *digiTPC = new AliceO2::TPC::DigitizerTask;
-        fRun->AddTask(digiTPC);
+  //  TGeoManager::Import("geofile_full.root");
 
-        fRun->Init();
+  // Setup digitizer
+  //o2::its::DigitizerTask *digi = new o2::its::DigitizerTask;
+  //fRun->AddTask(digi);
 
-        timer.Start();
-        fRun->Run();
+  fRun->Init();
 
-        std::cout << std::endl << std::endl;
+  timer.Start();
+  fRun->Run();
 
-        // Extract the maximal used memory an add is as Dart measurement
-        // This line is filtered by CTest and the value send to CDash
-        FairSystemInfo sysInfo;
-        Float_t maxMemory=sysInfo.GetMaxMemory();
-        std::cout << "<DartMeasurement name=\"MaxMemory\" type=\"numeric/double\">";
-        std::cout << maxMemory;
-        std::cout << "</DartMeasurement>" << std::endl;
+  fRun->TerminateRun();
 
-        timer.Stop();
-        Double_t rtime = timer.RealTime();
-        Double_t ctime = timer.CpuTime();
+  std::cout << std::endl
+            << std::endl;
 
-        Float_t cpuUsage=ctime/rtime;
-        cout << "<DartMeasurement name=\"CpuLoad\" type=\"numeric/double\">";
-        cout << cpuUsage;
-        cout << "</DartMeasurement>" << endl;
-        std::cout << "Macro finished succesfully." << std::endl;
+  // Extract the maximal used memory an add is as Dart measurement
+  // This line is filtered by CTest and the value send to CDash
+  FairSystemInfo sysInfo;
+  Float_t maxMemory = sysInfo.GetMaxMemory();
+  std::cout << "<DartMeasurement name=\"MaxMemory\" type=\"numeric/double\">";
+  std::cout << maxMemory;
+  std::cout << "</DartMeasurement>" << std::endl;
 
-        std::cout << endl << std::endl;
-        std::cout << "Output file is "    << outputfile.str() << std::endl;
-        //std::cout << "Parameter file is " << parFile << std::endl;
-        std::cout << "Real time " << rtime << " s, CPU time " << ctime
-                  << "s" << endl << endl;
+  timer.Stop();
+  Double_t rtime = timer.RealTime();
+  Double_t ctime = timer.CpuTime();
 
+  Float_t cpuUsage = ctime / rtime;
+  std::cout << "<DartMeasurement name=\"CpuLoad\" type=\"numeric/double\">";
+  std::cout << cpuUsage;
+  std::cout << "</DartMeasurement>" << std::endl;
+  std::cout << "Macro finished succesfully." << std::endl;
 
+  std::cout << std::endl
+            << std::endl;
+  std::cout << "Output file is " << outputfile.str() << std::endl;
+  //std::cout << "Parameter file is " << parFile << std::endl;
+  std::cout << "Real time " << rtime << " s, CPU time " << ctime
+            << "s" << std::endl
+            << std::endl;
 }

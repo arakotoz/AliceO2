@@ -1,12 +1,20 @@
-//-*- Mode: C++ -*-
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
 
 #ifndef COMPONENT_H
 #define COMPONENT_H
 //****************************************************************************
 //* This file is free software: you can redistribute it and/or modify        *
 //* it under the terms of the GNU General Public License as published by     *
-//* the Free Software Foundation, either version 3 of the License, or	     *
-//* (at your option) any later version.					     *
+//* the Free Software Foundation, either version 3 of the License, or        *
+//* (at your option) any later version.                                      *
 //*                                                                          *
 //* Primary Authors: Matthias Richter <richterm@scieq.net>                   *
 //*                                                                          *
@@ -23,11 +31,16 @@
 #include "MessageFormat.h"
 #include <vector>
 #include <boost/signals2.hpp>
+#include <boost/program_options.hpp>
 //using boost::signals2::signal;
-typedef boost::signals2::signal<unsigned char* (unsigned int)> cballoc_signal_t;
+typedef boost::signals2::signal<unsigned char*(unsigned int)> cballoc_signal_t;
 
-namespace ALICE {
-namespace HLT {
+namespace bpo = boost::program_options;
+
+namespace o2
+{
+namespace alice_hlt
+{
 class SystemInterface;
 
 /// @class Component
@@ -50,6 +63,7 @@ class SystemInterface;
 ///                 Currently, all HLT components need configuration and
 ///                 calibration data from OCDB; OCDB interface needs to
 ///                 be initialized with run number
+/// --ocdb          uri of the OCDB, e.g. 'local://./OCDB'
 /// --msgsize       size of the output buffer in byte
 ///                 This overrides the default behavior where output buffer
 ///                 size is determined from the input size and properties
@@ -58,13 +72,49 @@ class SystemInterface;
 ///                 0  HOMER format
 ///                 1  blocks in multiple messages
 ///                 2  blocks concatenated in one message (default)
+///                 3  O2 data format (default)
 ///
-class Component {
-public:
+class Component
+{
+ public:
   /// default constructor
   Component();
   /// destructor
   ~Component();
+
+  /// get description of options
+  static bpo::options_description GetOptionsDescription();
+
+  // TODO: have been trying to use strongly typed enums, however
+  // the problem starts with the iteration over all elements (which
+  // doen't seem to work without specialized coding in the enum class)
+  // Furthermore, one would need to use a map which can not be used in
+  // a constexpr because of the non-trivial destructor
+  // Keep the solution with the simple const char array for the OptionKeys
+  // and live with the fact that changing the sequence causes a runtime
+  // error, and a compile time check is not possible
+  enum /*class*/ OptionKeyIds /*: int*/ {
+    OptionKeyLibrary = 0,
+    OptionKeyComponent,
+    OptionKeyParameter,
+    OptionKeyRun,
+    OptionKeyOCDB,
+    OptionKeyMsgsize,
+    OptionKeyOutputMode,
+    OptionKeyInstanceId,
+    OptionKeyLast
+  };
+
+  constexpr static const char* OptionKeys[] = {
+    "library",
+    "component",
+    "parameter",
+    "run",
+    "ocdb",
+    "msgsize",
+    "output-mode",
+    "instance-id",
+    nullptr};
 
   /// Init the component
   int init(int argc, char** argv);
@@ -74,31 +124,30 @@ public:
   /// the AliHLTComponentBlockData header immediately followed by the block
   /// payload. After processing, handles to output blocks are provided in this
   /// list.
-  int process(std::vector<AliceO2::AliceHLT::MessageFormat::BufferDesc_t>& dataArray,
-              cballoc_signal_t* cbAllocate=nullptr);
+  int process(std::vector<o2::alice_hlt::MessageFormat::BufferDesc_t>& dataArray,
+              cballoc_signal_t* cbAllocate = nullptr);
 
-  int getEventCount() const {return mEventCount;}
+  int getEventCount() const { return mEventCount; }
 
-protected:
-
-private:
+ protected:
+ private:
   // copy constructor prohibited
   Component(const Component&);
   // assignment operator prohibited
   Component& operator=(const Component&);
 
   /// output buffer to receive the data produced by component
-  std::vector<AliHLTUInt8_t> mOutputBuffer;
+  std::vector<uint8_t> mOutputBuffer;
 
   /// instance of the system interface
   SystemInterface* mpSystem;
   /// handle of the processing component
   AliHLTComponentHandle mProcessor;
   /// container for handling the i/o buffers
-  AliceO2::AliceHLT::MessageFormat mFormatHandler;
+  o2::alice_hlt::MessageFormat mFormatHandler;
   int mEventCount;
 };
 
-} // namespace hlt
-} // namespace alice
+} // namespace alice_hlt
+} // namespace o2
 #endif // COMPONENT_H

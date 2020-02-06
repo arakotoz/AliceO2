@@ -1,8 +1,18 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 //****************************************************************************
 //* This file is free software: you can redistribute it and/or modify        *
 //* it under the terms of the GNU General Public License as published by     *
-//* the Free Software Foundation, either version 3 of the License, or	     *
-//* (at your option) any later version.					     *
+//* the Free Software Foundation, either version 3 of the License, or        *
+//* (at your option) any later version.                                      *
 //*                                                                          *
 //* Primary Authors: Matthias Richter <richterm@scieq.net>                   *
 //*                                                                          *
@@ -37,8 +47,8 @@ int main(int argc, char** argv)
 {
   int iResult = 0;
   // parse options
-  const char* inputFileName = NULL;
-  const char* outputFileName = NULL;
+  const char* inputFileName = nullptr;
+  const char* outputFileName = nullptr;
 
   vector<char*> componentOptions;
   for (int i = 0; i < argc; i++) {
@@ -62,7 +72,7 @@ int main(int argc, char** argv)
     }
   }
 
-  ALICE::HLT::Component component;
+  o2::alice_hlt::Component component;
   if ((iResult = component.init(componentOptions.size(), &componentOptions[0])) < 0) {
     cerr << "error: init failed with " << iResult << endl;
     // the ALICE HLT external interface uses the following error definition
@@ -71,8 +81,8 @@ int main(int argc, char** argv)
     return -iResult;
   }
 
-  vector<AliceO2::AliceHLT::MessageFormat::BufferDesc_t> blockData;
-  char* inputBuffer = NULL;
+  vector<o2::alice_hlt::MessageFormat::BufferDesc_t> blockData;
+  char* inputBuffer = nullptr;
   if (inputFileName) {
     std::ifstream input(inputFileName, std::ifstream::binary);
     if (input) {
@@ -85,20 +95,21 @@ int main(int argc, char** argv)
       inputBuffer = new char[length];
       input.read(inputBuffer, length);
       input.close();
-      blockData.push_back(
-        AliceO2::AliceHLT::MessageFormat::BufferDesc_t(reinterpret_cast<unsigned char*>(inputBuffer), length));
+      blockData.emplace_back(reinterpret_cast<unsigned char*>(inputBuffer), length);
     }
   }
   if ((iResult = component.process(blockData)) < 0) {
     cerr << "error: init failed with " << iResult << endl;
   }
-  if (inputBuffer) delete[] inputBuffer;
-  inputBuffer = NULL;
-  if (iResult < 0) return -iResult;
+  if (inputBuffer)
+    delete[] inputBuffer;
+  inputBuffer = nullptr;
+  if (iResult < 0)
+    return -iResult;
 
   // for now, only the first buffer is written
   if (blockData.size() > 0) {
-    if (outputFileName != NULL) {
+    if (outputFileName != nullptr) {
       ofstream outputFile(outputFileName);
       if (outputFile.good()) {
         outputFile.write(reinterpret_cast<const char*>(blockData[0].mP), blockData[0].mSize);

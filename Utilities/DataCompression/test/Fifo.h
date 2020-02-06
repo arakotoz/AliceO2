@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 //-*- Mode: C++ -*-
 
 #ifndef FIFO_H
@@ -14,18 +24,20 @@
 //* any purpose. It is provided "as is" without express or implied warranty. *
 //****************************************************************************
 
-//  @file   Fifo.h
-//  @author Matthias Richter
-//  @since  2016-12-07
-//  @brief  Thread safe FIFO
+/// @file   Fifo.h
+/// @author Matthias Richter
+/// @since  2016-12-07
+/// @brief  Thread safe FIFO
 
 #include <queue>
 #include <mutex>
 #include <condition_variable>
 #include <chrono>
 
-namespace AliceO2 {
-namespace Test {
+namespace o2
+{
+namespace test
+{
 
 /**
  * @class Fifo
@@ -42,18 +54,18 @@ namespace Test {
  * the pull method whether data can be expected despite of a currently
  * empty queue, or if the pull should be terminated immediately.
  */
-template<class T
-         , class _BASE = std::queue<T>
-         >
-class Fifo : protected _BASE {
+template <class T, class _BASE = std::queue<T>>
+class Fifo : protected _BASE
+{
  public:
   Fifo() : mMutex(), mFillStatus(), mStop(false) {}
-  typedef T value_type;
+  using value_type = T;
 
   /**
    * Push value to the FIFO
    */
-  void push(T something, bool isLast = false) {
+  void push(T something, bool isLast = false)
+  {
     std::lock_guard<std::mutex> lock(mMutex);
     mStop |= isLast;
     _BASE::push(something);
@@ -67,7 +79,8 @@ class Fifo : protected _BASE {
    * TODO: make this const, but then the const'ness must be cast away
    * in order to lock the mutex
    */
-  bool empty() {
+  bool empty()
+  {
     std::lock_guard<std::mutex> lock(mMutex);
     return _BASE::empty();
   }
@@ -77,8 +90,9 @@ class Fifo : protected _BASE {
    * processor function. The return value from the processor is propagated
    * to indicate whether to continue pulling from the FIFO or not.
    */
-  template<typename F>
-  bool pull(F processor /*, const std::chrono::milliseconds& timeout*/) {
+  template <typename F>
+  bool pull(F processor /*, const std::chrono::milliseconds& timeout*/)
+  {
     T value;
     {
       std::unique_lock<std::mutex> lock(mMutex);
@@ -110,5 +124,5 @@ class Fifo : protected _BASE {
 };
 
 }; // namespace test
-}; // namespace AliceO2
+}; // namespace o2
 #endif

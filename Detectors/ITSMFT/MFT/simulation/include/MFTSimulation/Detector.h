@@ -1,101 +1,182 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /// \file Detector.h
 /// \brief Definition of the Detector class
-/// \author antonio.uras@cern.ch, bogdan.vulpescu@cern.ch 
+/// \author antonio.uras@cern.ch, bogdan.vulpescu@cern.ch
 /// \date 01/08/2016
 
-#ifndef ALICEO2_MFT_DETECTOR_H_
-#define ALICEO2_MFT_DETECTOR_H_
+#ifndef ALICEO2_MFT_DETECTOR_H
+#define ALICEO2_MFT_DETECTOR_H
 
+#include "TLorentzVector.h"
+
+#include <vector> // for vector
 #include "DetectorsBase/Detector.h"
+#include "DetectorsCommonDataFormats/DetID.h" // for Detector
+#include "ITSMFTSimulation/Hit.h"             // for Hit
 
-class TClonesArray;
 class TVector3;
 
-namespace AliceO2 { namespace MFT { class GeometryTGeo; } }
-namespace AliceO2 { namespace MFT { class Point; } }
+namespace o2
+{
+namespace itsmft
+{
+class Hit;
+}
+} // namespace o2
 
-namespace AliceO2 {
-namespace MFT {
+namespace o2
+{
+namespace mft
+{
+class GeometryTGeo;
+}
+} // namespace o2
 
-class Detector : public AliceO2::Base::Detector {
-
-public:
-
+namespace o2
+{
+namespace mft
+{
+class Detector : public o2::base::DetImpl<Detector>
+{
+ public:
   /// Default constructor
   Detector();
 
   /// Default destructor
-  virtual ~Detector();
-
-  Int_t IsVersion() const { return fVersion; }
+  ~Detector() override;
 
   /// Initialization of the detector is done here
-  virtual void Initialize();
+  void InitializeO2Detector() override;
 
   /// This method is called for each step during simulation (see FairMCApplication::Stepping())
-  virtual Bool_t ProcessHits(FairVolume* v = 0);
+  Bool_t ProcessHits(FairVolume* v = nullptr) override;
 
   /// Has to be called after each event to reset the containers
-  virtual void Reset();
+  void Reset() override;
 
   /// Registers the produced collections in FAIRRootManager
-  virtual void Register(); 
+  void Register() override;
 
-  /// Gets the produced collections
-  virtual TClonesArray* GetCollection(Int_t iColl) const;
-
-  virtual void EndOfEvent();
-
-  virtual void CopyClones(TClonesArray* cl1, TClonesArray* cl2, Int_t offset) {;}
-  virtual void FinishPrimary() {;}
-  virtual void FinishRun() {;}
-  virtual void BeginPrimary() {;}
-  virtual void PostTrack() {;}
-  virtual void PreTrack() {;}
-  virtual void BeginEvent() {;}
-  virtual void SetSpecialPhysicsCuts() {;}
-
-  GeometryTGeo* GetGeometryTGeo() const { return fGeometryTGeo; }
-  
-  /// Creating materials for the detector
-
-  void CreateMaterials();
-
-  enum EMedia{kZero,kAir, kVacuum, kSi, kReadout, kSupport, kCarbon, kBe, kAlu, kWater, kSiO2, kInox, kKapton, kEpoxy, kCarbonFiber, kCarbonEpoxy, kRohacell, kPolyimide, kPEEK, kFR4, kCu, kX7R, kX7Rw, kCarbonFleece, kSE4445};  // media IDs used in CreateMaterials
-
-  void SetDensitySupportOverSi(Double_t density) { 
-    if (density > 1e-6) fDensitySupportOverSi = density; 
-    else fDensitySupportOverSi = 1e-6; 
+  /// Gets the produced hits
+  std::vector<o2::itsmft::Hit>* getHits(Int_t iColl) const
+  {
+    if (iColl == 0) {
+      return mHits;
+    }
+    return nullptr;
   }
 
-  /// Constructing the geometry
+  void EndOfEvent() override;
 
-  void ConstructGeometry();  // inherited from FairModule
-  void CreateGeometry();
-  void DefineSensitiveVolumes();
+  void FinishPrimary() override { ; }
+  void FinishRun() override { ; }
+  void BeginPrimary() override { ; }
+  void PostTrack() override { ; }
+  void PreTrack() override { ; }
+  void ConstructGeometry() override; // inherited from FairModule
 
-protected:
+  //
 
-  Int_t fVersion;                  //
-  GeometryTGeo *fGeometryTGeo;     //!
-  Double_t fDensitySupportOverSi;  //
-  TClonesArray *fPoints;           //!
- 
-private:
+  Int_t isVersion() const { return mVersion; }
+  /// Creating materials for the detector
+
+  void createMaterials();
+
+  enum EMedia {
+    Zero,
+    Air,
+    Vacuum,
+    Si,
+    Readout,
+    Support,
+    Carbon,
+    Be,
+    Alu,
+    Water,
+    SiO2,
+    Inox,
+    Kapton,
+    Epoxy,
+    CarbonFiber,
+    CarbonEpoxy,
+    Rohacell,
+    Polyimide,
+    PEEK,
+    FR4,
+    Cu,
+    X7R,
+    X7Rw,
+    CarbonFleece,
+    SE4445
+  }; // media IDs used in CreateMaterials
+
+  void setDensitySupportOverSi(Double_t density)
+  {
+    if (density > 1e-6)
+      mDensitySupportOverSi = density;
+    else
+      mDensitySupportOverSi = 1e-6;
+  }
+
+  void createGeometry();
+  void defineSensitiveVolumes();
+
+  GeometryTGeo* mGeometryTGeo; //! access to geometry details
+
+ protected:
+  Int_t mVersion;                 //
+  Double_t mDensitySupportOverSi; //
+
+ private:
+  /// Container for hit data
+  std::vector<o2::itsmft::Hit>* mHits;
 
   Detector(const Detector&);
   Detector& operator=(const Detector&);
 
-  Point* AddHit(Int_t trackID, Int_t detID, TVector3 pos, TVector3 mom, Double_t time, Double_t length, Double_t eLoss);
+  o2::itsmft::Hit* addHit(int trackID, int detID, TVector3 startPos, TVector3 endPos, TVector3 startMom, double startE,
+                          double endTime, double eLoss, unsigned char startStatus, unsigned char endStatus);
 
-  ClassDef(Detector,1)
+  /// this is transient data about track passing the sensor
+  struct TrackData {               // this is transient
+    bool mHitStarted;              //! hit creation started
+    unsigned char mTrkStatusStart; //! track status flag
+    TLorentzVector mPositionStart; //! position at entrance
+    TLorentzVector mMomentumStart; //! momentum
+    double mEnergyLoss;            //! energy loss
+  } mTrackData;                    //!
 
+  template <typename Det>
+  friend class o2::base::DetImpl;
+  ClassDefOverride(Detector, 1);
 };
 
 // Input and output function for standard C++ input/output.
 std::ostream& operator<<(std::ostream& os, Detector& source);
 std::istream& operator>>(std::istream& os, Detector& source);
-}
-}
+} // namespace mft
+} // namespace o2
+
+#ifdef USESHM
+namespace o2
+{
+namespace base
+{
+template <>
+struct UseShm<o2::mft::Detector> {
+  static constexpr bool value = true;
+};
+} // namespace base
+} // namespace o2
+#endif
 
 #endif

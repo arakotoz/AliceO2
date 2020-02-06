@@ -29,7 +29,6 @@ runno=167808
 firstslice=0
 lastslice=35
 slices_per_node=1
-#dryrun="-n"
 pollingtimeout=100
 eventperiod=100000
 initialdelay=10000  # time before trigger starts
@@ -64,27 +63,37 @@ epn2node=localhost
 while [ "x$1" != "x" ]; do
     if [ "x$1" == "x--print-commands" ]; then
 	printcmdtoscreen='echo'
-    fi
-    if [ "x$1" == "x--polling-timeout" ] && [ "x$2" != "x" ] ; then
+    elif [ "x$1" == "x--polling-timeout" ] && [ "x$2" != "x" ] ; then
 	pollingtimeout=$2
 	shift
-    fi
-    if [ "x$1" == "x--eventperiod" ] && [ "x$2" != "x" ] ; then
+    elif [ "x$1" == "x--eventperiod" ] && [ "x$2" != "x" ] ; then
 	eventperiod=$2
 	shift
-    fi
-    if [ "x$1" == "x--initialdelay" ] && [ "x$2" != "x" ] ; then
+    elif [ "x$1" == "x--initialdelay" ] && [ "x$2" != "x" ] ; then
 	initialdelay=$2
 	shift
-    fi
-    if [ "x$1" == "x--sync-rundir" ]; then
+    elif [ "x$1" == "x--first-slice" ] && [ "x$2" != "x" ] ; then
+	firstslice=$2
+	shift
+    elif [ "x$1" == "x--last-slice" ] && [ "x$2" != "x" ] ; then
+	lastslice=$2
+	shift
+    elif [ "x$1" == "x--sync-rundir" ]; then
 	syncrundir=yes
-    fi
-    if [ "x$1" == "x--write-tracks" ]; then
+    elif [ "x$1" == "x--write-tracks" ]; then
 	write_tracks=yes
-    fi
-    if [ "x$1" == "x--skip-write-tracks" ]; then
+    elif [ "x$1" == "x--skip-write-tracks" ]; then
 	write_tracks=no
+    elif [ "x$1" == "x--skip-tracking" ]; then
+	# skip the tracking by using the dry-run option of the wrapper
+	# component
+	skiptracking="-n"
+    elif [ "x$1" == "x--enable-gpu" ]; then
+	# set the GPU parameter for the tracker
+	gpuparams="-allowGPU -GPUHelperThreads 4"
+    else
+	echo unknown option $1
+	exit
     fi
     shift
 done
@@ -166,7 +175,11 @@ nnodes=${#nodelist[@]}
 nflpnodes=${#flpnodelist[@]}
 nepnnodes=${#epnnodelist[@]}
 
-echo "using $nflpnodes FLP and $nepnnodes EPN node(s) for running processing topology"
+# the same node name can be specified for multiple FLP groups
+# this map holds a count of sockets already used per node
+declare -A numberOfUsedSocketsPerNode
+
+echo "using ${#flpinputnode[@]} FLP(s) on $nflpnodes node(s) and $nepnnodes EPN node(s) for running processing topology"
 echo "FLP ${flpnodelist[@]} - EPN ${epnnodelist[@]}"
 
 # init the variables for the session commands
@@ -179,12 +192,12 @@ nsessions=0
 ###################################################################
 # check if the output of the parent is binding or not
 # and set the attributes according to that
-# --output --> --input
+# name=data-out <--> name=data-in
 # bind <--> connect
 # push <--> pull
 translate_io_attributes() {
     __inputattributes=$1
-    __translated=`echo $1 | sed -e 'h; /--output/{s|--output|--input|g; p}; g; /--input/{s|--input|--output|g; p}; d'`
+    __translated=`echo $1 | sed -e 'h; /name=data-out/{s|name=data-out|name=data-in|g; p}; g; /name=data-in/{s|name=data-in|name=data-out|g; p}; d'`
     __node=${2:-localhost}
     if [ x`echo ${__inputattributes} | sed -e 's|.*method=\(.*\)|\1|' -e 's|,.*$||'` == "xbind" ]; then
 	__translated=`echo ${__translated} | sed -e "s|://\*:|://${__node}:|g" -e 's|method=bind|method=connect|g'`
@@ -199,13 +212,6 @@ translate_io_attributes() {
     echo $__translated
 }
 
-translate_io_alternateformat() {
-    __inputattributes=$1
-    io=`echo $__inputattributes | sed -e 's| .*$||`
-    type=`echo $__inputattributes | sed -e 's| .*$||`
-    io=`echo $__inputattributes | sed -e 's| .*$||`
-}
-
 ###################################################################
 # create the trigger node group
 flp_trigger_input=
@@ -216,9 +222,9 @@ create_triggergroup() {
 
     deviceid="Trigger"
     input=
-    output="--output type=pub,size=5000,method=bind,address=tcp://*:$((basesocket + socketcount))"
+    output="--channel-config name=data-out,type=pub,size=5000,method=bind,address=tcp://*:$((basesocket + socketcount))"
     let socketcount++
-    command="aliceHLTEventSampler $deviceid 1 $input $output --eventperiod $eventperiod --initialdelay $initialdelay --latency-log /tmp/latency.log"
+    command="o2-alicehlt-eventsampler-device --id=$deviceid $input $output --eventperiod $eventperiod --initialdelay $initialdelay --latency-log /tmp/latency.log"
 
     sessionnode[nsessions]=$node
     sessiontitle[nsessions]="$deviceid"
@@ -237,6 +243,7 @@ create_flpgroup() {
     basesocket=$2
     firstslice_on_node=$3
     nofslices=$4
+    groupoutputsocket=$5
     socketcount=0
     cf_output=
     if [ "x$CFoptPublishIndividualPartitions" == "xyes" ]; then
@@ -261,7 +268,7 @@ create_flpgroup() {
         if [ "x$flp_trigger_input" != "x" ]; then
             input=`translate_io_attributes "$flp_trigger_input"`
         fi
-	output="--output type=push,size=5000,method=bind,address=tcp://*:$socket"
+	output="--channel-config name=data-out,type=push,size=5000,method=bind,address=tcp://*:$socket"
         if [ "x$syncrundir" == "xyes" ]; then
             echo "synchronizing data $rundir on node $node"
             rsync -auL --include="*CLUSTERS_"`printf 0x%02x $slice`"*" --exclude="event_*" $rundir/ $node:$rundir
@@ -272,7 +279,7 @@ create_flpgroup() {
             scp $publisher_conf_file $node:$CFoptLocalConfigFile
             publisher_conf_file=$CFoptLocalConfigFile
         fi
-	command="aliceHLTWrapper $deviceid 2 --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component FilePublisher --run $runno --parameter '-datafilelist $publisher_conf_file $CFoptOpenFilesAtStart'"
+	command="o2-alicehlt-wrapper-device --id=$deviceid --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component FilePublisher --run $runno --parameter '-datafilelist $publisher_conf_file $CFoptOpenFilesAtStart'"
 
 	sessionnode[nsessions]=$node
 	sessiontitle[nsessions]=$deviceid
@@ -285,28 +292,25 @@ create_flpgroup() {
 
     if [ "x$bypass_relays" != "xyes" ]; then
         # add a relay combining CF output into one (multi)message
-        deviceid="Relay_$node"
+        deviceid=Relay_`printf %02d $slice`
         input=`translate_io_attributes "$cf_output"`
         # output configuration is either taken from the flp/epn network
         # or according to the base socket
         output=
         if [ "$nflpinputs" -eq 0 ]; then
-        output="--output type=push,size=5000,method=bind,address=tcp://*:$((basesocket + c))"
+        output="--channel-config name=data-out,type=push,size=5000,method=bind,address=tcp://*:$((basesocket + socketcount))"
+        let socketcount++
         else
-            for ((iflpinput=0; iflpinput<nflpinputs; iflpinput++)); do
-                if [ "x${flpinputnode[$iflpinput]}" == "x$node" ]; then
-                    output="--output type=push,size=5000,method=connect,address=tcp://${flpinputnode[$iflpinput]}:${flpinputsocket[$iflpinput]}"
-                fi
-            done
+            output="--channel-config name=data-out,type=push,size=5000,method=connect,address=tcp://${node}:${groupoutputsocket}"
         fi
 
-        let socketcount++
-        command="aliceHLTWrapper $deviceid 2 --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component BlockFilter --run $runno --parameter ''"
+        command="o2-alicehlt-wrapper-device --id=$deviceid --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component BlockFilter --run $runno --parameter ''"
 
         sessionnode[nsessions]=$node
         sessiontitle[nsessions]="$deviceid"
         sessioncmd[nsessions]=$command
         let nsessions++
+        numberOfUsedSocketsPerNode[$node]=$(( numberOfUsedSocketsPerNode[$node] + socketcount ))
 
         epn1_input[n_epn1_inputs]=${output/\/\/\*:///$node:}
         let n_epn1_inputs++
@@ -357,11 +361,11 @@ create_epn1group() {
             output=`echo "${epn1_input[@]}"`
             input=`translate_io_attributes "$output"`
         else
-            input="--input type=pull,size=1000,method=connect,address=${epnoutputonnode[$trackerid]}"
+            input="--channel-config name=data-in,type=pull,size=1000,method=connect,address=${epnoutputonnode[$trackerid]}"
         fi
 
-        output="--output type=push,size=1000,method=connect,address=tcp://localhost:$((basesocket + socketcount))"
-        command="aliceHLTWrapper $deviceid 1 ${dryrun} --poll-period $pollingtimeout $input $output --library libAliHLTTPC.so --component TPCCATracker --run $runno --parameter '-GlobalTracking -allowGPU -GPUHelperThreads 4 -loglevel=0x7c'"
+        output="--channel-config name=data-out,type=push,size=1000,method=connect,address=tcp://localhost:$((basesocket + socketcount))"
+        command="o2-alicehlt-wrapper-device --id=$deviceid ${skiptracking} --poll-period $pollingtimeout $input $output --library libAliHLTTPC.so --component TPCCATracker --run $runno --parameter '-GlobalTracking ${gpuparams} -loglevel=0x7c'"
 
         sessionnode[nsessions]=$node
         sessiontitle[nsessions]="$deviceid"
@@ -374,7 +378,7 @@ create_epn1group() {
         input=`translate_io_attributes "$output"`
         output=`translate_io_attributes "$epn2_input"`
         let socketcount++
-        command="aliceHLTWrapper $deviceid 1 ${dryrun} --poll-period $pollingtimeout $input $output --library libAliHLTTPC.so --component TPCCAGlobalMerger --run $runno --parameter '-loglevel=0x7c'"
+        command="o2-alicehlt-wrapper-device --id=$deviceid ${skiptracking} --poll-period $pollingtimeout $input $output --library libAliHLTTPC.so --component TPCCAGlobalMerger --run $runno --parameter '-loglevel=0x7c'"
 
         sessionnode[nsessions]=$node
         sessiontitle[nsessions]="$deviceid"
@@ -387,7 +391,7 @@ create_epn1group() {
     # input=`translate_io_attributes "$output"`
     # output=
     # let socketcount++
-    # command="aliceHLTWrapper $deviceid 1 ${dryrun} --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component FileWriter --run $runno --parameter '-directory tracker-output -idfmt=%04d -specfmt=_%08x -blocknofmt= -loglevel=0x7c -write-all-blocks -publisher-conf tracker-output/datablocks.txt'"
+    # command="o2-alicehlt-wrapper-device --id=$deviceid ${skiptracking} --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component FileWriter --run $runno --parameter '-directory tracker-output -idfmt=%04d -specfmt=_%08x -blocknofmt= -loglevel=0x7c -write-all-blocks -publisher-conf tracker-output/datablocks.txt'"
 
     # sessionnode[nsessions]=$node
     # sessiontitle[nsessions]="$deviceid"
@@ -404,12 +408,12 @@ create_epn2group() {
     socketcount=0
 
     deviceid=Collector
-    epn2_input="--input type=pull,size=1000,method=bind,address=tcp://$node:$((basesocket + socketcount))"
+    epn2_input="--channel-config name=data-in,type=pull,size=1000,method=bind,address=tcp://$node:$((basesocket + socketcount))"
     let socketcount++
     input=$epn2_input
-    output="--output type=pub,size=1000,method=bind,address=tcp://$node:$((basesocket + socketcount))"
+    output="--channel-config name=data-out,type=pub,size=1000,method=bind,address=tcp://$node:$((basesocket + socketcount))"
     let socketcount++
-    command="aliceHLTWrapper $deviceid 1 --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component BlockFilter --run $runno --parameter ''"
+    command="o2-alicehlt-wrapper-device --id=$deviceid --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component BlockFilter --run $runno --parameter ''"
 
     sessionnode[nsessions]=$node
     sessiontitle[nsessions]="$deviceid"
@@ -420,7 +424,7 @@ create_epn2group() {
     deviceid=FileWriter
     input=`translate_io_attributes "$output"`
     output=
-    command="aliceHLTWrapper $deviceid 1 --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component FileWriter --run $runno --parameter '-directory tracker-output -subdir -idfmt=%04d -specfmt=_%08x -blocknofmt= -loglevel=0x7c -write-all-blocks -publisher-conf tracker-output/datablocks.txt'"
+    command="o2-alicehlt-wrapper-device --id=$deviceid --poll-period $pollingtimeout $input $output --library libAliHLTUtil.so --component FileWriter --run $runno --parameter '-directory tracker-output -subdir -idfmt=%04d -specfmt=_%08x -blocknofmt= -loglevel=0x7c -write-all-blocks -publisher-conf tracker-output/datablocks.txt'"
 
     sessionnode[nsessions]=$node
     sessiontitle[nsessions]="$deviceid"
@@ -439,12 +443,13 @@ create_triggergroup $triggernode $baseport_on_triggergroup
 sliceno=$firstslice
 inode=0
 while [ "$sliceno" -le "$lastslice" ]; do
-    if [ "$inode" -ge "$nflpnodes" ]; then
+    if [ "$inode" -ge "${#flpinputnode[@]}" ]; then
         echo "error: too few nodes to create all flp node groups"
         sliceno=$((lastslice + 1))
         exit -1
     fi
-    create_flpgroup ${flpnodelist[inode]} $baseport_on_flpgroup $sliceno $slices_per_node
+    node=${flpinputnode[inode]}
+    create_flpgroup $node $(( baseport_on_flpgroup + ${numberOfUsedSocketsPerNode[$node]:=0} )) $sliceno $slices_per_node ${flpinputsocket[inode]}
     sliceno=$((sliceno + slices_per_node))
 
     let inode++

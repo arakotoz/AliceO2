@@ -1,24 +1,46 @@
-set(MODULE_NAME "ITSMFTSimulation")
+# Copyright CERN and copyright holders of ALICE O2. This software is distributed
+# under the terms of the GNU General Public License v3 (GPL Version 3), copied
+# verbatim in the file "COPYING".
+#
+# See http://alice-o2.web.cern.ch/license for full licensing information.
+#
+# In applying this license CERN does not waive the privileges and immunities
+# granted to it by virtue of its status as an Intergovernmental Organization or
+# submit itself to any jurisdiction.
 
-O2_SETUP(NAME ${MODULE_NAME})
+o2_add_library(ITSMFTSimulation
+               SOURCES src/Hit.cxx
+                       src/AlpideSimResponse.cxx
+                       src/ChipDigitsContainer.cxx
+                       src/AlpideChip.cxx
+                       src/DigiParams.cxx
+                       src/Digitizer.cxx
+                       src/AlpideSignalTrapezoid.cxx
+                       src/ClusterShape.cxx
+                       src/DPLDigitizerParam.cxx
+		       src/MC2RawEncoder.cxx
+		PUBLIC_LINK_LIBRARIES O2::SimulationDataFormat O2::ITSMFTBase
+		                      O2::ITSMFTReconstruction
+                                      O2::DataFormatsITSMFT O2::DetectorsRaw)
 
-set(SRCS
-    src/Point.cxx
-    src/Chip.cxx
-    src/ClusterShape.cxx
-    src/SimuClusterShaper.cxx
-    src/SimulationAlpide.cxx
-    )
-set(HEADERS
-    include/${MODULE_NAME}/Point.h
-    include/${MODULE_NAME}/Chip.h
-    include/${MODULE_NAME}/ClusterShape.h
-    include/${MODULE_NAME}/SimuClusterShaper.h
-    include/${MODULE_NAME}/SimulationAlpide.h
-    )
+o2_target_root_dictionary(
+  ITSMFTSimulation
+  HEADERS include/ITSMFTSimulation/Hit.h
+          include/ITSMFTSimulation/AlpideSimResponse.h
+          include/ITSMFTSimulation/DigiParams.h
+          include/ITSMFTSimulation/Digitizer.h
+          include/ITSMFTSimulation/PreDigit.h
+          include/ITSMFTSimulation/ChipDigitsContainer.h
+          include/ITSMFTSimulation/AlpideChip.h
+          include/ITSMFTSimulation/AlpideSignalTrapezoid.h
+          include/ITSMFTSimulation/ClusterShape.h
+          include/ITSMFTSimulation/DPLDigitizerParam.h
+	  include/ITSMFTSimulation/MC2RawEncoder.h
+	  )
 
-Set(LINKDEF src/ITSMFTSimulationLinkDef.h)
-Set(LIBRARY_NAME ${MODULE_NAME})
-set(BUCKET_NAME itsmft_simulation_bucket)
-
-O2_GENERATE_LIBRARY()
+o2_add_test(AlpideSimResponse
+            SOURCES test/testAlpideSimResponse.cxx
+            COMPONENT_NAME ITSMFT
+            PUBLIC_LINK_LIBRARIES O2::ITSMFTSimulation
+            LABELS "its;mft"
+            ENVIRONMENT O2_ROOT=${CMAKE_BINARY_DIR}/stage)

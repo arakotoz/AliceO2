@@ -1,4 +1,8 @@
-# Base classes 
+<!-- doxy
+\page refMFTbase MFT base
+/doxy -->
+
+# MFT base classes 
 
 Constants: static constants for the MFT
 

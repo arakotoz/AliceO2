@@ -1,45 +1,58 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /// \file TrivialClusterer.cxx
 /// \brief Implementation of the ITS cluster finder
-#include "ITSMFTBase/Digit.h"
-#include "ITSMFTBase/SegmentationPixel.h"
+#include "MathUtils/Cartesian3D.h"
+#include "DataFormatsITSMFT/Digit.h"
+#include "ITSMFTBase/SegmentationAlpide.h"
 #include "ITSReconstruction/TrivialClusterer.h"
-#include "ITSReconstruction/Cluster.h"
+#include "DataFormatsITSMFT/Cluster.h"
+#include "SimulationDataFormat/MCCompLabel.h"
+#include "SimulationDataFormat/MCTruthContainer.h"
 
-#include "FairLogger.h"   // for LOG
-#include "TClonesArray.h" // for TClonesArray
+#include "FairLogger.h" // for LOG
 
-using AliceO2::ITSMFT::SegmentationPixel;
-using AliceO2::ITSMFT::Digit;
-using namespace AliceO2::ITS;
+using o2::itsmft::SegmentationAlpide;
+using namespace o2::its;
+using namespace o2::itsmft;
 
-TrivialClusterer::TrivialClusterer() {}
+using Point3Df = Point3D<float>;
 
-TrivialClusterer::~TrivialClusterer() {}
+TrivialClusterer::TrivialClusterer() = default;
 
-void
-TrivialClusterer::process(const SegmentationPixel *seg, const TClonesArray* digits, TClonesArray* clusters)
+TrivialClusterer::~TrivialClusterer() = default;
+
+void TrivialClusterer::process(const std::vector<Digit>* digits, std::vector<Cluster>* clusters)
 {
-  Float_t sigma2 = seg->cellSizeX() * seg->cellSizeX() / 12.;
+  Float_t sigma2 = SegmentationAlpide::PitchRow * SegmentationAlpide::PitchRow / 12.;
 
-  TClonesArray& clref = *clusters;
-  for (TIter digP = TIter(digits).Begin(); digP != TIter::End(); ++digP) {
-    Digit* dig = static_cast<Digit*>(*digP);
-    Int_t ix = dig->getRow(), iz = dig->getColumn();
-    Double_t charge = dig->getCharge();
-    Int_t lab = dig->getLabel(0);
-
+  for (const auto& d : *digits) {
+    Int_t ix = d.getRow(), iz = d.getColumn();
     Float_t x = 0., y = 0., z = 0.;
-    seg->detectorToLocal(ix, iz, x, z);
-    Cluster c;
-    c.setVolumeId(dig->getChipIndex());
-    c.setX(x);
-    c.setY(y);
-    c.setZ(z);
-    c.setSigmaY2(sigma2);
-    c.setSigmaZ2(sigma2);
-    c.setFrameLoc();
-    c.setLabel(lab, 0);
+    SegmentationAlpide::detectorToLocal(ix, iz, x, z);
+    Point3Df loc(x, 0.f, z);
+    // inverse transform from local to tracking frame
+    auto tra = mGeometry->getMatrixT2L(d.getChipIndex()) ^ (loc);
 
-    new (clref[clref.GetEntriesFast()]) Cluster(c);
+    int noc = clusters->size();
+    clusters->emplace_back(d.getChipIndex(), tra, sigma2, sigma2, 0.);
+    (*clusters)[noc].SetUniqueID(noc); // Save the index within the cluster array
+    if (mClsLabels) {
+      /*
+      for (int i=0; i<Digit::maxLabels; i++) {
+        Label lab = d.getLabel(i);
+        if (lab.isEmpty()) break;
+        mClsLabels->addElement(noc,lab);
+      }
+      */
+    }
   }
 }

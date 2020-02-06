@@ -1,11 +1,20 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
 
 #include "TPCBase/ContainerFactory.h"
-#include "FairRuntimeDb.h"  // for FairRuntimeDb
+#include "FairRuntimeDb.h" // for FairRuntimeDb
 
 class FairParSet;
-using namespace AliceO2::TPC;
+using namespace o2::tpc;
 
-ClassImp(ContainerFactory)
+ClassImp(ContainerFactory);
 
 static ContainerFactory gTpcContainerFactory;
 
@@ -13,8 +22,8 @@ ContainerFactory::ContainerFactory()
   : FairContFact()
 {
   /** Constructor (called when the library is loaded) */
-  fName="ContainerFactory";
-  fTitle="Factory for parameter containers in libO2tpc";
+  fName = "ContainerFactory";
+  fTitle = "Factory for parameter containers in libO2tpc";
   setAllContainers();
   FairRuntimeDb::instance()->addContFactory(this);
 }
@@ -26,7 +35,7 @@ void ContainerFactory::setAllContainers()
       the list of containers for the O2tpc library.
   */
 
- /* FairContainer* p= new FairContainer("O2tpcGeoPar",
+  /* FairContainer* p= new FairContainer("O2tpcGeoPar",
                                       "O2tpc Geometry Parameters",
                                       "TestDefaultContext");
   p->addContext("TestNonDefaultContext");
@@ -42,7 +51,7 @@ FairParSet* ContainerFactory::createContainer(FairContainer* c)
       the default context
       of this container, the name is concatinated with the context.
   */
-    /*
+  /*
   const char* name=c->GetName();
   FairParSet* p=NULL;
   if (strcmp(name,"O2tpcGeoPar")==0) {
@@ -51,5 +60,5 @@ FairParSet* ContainerFactory::createContainer(FairContainer* c)
   }
   return p;
      */
-  return 0;
+  return nullptr;
 }

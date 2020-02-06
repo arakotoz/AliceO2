@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /**
  * EPNReceiver.cxx
  *
@@ -7,52 +17,47 @@
 
 #include <cstddef> // size_t
 #include <fstream> // writing to file (DEBUG)
+#include <iomanip>
 
-#include "FairMQLogger.h"
-#include "FairMQProgOptions.h"
+#include <FairMQLogger.h>
+#include <options/FairMQProgOptions.h>
 
 #include "FLP2EPNex_distributed/EPNReceiver.h"
+#include "O2Device/Compatibility.h"
+
+#include <iomanip>
 
 using namespace std;
 using namespace std::chrono;
-using namespace AliceO2::Devices;
+using namespace o2::devices;
 
 struct f2eHeader {
   uint16_t timeFrameId;
-  int      flpIndex;
+  int flpIndex;
 };
 
 EPNReceiver::EPNReceiver()
-  : fTimeframeBuffer()
-  , fDiscardedSet()
-  , fNumFLPs(0)
-  , fBufferTimeoutInMs(5000)
-  , fTestMode(0)
-  , fInChannelName()
-  , fOutChannelName()
-  , fAckChannelName()
+  : mTimeframeBuffer(), mDiscardedSet(), mNumFLPs(0), mBufferTimeoutInMs(5000), mTestMode(0), mInChannelName(), mOutChannelName(), mAckChannelName()
 {
 }
 
-EPNReceiver::~EPNReceiver()
-{
-}
+EPNReceiver::~EPNReceiver() = default;
 
 void EPNReceiver::InitTask()
 {
-  fNumFLPs = fConfig->GetValue<int>("num-flps");
-  fBufferTimeoutInMs = fConfig->GetValue<int>("buffer-timeout");
-  fTestMode = fConfig->GetValue<int>("test-mode");
-  fInChannelName = fConfig->GetValue<string>("in-chan-name");
-  fOutChannelName = fConfig->GetValue<string>("out-chan-name");
-  fAckChannelName = fConfig->GetValue<string>("ack-chan-name");
+  mNumFLPs = GetConfig()->GetValue<int>("num-flps");
+  mBufferTimeoutInMs = GetConfig()->GetValue<int>("buffer-timeout");
+  mTestMode = GetConfig()->GetValue<int>("test-mode");
+  mInChannelName = GetConfig()->GetValue<string>("in-chan-name");
+  mOutChannelName = GetConfig()->GetValue<string>("out-chan-name");
+  mAckChannelName = GetConfig()->GetValue<string>("ack-chan-name");
 }
 
 void EPNReceiver::PrintBuffer(const unordered_map<uint16_t, TFBuffer>& buffer) const
 {
   string header = "===== ";
 
-  for (int i = 1; i <= fNumFLPs; ++i) {
+  for (int i = 1; i <= mNumFLPs; ++i) {
     stringstream out;
     out << i % 10;
     header += out.str();
@@ -71,14 +76,14 @@ void EPNReceiver::PrintBuffer(const unordered_map<uint16_t, TFBuffer>& buffer) c
 
 void EPNReceiver::DiscardIncompleteTimeframes()
 {
-  auto it = fTimeframeBuffer.begin();
+  auto it = mTimeframeBuffer.begin();
 
-  while (it != fTimeframeBuffer.end()) {
-    if (duration_cast<milliseconds>(steady_clock::now() - (it->second).start).count() > fBufferTimeoutInMs) {
-      LOG(WARN) << "Timeframe #" << it->first << " incomplete after " << fBufferTimeoutInMs << " milliseconds, discarding";
-      fDiscardedSet.insert(it->first);
-      fTimeframeBuffer.erase(it++);
-      LOG(WARN) << "Number of discarded timeframes: " << fDiscardedSet.size();
+  while (it != mTimeframeBuffer.end()) {
+    if (duration_cast<milliseconds>(steady_clock::now() - (it->second).start).count() > mBufferTimeoutInMs) {
+      LOG(WARN) << "Timeframe #" << it->first << " incomplete after " << mBufferTimeoutInMs << " milliseconds, discarding";
+      mDiscardedSet.insert(it->first);
+      mTimeframeBuffer.erase(it++);
+      LOG(WARN) << "Number of discarded timeframes: " << mDiscardedSet.size();
     } else {
       // LOG(INFO) << "Timeframe #" << it->first << " within timeout, buffering...";
       ++it;
@@ -96,12 +101,12 @@ void EPNReceiver::Run()
   // f2eHeader* header; // holds the header of the currently arrived message.
   uint16_t id = 0; // holds the timeframe id of the currently arrived sub-timeframe.
 
-  FairMQChannel& ackOutChannel = fChannels.at(fAckChannelName).at(0);
+  FairMQChannel& ackOutChannel = fChannels.at(mAckChannelName).at(0);
 
-  while (CheckCurrentState(RUNNING)) {
+  while (compatibility::FairMQ13<FairMQDevice>::IsRunning(this)) {
     FairMQParts parts;
 
-    if (Receive(parts, fInChannelName, 0, 100) > 0) {
+    if (Receive(parts, mInChannelName, 0, 100) > 0) {
       // store the received ID
       f2eHeader& header = *(static_cast<f2eHeader*>(parts.At(0)->GetData()));
       id = header.timeFrameId;
@@ -116,26 +121,22 @@ void EPNReceiver::Run()
       // }
       // end DEBUG
 
-      if (fDiscardedSet.find(id) == fDiscardedSet.end())
-      {
-        if (fTimeframeBuffer.find(id) == fTimeframeBuffer.end())
-        {
+      if (mDiscardedSet.find(id) == mDiscardedSet.end()) {
+        if (mTimeframeBuffer.find(id) == mTimeframeBuffer.end()) {
           // if this is the first part with this ID, save the receive time.
-          fTimeframeBuffer[id].start = steady_clock::now();
+          mTimeframeBuffer[id].start = steady_clock::now();
         }
         // if the received ID has not previously been discarded,
         // store the data part in the buffer
-        fTimeframeBuffer[id].parts.AddPart(move(parts.At(1)));
+        mTimeframeBuffer[id].parts.AddPart(move(parts.At(1)));
         // PrintBuffer(fTimeframeBuffer);
-      }
-      else
-      {
+      } else {
         // if received ID has been previously discarded.
         LOG(WARN) << "Received part from an already discarded timeframe with id " << id;
       }
 
-      if (fTimeframeBuffer[id].parts.Size() == fNumFLPs) {
-        if (fTestMode > 0) {
+      if (mTimeframeBuffer[id].parts.Size() == mNumFLPs) {
+        if (mTestMode > 0) {
           // Send an acknowledgement back to the sampler to measure the round trip time
           unique_ptr<FairMQMessage> ack(NewMessage(sizeof(uint16_t)));
           memcpy(ack->GetData(), &id, sizeof(uint16_t));
@@ -143,17 +144,15 @@ void EPNReceiver::Run()
           if (ackOutChannel.Send(ack, 0) <= 0) {
             LOG(ERROR) << "Could not send acknowledgement without blocking";
           }
-        }
-        else
-        {
+        } else {
           // LOG(INFO) << "Collected all parts for timeframe #" << id;
           // when all parts are collected send them to the output channel
-          Send(fTimeframeBuffer[id].parts, fOutChannelName);
+          Send(mTimeframeBuffer[id].parts, mOutChannelName);
         }
 
         // fTimeframeBuffer[id].end = steady_clock::now();
 
-        fTimeframeBuffer.erase(id);
+        mTimeframeBuffer.erase(id);
       }
 
       // LOG(WARN) << "Buffer size: " << fTimeframeBuffer.size();

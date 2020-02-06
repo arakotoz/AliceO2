@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 //
 //  HitAnalysis.h
 //  ALICEO2
@@ -10,69 +20,67 @@
 #define __ALICEO2__HitAnalysis__
 
 #include <map>
-#include "FairTask.h"  // for FairTask, InitStatus
-#include "Rtypes.h"    // for Bool_t, HitAnalysis::Class, ClassDef, etc
+#include "FairTask.h" // for FairTask, InitStatus
+#include "Rtypes.h"   // for Bool_t, HitAnalysis::Class, ClassDef, etc
+#include "ITSMFTSimulation/Hit.h"
+#include <vector>
 
-class TClonesArray;  // lines 17-17
-class TH1;  // lines 16-16
-namespace AliceO2 { namespace ITS { class GeometryTGeo; }}  // lines 23-23
-
+class TH1; // lines 16-16
+namespace o2
+{
+namespace its
+{
+class GeometryTGeo;
+}
+} // namespace o2
 
 class TH1;
 
-class TClonesArray;
-
-namespace AliceO2 {
-namespace ITSMFT {
+namespace o2
+{
+namespace itsmft
+{
 class Chip;
 }
-}
+} // namespace o2
 
-namespace AliceO2 {
-namespace ITS {
+namespace o2
+{
+namespace its
+{
 
 class HitAnalysis : public FairTask
 {
-  public:
-    HitAnalysis();
+ public:
+  HitAnalysis();
 
-    virtual ~HitAnalysis();
+  ~HitAnalysis() override;
 
-    virtual InitStatus Init();
+  InitStatus Init() override;
 
-    virtual void Exec(Option_t *option);
+  void Exec(Option_t* option) override;
 
-    virtual void FinishTask();
+  void FinishTask() override;
 
-    void SetProcessHits()
-    { fProcessChips = kFALSE; }
+ protected:
+  void ProcessHits();
 
-    void SetProcessChips()
-    { fProcessChips = kTRUE; }
+ private:
+  Bool_t mIsInitialized;                     ///< Check whether task is initialized
+  const std::vector<o2::itsmft::Hit>* mHits; ///< Array with ITS hits, filled by the FairRootManager
+  const GeometryTGeo* mGeometry;             ///<  geometry
+  TH1* mLineSegment;                         ///< Histogram for line segment
+  TH1* mLocalX0;                             ///< Histogram for Starting X position in local coordinates
+  TH1* mLocalX1;                             ///< Histogram for Hit X position in local coordinates
+  TH1* mLocalY0;                             ///< Histogram for Starting Y position in local coordinates
+  TH1* mLocalY1;                             ///< Histogram for Hit Y position in local coordinates
+  TH1* mLocalZ0;                             ///< Histogram for Starting Z position in local coordinates
+  TH1* mLocalZ1;                             ///< Histogram for Hit Z position in local coordinates
+  TH1* mHitCounter;                          ///< simple hit counter histogram
 
-  protected:
-    void ProcessChips();
-
-    void ProcessHits();
-
-  private:
-    Bool_t fIsInitialized;       ///< Check whether task is initialized
-    Bool_t fProcessChips;        ///< Process chips or hits
-    std::map<int, AliceO2::ITSMFT::Chip *> fChips; ///< lookup map for ITS chips
-    TClonesArray *fPointsArray;        ///< Array with ITS space points, filled by the FairRootManager
-    GeometryTGeo *fGeometry;           ///<  geometry
-    TH1 *fLineSegment;        ///< Histogram for line segment
-    TH1 *fLocalX0;            ///< Histogram for Starting X position in local coordinates
-    TH1 *fLocalX1;            ///< Histogram for Hit X position in local coordinates
-    TH1 *fLocalY0;            ///< Histogram for Starting Y position in local coordinates
-    TH1 *fLocalY1;            ///< Histogram for Hit Y position in local coordinates
-    TH1 *fLocalZ0;            ///< Histogram for Starting Z position in local coordinates
-    TH1 *fLocalZ1;            ///< Histogram for Hit Z position in local coordinates
-    TH1 *fHitCounter;         ///< simple hit counter histogram
-
-  ClassDef(HitAnalysis, 1);
+  ClassDefOverride(HitAnalysis, 1);
 };
-}
-}
+} // namespace its
+} // namespace o2
 
 #endif /* defined(__ALICEO2__HitAnalysis__) */

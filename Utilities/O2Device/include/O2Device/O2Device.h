@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /// @copyright
 /// © Copyright 2014 Copyright Holders of the ALICE O2 collaboration.
 /// See https://aliceinfo.cern.ch/AliceO2 for details on the Copyright holders.
@@ -18,80 +28,45 @@
 #ifndef O2DEVICE_H_
 #define O2DEVICE_H_
 
-#include "FairMQDevice.h"
-#include "Headers/DataHeader.h"
+#include <FairMQDevice.h>
+#include <options/FairMQProgOptions.h>
+#include "O2Device/Utilities.h"
+#include "Monitoring/MonitoringFactory.h"
 #include <stdexcept>
 
-namespace AliceO2 {
-namespace Base {
+namespace o2
+{
+namespace base
+{
 
 /// just a typedef to express the fact that it is not just a FairMQParts vector,
 /// it has to follow the O2 convention of header-payload-header-payload
-using O2Message = FairMQParts;
-
 class O2Device : public FairMQDevice
 {
-public:
+ public:
   using FairMQDevice::FairMQDevice;
-  virtual ~O2Device() {}
 
-  /// Here is how to add an annotated data part (with header);
-  /// @param[in,out] parts is a reference to the message;
-  /// @param[] incomingBlock header block must be MOVED in (rvalue ref)
-  /// @param[] dataMessage the data message must be MOVED in (unique_ptr by value)
-  bool AddMessage(O2Message& parts,
-                  AliceO2::Header::Block&& incomingBlock,
-                  FairMQMessagePtr incomingDataMessage) {
+  ~O2Device() override = default;
 
-    //we have to move the incoming data
-    AliceO2::Header::Block headerBlock{std::move(incomingBlock)};
-    FairMQMessagePtr dataMessage{std::move(incomingDataMessage)};
+  /// Monitoring instance
+  std::unique_ptr<o2::monitoring::Monitoring> monitoring;
 
-    FairMQMessagePtr headerMessage = NewMessage(headerBlock.buffer.get(),
-                                                headerBlock.bufferSize,
-                                                &AliceO2::Header::Block::freefn,
-                                                headerBlock.buffer.get());
-    headerBlock.buffer.release();
+  /// Provides monitoring instance
+  auto GetMonitoring() { return monitoring.get(); }
 
-    parts.AddPart(std::move(headerMessage));
-    parts.AddPart(std::move(dataMessage));
-    return true;
-  }
-
-  /// The user needs to define a member function with correct signature
-  /// currently this is old school: buf,len pairs;
-  /// In the end I'd like to move to array_view
-  /// when this becomes available (either with C++17 or via GSL)
-  template <typename T>
-  bool ForEach(O2Message& parts, bool (T::*memberFunction)(const byte* headerBuffer, size_t headerBufferSize,
-                                                           const byte* dataBuffer, size_t dataBufferSize))
+  /// Connects to a monitoring backend
+  void Init() override
   {
-    if ((parts.Size() % 2) != 0)
-      throw std::invalid_argument("number of parts in message not even (n%2 != 0)");
-
-    for (auto it = parts.fParts.begin(); it != parts.fParts.end(); ++it) {
-      byte* headerBuffer = nullptr;
-      size_t headerBufferSize = 0;
-      if (*it != nullptr) {
-        headerBuffer = reinterpret_cast<byte*>((*it)->GetData());
-        headerBufferSize = (*it)->GetSize();
-      }
-      ++it;
-      byte* dataBuffer = nullptr;
-      size_t dataBufferSize = 0;
-      if (*it != nullptr) {
-        dataBuffer = reinterpret_cast<byte*>((*it)->GetData());
-        dataBufferSize = (*it)->GetSize();
-      }
-
-      // call the user provided function
-      (static_cast<T*>(this)->*memberFunction)
-        (headerBuffer, headerBufferSize, dataBuffer, dataBufferSize);
+    FairMQDevice::Init();
+    static constexpr const char* MonitoringUrlKey = "monitoring-url";
+    std::string monitoringUrl = GetConfig()->GetValue<std::string>(MonitoringUrlKey);
+    if (!monitoringUrl.empty()) {
+      monitoring->addBackend(o2::monitoring::MonitoringFactory::GetBackend(monitoringUrl));
     }
-    return true;
   }
-};
 
-}
-}
+ private:
+};
+} // namespace base
+} // namespace o2
 #endif /* O2DEVICE_H_ */

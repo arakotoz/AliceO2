@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /**
  * FLPSender.h
  *
@@ -13,10 +23,12 @@
 #include <unordered_map>
 #include <chrono>
 
-#include "FairMQDevice.h"
+#include <FairMQDevice.h>
 
-namespace AliceO2 {
-namespace Devices {
+namespace o2
+{
+namespace devices
+{
 
 /// Sends sub-timframes to epnReceivers
 ///
@@ -26,41 +38,41 @@ namespace Devices {
 
 class FLPSender : public FairMQDevice
 {
-  public:
-    /// Default constructor
-    FLPSender();
+ public:
+  /// Default constructor
+  FLPSender();
 
-    /// Default destructor
-    virtual ~FLPSender();
+  /// Default destructor
+  ~FLPSender() override;
 
-  protected:
-    /// Overloads the InitTask() method of FairMQDevice
-    virtual void InitTask();
+ protected:
+  /// Overloads the InitTask() method of FairMQDevice
+  void InitTask() override;
 
-    /// Overloads the Run() method of FairMQDevice
-    virtual void Run();
+  /// Overloads the Run() method of FairMQDevice
+  void Run() override;
 
-  private:
-    /// Sends the "oldest" element from the sub-timeframe container
-    void sendFrontData();
+ private:
+  /// Sends the "oldest" element from the sub-timeframe container
+  void sendFrontData();
 
-    std::queue<FairMQParts> fSTFBuffer; ///< Buffer for sub-timeframes
-    std::queue<std::chrono::steady_clock::time_point> fArrivalTime; ///< Stores arrival times of sub-timeframes
+  std::queue<FairMQParts> mSTFBuffer;                             ///< Buffer for sub-timeframes
+  std::queue<std::chrono::steady_clock::time_point> mArrivalTime; ///< Stores arrival times of sub-timeframes
 
-    int fNumEPNs; ///< Number of epnReceivers
-    unsigned int fIndex; ///< Index of the flpSender among other flpSenders
-    unsigned int fSendOffset; ///< Offset for staggering output
-    unsigned int fSendDelay; ///< Delay for staggering output
+  int mNumEPNs;             ///< Number of epnReceivers
+  unsigned int mIndex;      ///< Index of the flpSender among other flpSenders
+  unsigned int mSendOffset; ///< Offset for staggering output
+  unsigned int mSendDelay;  ///< Delay for staggering output
 
-    int fEventSize; ///< Size of the sub-timeframe body (only for test mode)
-    int fTestMode; ///< Run the device in test mode (only syncSampler+flpSender+epnReceiver)
-    uint16_t fTimeFrameId;
+  int mEventSize; ///< Size of the sub-timeframe body (only for test mode)
+  int mTestMode;  ///< Run the device in test mode (only syncSampler+flpSender+epnReceiver)
+  uint16_t mTimeFrameId;
 
-    std::string fInChannelName;
-    std::string fOutChannelName;
+  std::string mInChannelName;
+  std::string mOutChannelName;
 };
 
-} // namespace Devices
-} // namespace AliceO2
+} // namespace devices
+} // namespace o2
 
 #endif

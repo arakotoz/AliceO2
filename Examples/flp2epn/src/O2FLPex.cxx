@@ -1,3 +1,13 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 /**
  * O2FLPex.cxx
  *
@@ -6,28 +16,25 @@
  */
 
 #include <vector>
-#include <stdlib.h>     /* srand, rand */
-#include <time.h>       /* time */
+#include <cstdlib> /* srand, rand */
+#include <ctime>   /* time */
 
-#include "FairMQLogger.h"
-#include "FairMQProgOptions.h"
+#include <FairMQLogger.h>
+#include <options/FairMQProgOptions.h>
 #include "flp2epn/O2FLPex.h"
 #include "O2FLPExContent.h"
 
-O2FLPex::O2FLPex() :
-  fNumContent(10000)
+O2FLPex::O2FLPex() : fNumContent(10000)
 {
 }
 
-O2FLPex::~O2FLPex()
-{
-}
+O2FLPex::~O2FLPex() = default;
 
 void O2FLPex::InitTask()
 {
-  srand(time(NULL));
+  srand(time(nullptr));
 
-  fNumContent = fConfig->GetValue<int>("num-content");
+  fNumContent = GetConfig()->GetValue<int>("num-content");
   LOG(INFO) << "Message size (num-content * sizeof(O2FLPExContent)): " << fNumContent * sizeof(O2FLPExContent) << " bytes.";
 }
 

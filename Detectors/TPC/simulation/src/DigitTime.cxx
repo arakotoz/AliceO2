@@ -1,38 +1,17 @@
+// Copyright CERN and copyright holders of ALICE O2. This software is
+// distributed under the terms of the GNU General Public License v3 (GPL
+// Version 3), copied verbatim in the file "COPYING".
+//
+// See http://alice-o2.web.cern.ch/license for full licensing information.
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
+/// \file DigitTime.cxx
+/// \brief Implementation of the Time Bin container
+/// \author Andi Mathis, TU München, andreas.mathis@ph.tum.de
+
 #include "TPCSimulation/DigitTime.h"
-#include "TPCSimulation/DigitRow.h"
-#include "TPCBase/Mapper.h"
-#include "TClonesArray.h"
-#include "FairLogger.h"
-using namespace AliceO2::TPC;
 
-DigitTime::DigitTime(Int_t timeBin, Int_t nrows):
-mTimeBin(timeBin),
-mNRows(nrows),
-mRows(nrows)
-{}
-
-DigitTime::~DigitTime() {
-  for(auto &aRow : mRows) {
-    if(aRow == nullptr) continue;
-    delete aRow;
-  }
-}
-
-void DigitTime::setDigit(Int_t cru, Int_t row, Int_t pad, Float_t charge) {
-  DigitRow *result = mRows[row];
-  if(result != nullptr) {
-    mRows[row]->setDigit(pad, charge);
-  }
-  else{
-    const Mapper& mapper = Mapper::instance();
-    mRows[row] = new DigitRow(row, mapper.getPadRegionInfo(CRU(cru).region()).getPadsInRowRegion(row));
-    mRows[row]->setDigit(pad, charge);
-  }
-}
-
-void DigitTime::fillOutputContainer(TClonesArray *output, Int_t cru, Int_t timeBin) {
-  for(auto &aRow : mRows) {
-    if(aRow == nullptr) continue;
-    aRow->fillOutputContainer(output, cru, timeBin, aRow->getRow());
-  }
-}
+using namespace o2::tpc;

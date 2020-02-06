@@ -1,49 +1,59 @@
+# ALICE O2 software {#mainpage}
 
-AliceO2
-=======
+<!--  /// \cond EXCLUDE_FOR_DOXYGEN -->
 
-Alice O2 project software. Simulation, reconstruction and common software for
-the ALICE experiment at CERN based on ALFA and the FairRoot software.
+[![codecov](https://codecov.io/gh/AliceO2Group/AliceO2/branch/dev/graph/badge.svg)](https://codecov.io/gh/AliceO2Group/AliceO2/branches/dev)
+[![JIRA](https://img.shields.io/badge/JIRA-Report%20issue-blue.svg)](https://alice.its.cern.ch/jira/secure/CreateIssue.jspa?pid=11201&issuetype=1)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1493334.svg)](https://doi.org/10.5281/zenodo.1493334)
 
-### Documentation
-The documentation single entry point is [here](https://alice-o2.web.cern.ch/).
+[![](http://ali-ci.cern.ch/repo/buildstatus/AliceO2Group/AliceO2/dev/build_O2_o2.svg)](https://ali-ci.cern.ch/repo/logs/AliceO2Group/AliceO2/dev/latest/build_O2_o2/fullLog.txt)
+[![](http://ali-ci.cern.ch/repo/buildstatus/AliceO2Group/AliceO2/dev/build_o2_macos.svg)](https://ali-ci.cern.ch/repo/logs/AliceO2Group/AliceO2/dev/latest/build_o2_macos/fullLog.txt)
+[![](http://ali-ci.cern.ch/repo/buildstatus/AliceO2Group/AliceO2/dev/build_o2checkcode_o2.svg)](https://ali-ci.cern.ch/repo/logs/AliceO2Group/AliceO2/dev/latest/build_o2checkcode_o2/fullLog.txt)
+[![](http://ali-ci.cern.ch/repo/buildstatus/AliceO2Group/AliceO2/dev/build_O2_o2-dev-fairroot.svg)](https://ali-ci.cern.ch/repo/logs/AliceO2Group/AliceO2/dev/latest/build_O2_o2-dev-fairroot/fullLog.txt)
 
-### Installation
-In order to install with aliBuild you can follow [this tutorial](http://alisw.github.io/alibuild/o2-tutorial.html).
+<!--  /// \endcond  -->
+
+### Scope
+
+The ALICE O2 software repository contains the framework, as well as the detector specific, code for the reconstruction, calibration and simulation for the ALICE experiment at CERN for Run 3 and 4. It also encompasses the commonalities such as the data format, and the global algorithms like the global tracking.
+Other repositories in AliceO2Group contain a number of large common modules, for instance for Monitoring or Configuration.
+
+### Website
+
+The main entry point for O2 information is [here](https://alice-o2-project.web.cern.ch).
+A quickstart page can be found under [https://aliceo2group.github.io/](https://aliceo2group.github.io/).
+
+### Building / Installation
+
+In order to build and install O2 with aliBuild you can follow [this tutorial](http://alisw.github.io/alibuild/o2-tutorial.html).
 
 ### Issue tracking system
-We use JIRA to track issues. Head [here](https://alice.its.cern.ch/jira) to create tickets.
+
+We use JIRA to track issues. [Report a bug here](https://alice.its.cern.ch/jira/secure/CreateIssue.jspa?pid=11201&issuetype=1).
+Add the JIRA issue key (e.g. `O2-XYZ`) to the PR title or in a commit message to have the PR/commit appear in the JIRA ticket.
 
 ### Coding guidelines
+
 The Coding Guidelines are [here](https://github.com/AliceO2Group/CodingGuidelines).
 See [below](###Formatting) how to format your code accordingly.
 
 ### Doxygen
-Turn it on in cmake (`cmake -DBUILD_DOXYGEN=ON ...`) before building (`make`) and then open
-`docs/doxygen/doc/html/index.html` from the build directory.
 
-Doxygen documentation is also available online [here](http://aliceo2group.github.io/AliceO2/)
+Documentation pages: [https://aliceo2group.github.io/AliceO2/](https://aliceo2group.github.io/AliceO2/).
 
-### Build system and directory structure
-The build system and directory structure are described in
-[docs/doxygen/CMakeInstructions.md](@ref CodeOrganizationAndBuild).
+`cmake --build . --target doc` will generate the doxygen documentation.
+To access the resulting documentation, open doc/html/index.html in your
+build directory. To install the documentation when calling `cmake --build . -- install` (or `cmake --install` for CMake >= 3.15)
+turn on the variable `DOC_INSTALL`.
+
+The instruction how to add the documentation pages (README.md) are available [here](https://aliceo2group.github.io/AliceO2/refdocDoxygenInstructions.html).
+
+### Build system (cmake) and directory structure
+
+The code organisation is described [here](https://aliceo2group.github.io/AliceO2/refdocCodeOrganization.html).
+The build system (cmake) is described [here](https://aliceo2group.github.io/AliceO2/refdocCMakeInstructions.html).
 
 ### Formatting
-##### Using clang-format
-```bash
-# Get the configuration file
-git clone https://github.com/AliceO2Group/CodingGuidelines.git
-cp CodingGuidelines/_clang-format-4  /path/to/O2/top/dir # (use _clang-format-3 if you use clang-format v3)
 
-# Check the style
-# Here any tag "<replacement " indicates a problem ("<replacements " with **s** is fine!)
-clang-format -style=file -output-replacements-xml SOURCEFILE`
-# shows what would the file content be after the reformatting
-clang-format -style=file SOURCEFILE
-
-# Apply the style to the file
-clang-format -style=file -i SOURCEFILE
-```
-
-##### Using an IDE
-A number of config files are available [here](https://github.com/AliceO2Group/CodingGuidelines) for various IDEs.
+Rules and instructions are available in the repository
+[CodingGuidelines](https://github.com/AliceO2Group/CodingGuidelines).

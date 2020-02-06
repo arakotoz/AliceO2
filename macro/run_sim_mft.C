@@ -1,14 +1,40 @@
+#if !defined(__CLING__) || defined(__ROOTCLING__)
+
+#include <TSystem.h>
+#include <TMath.h>
+#include <TString.h>
+#include <TStopwatch.h>
+#include <TRandom.h>
+
+#include "FairRunSim.h"
+#include "FairRuntimeDb.h"
+#include "FairPrimaryGenerator.h"
+#include "FairBoxGenerator.h"
+#include "FairParRootFileIo.h"
+
+#include "DetectorsPassive/Cave.h"
+#include "Field/MagneticField.h"
+#include "MFTBase/GeometryTGeo.h"
+#include "MFTSimulation/Detector.h"
+
+#endif
+
+extern TSystem* gSystem;
+
 void run_sim_mft(Int_t nEvents = 1, Int_t nMuons = 100, TString mcEngine = "TGeant3")
 {
+
+  printf("Run simulations: %d ev %d mu %s \n", nEvents, nMuons, mcEngine.Data());
+  //return;
 
   gRandom->SetSeed(0);
 
   TString dir = getenv("VMCWORKDIR");
   TString geom_dir = dir + "/Detectors/Geometry/";
-  gSystem->Setenv("GEOMPATH",geom_dir.Data());
+  gSystem->Setenv("GEOMPATH", geom_dir.Data());
 
   TString tut_configdir = dir + "/Detectors/gconfig";
-  gSystem->Setenv("CONFIG_DIR",tut_configdir.Data());
+  gSystem->Setenv("CONFIG_DIR", tut_configdir.Data());
 
   // Output file name
   char fileout[100];
@@ -39,14 +65,14 @@ void run_sim_mft(Int_t nEvents = 1, Int_t nMuons = 100, TString mcEngine = "TGea
   run->SetMaterials("media.geo"); // Materials
 
   // Create geometry
-  AliceO2::Passive::Cave* cave = new AliceO2::Passive::Cave("CAVE");
+  o2::passive::Cave* cave = new o2::passive::Cave("CAVE");
   cave->SetGeometryFileName("cave.geo");
   run->AddModule(cave);
 
-  //TGeoGlobalMagField::Instance()->SetField(new AliceO2::Field::MagneticField("Maps","Maps", -1., -1., AliceO2::Field::MagneticField::k5kG));
+  o2::field::MagneticField field("field", "field +5kG");
+  run->SetField(&field);
 
-  AliceO2::MFT::Detector* mft = new AliceO2::MFT::Detector();
-
+  o2::mft::Detector* mft = new o2::mft::Detector();
   run->AddModule(mft);
 
   // Create PrimaryGenerator
@@ -73,20 +99,19 @@ void run_sim_mft(Int_t nEvents = 1, Int_t nMuons = 100, TString mcEngine = "TGea
   rtdb->saveOutput();
   rtdb->print();
 
-  //AliceO2::MFT::GeometryTGeo *geom = mft->GetGeometryTGeo();
-  //printf("MFT has %d disks.\n",geom->GetNofDisks());
-
   run->Run(nEvents);
   run->CreateGeometryFile("geofile_mft.root");
 
   // Finish
   timer.Stop();
+
   Double_t rtime = timer.RealTime();
   Double_t ctime = timer.CpuTime();
-  cout << endl << endl;
-  cout << "Macro finished succesfully" << endl;
+  cout << endl
+       << endl;
+  cout << "Macro finished succesfully." << endl;
   cout << "Output file is " << outFile << endl;
   cout << "Parameter file is " << parFile << endl;
-  cout << "Real time " << rtime << " s, CPU time " << ctime << "s" << endl << endl;
-
+  cout << "Real time " << rtime << " s, CPU time " << ctime << "s" << endl
+       << endl;
 }
