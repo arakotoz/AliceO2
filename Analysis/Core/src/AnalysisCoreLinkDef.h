@@ -24,3 +24,5 @@
 
 #pragma link C++ class VarManager + ;
 #pragma link C++ class HistogramManager + ;
+#pragma link C++ class AnalysisCut + ;
+#pragma link C++ class AnalysisCompositeCut + ;
