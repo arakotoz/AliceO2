@@ -16,6 +16,6 @@ o2_add_library(AnalysisDataModel
               )
 
 o2_add_executable(dump-aod-data-model
-                  SOURCES src/dumpDataModel.cxx
+                  SOURCES src/aodDataModelGraph.cxx
                   PUBLIC_LINK_LIBRARIES O2::Framework O2::AnalysisDataModel
                   )
