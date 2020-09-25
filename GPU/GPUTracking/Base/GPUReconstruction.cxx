@@ -287,6 +287,9 @@ int GPUReconstruction::InitPhaseBeforeDevice()
   } else if (mDeviceProcessingSettings.forceMemoryPoolSize > 2) {
     mDeviceMemorySize = mHostMemorySize = mDeviceProcessingSettings.forceMemoryPoolSize;
   }
+  if (mDeviceProcessingSettings.forceHostMemoryPoolSize) {
+    mHostMemorySize = mDeviceProcessingSettings.forceHostMemoryPoolSize;
+  }
 
   for (unsigned int i = 0; i < mProcessors.size(); i++) {
     (mProcessors[i].proc->*(mProcessors[i].RegisterMemoryAllocation))();
@@ -915,6 +918,11 @@ void GPUReconstruction::SetOutputControl(void* ptr, size_t size)
   GPUOutputControl outputControl;
   outputControl.set(ptr, size);
   SetOutputControl(outputControl);
+}
+
+void GPUReconstruction::SetInputControl(void* ptr, size_t size)
+{
+  mInputControl.set(ptr, size);
 }
 
 std::unique_ptr<GPUReconstruction::GPUThreadContext> GPUReconstruction::GetThreadContext() { return std::unique_ptr<GPUReconstruction::GPUThreadContext>(new GPUThreadContext); }
