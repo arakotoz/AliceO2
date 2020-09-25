@@ -400,7 +400,10 @@ inline void GPUReconstruction::AllocateIOMemoryHelper(size_t n, const T*& ptr, s
   u.reset(new T[n]);
   ptr = u.get();
   if (mDeviceProcessingSettings.registerStandaloneInputMemory) {
-    registerMemoryForGPU(u.get(), n * sizeof(T));
+    if (registerMemoryForGPU(u.get(), n * sizeof(T))) {
+      GPUError("Error registering memory for GPU: %p - %lld bytes\n", (void*)u.get(), (long long int)(n * sizeof(T)));
+      throw std::bad_alloc();
+    }
   }
 }
 
@@ -429,7 +432,7 @@ inline short GPUReconstruction::RegisterMemoryAllocation(T* proc, void* (T::*set
     throw std::bad_alloc();
   }
   unsigned short retVal = mMemoryResources.size() - 1;
-  if (re.type != GPUMemoryReuse::NONE) {
+  if (re.type != GPUMemoryReuse::NONE && !mDeviceProcessingSettings.disableMemoryReuse) {
     const auto& it = mMemoryReuse1to1.find(re.id);
     if (it == mMemoryReuse1to1.end()) {
       mMemoryReuse1to1[re.id] = {proc, retVal};
