@@ -78,6 +78,7 @@ namespace o2::framework
 /// Watching stdin for commands probably a better approach.
 void idle_timer(uv_timer_t* handle)
 {
+  ZoneScopedN("Idle timer");
 }
 
 DataProcessingDevice::DataProcessingDevice(DeviceSpec const& spec, ServiceRegistry& registry, DeviceState& state)
@@ -154,7 +155,7 @@ void on_socket_polled(uv_poll_t* poller, int status, int events)
 /// * Invoke the actual init callback, which returns the processing callback.
 void DataProcessingDevice::Init()
 {
-  TracyAppInfo("foo", 3);
+  TracyAppInfo(mSpec.name.data(), mSpec.name.size());
   ZoneScopedN("DataProcessingDevice::Init");
   mRelayer = &mServiceRegistry.get<DataRelayer>();
   // For some reason passing rateLogging does not work anymore.
@@ -454,7 +455,10 @@ bool DataProcessingDevice::doRun()
     }
   }
   mWasActive = false;
-  mServiceRegistry.get<CallbackService>()(CallbackService::Id::ClockTick);
+  {
+    ZoneScopedN("CallbackService::Id::ClockTick");
+    mServiceRegistry.get<CallbackService>()(CallbackService::Id::ClockTick);
+  }
   // Whether or not we had something to do.
 
   // Notice that fake input channels (InputChannelState::Pull) cannot possibly
@@ -552,6 +556,7 @@ void DataProcessingDevice::ResetTask()
 /// boilerplate which the user does not need to care about at top level.
 bool DataProcessingDevice::handleData(FairMQParts& parts, InputChannelInfo& info)
 {
+  ZoneScopedN("DataProcessingDevice::handleData");
   assert(mSpec.inputChannels.empty() == false);
   assert(parts.Size() > 0);
 
@@ -666,6 +671,7 @@ bool DataProcessingDevice::handleData(FairMQParts& parts, InputChannelInfo& info
 
 bool DataProcessingDevice::tryDispatchComputation(std::vector<DataRelayer::RecordAction>& completed)
 {
+  ZoneScopedN("DataProcessingDevice::tryDispatchComputation");
   // This is the actual hidden state for the outer loop. In case we decide we
   // want to support multithreaded dispatching of operations, I can simply
   // move these to some thread local store and the rest of the lambdas
@@ -689,7 +695,6 @@ bool DataProcessingDevice::tryDispatchComputation(std::vector<DataRelayer::Recor
   // does not need to know about the whole class state, but I can
   // fine grain control what is exposed at each state.
   // FIXME: I should use a different id for this state.
-  auto& monitoringService = mServiceRegistry.get<Monitoring>();
   StateMonitoring<DataProcessingStatus>::moveTo(DataProcessingStatus::IN_DPL_OVERHEAD);
   auto metricFlusher = make_scope_guard([]() noexcept -> void {
     StateMonitoring<DataProcessingStatus>::moveTo(DataProcessingStatus::IN_DPL_OVERHEAD);
@@ -899,90 +904,90 @@ bool DataProcessingDevice::tryDispatchComputation(std::vector<DataRelayer::Recor
 
   if (canDispatchSomeComputation() == false) {
     return false;
+  }
+
+  for (auto action : getReadyActions()) {
+    if (action.op == CompletionPolicy::CompletionOp::Wait) {
+      continue;
     }
 
-    for (auto action : getReadyActions()) {
-      if (action.op == CompletionPolicy::CompletionOp::Wait) {
+    prepareAllocatorForCurrentTimeSlice(TimesliceSlot{action.slot});
+    InputRecord record = fillInputs(action.slot);
+    ProcessingContext processContext{record, mServiceRegistry, mAllocator};
+    {
+      ZoneScopedN("service pre processing");
+      for (auto& handle : mPreProcessingHandles) {
+        handle.callback(processContext, handle.service);
+      }
+    }
+    if (action.op == CompletionPolicy::CompletionOp::Discard) {
+      if (forwards.empty() == false) {
+        forwardInputs(action.slot, record);
         continue;
       }
+    }
+    uint64_t tStart = uv_hrtime();
+    for (size_t ai = 0; ai != record.size(); ai++) {
+      auto cacheId = action.slot.index * record.size() + ai;
+      auto state = record.isValid(ai) ? 2 : 0;
+      mStats.relayerState.resize(std::max(cacheId + 1, mStats.relayerState.size()), 0);
+      mStats.relayerState[cacheId] = state;
+    }
+    try {
+      if (mState.quitRequested == false) {
 
-      prepareAllocatorForCurrentTimeSlice(TimesliceSlot{action.slot});
-      InputRecord record = fillInputs(action.slot);
-      ProcessingContext processContext{record, mServiceRegistry, mAllocator};
-      {
-        ZoneScopedN("service pre processing");
-        for (auto& handle : mPreProcessingHandles) {
-          handle.callback(processContext, handle.service);
+        if (statefulProcess) {
+          ZoneScopedN("statefull process");
+          statefulProcess(processContext);
         }
-      }
-      if (action.op == CompletionPolicy::CompletionOp::Discard) {
-        if (forwards.empty() == false) {
-          forwardInputs(action.slot, record);
-          continue;
+        if (statelessProcess) {
+          ZoneScopedN("stateless process");
+          statelessProcess(processContext);
         }
-      }
-      uint64_t tStart = uv_hrtime();
-      for (size_t ai = 0; ai != record.size(); ai++) {
-        auto cacheId = action.slot.index * record.size() + ai;
-        auto state = record.isValid(ai) ? 2 : 0;
-        mStats.relayerState.resize(std::max(cacheId + 1, mStats.relayerState.size()), 0);
-        mStats.relayerState[cacheId] = state;
-      }
-      try {
-        if (mState.quitRequested == false) {
 
-          if (statefulProcess) {
-            ZoneScopedN("statefull process");
-            statefulProcess(processContext);
-          }
-          if (statelessProcess) {
-            ZoneScopedN("stateless process");
-            statelessProcess(processContext);
-          }
-
-          {
-            ZoneScopedN("service post processing");
-            for (auto& handle : mPostProcessingHandles) {
-              handle.callback(processContext, handle.service);
-            }
+        {
+          ZoneScopedN("service post processing");
+          for (auto& handle : mPostProcessingHandles) {
+            handle.callback(processContext, handle.service);
           }
         }
-      } catch (std::exception& e) {
-        ZoneScopedN("error handling");
-        mErrorHandling(e, record);
       }
-      for (size_t ai = 0; ai != record.size(); ai++) {
-        auto cacheId = action.slot.index * record.size() + ai;
-        auto state = record.isValid(ai) ? 3 : 0;
-        mStats.relayerState.resize(std::max(cacheId + 1, mStats.relayerState.size()), 0);
-        mStats.relayerState[cacheId] = state;
+    } catch (std::exception& e) {
+      ZoneScopedN("error handling");
+      mErrorHandling(e, record);
+    }
+    for (size_t ai = 0; ai != record.size(); ai++) {
+      auto cacheId = action.slot.index * record.size() + ai;
+      auto state = record.isValid(ai) ? 3 : 0;
+      mStats.relayerState.resize(std::max(cacheId + 1, mStats.relayerState.size()), 0);
+      mStats.relayerState[cacheId] = state;
+    }
+    uint64_t tEnd = uv_hrtime();
+    mStats.lastElapsedTimeMs = tEnd - tStart;
+    mStats.lastTotalProcessedSize = calculateTotalInputRecordSize(record);
+    mStats.lastLatency = calculateInputRecordLatency(record, tStart);
+    // We forward inputs only when we consume them. If we simply Process them,
+    // we keep them for next message arriving.
+    if (action.op == CompletionPolicy::CompletionOp::Consume) {
+      if (forwards.empty() == false) {
+        forwardInputs(action.slot, record);
       }
-      uint64_t tEnd = uv_hrtime();
-      mStats.lastElapsedTimeMs = tEnd - tStart;
-      mStats.lastTotalProcessedSize = calculateTotalInputRecordSize(record);
-      mStats.lastLatency = calculateInputRecordLatency(record, tStart);
-      // We forward inputs only when we consume them. If we simply Process them,
-      // we keep them for next message arriving.
-      if (action.op == CompletionPolicy::CompletionOp::Consume) {
-        if (forwards.empty() == false) {
-          forwardInputs(action.slot, record);
-        }
 #ifdef TRACY_ENABLE
         cleanupRecord(record);
 #endif
-      } else if (action.op == CompletionPolicy::CompletionOp::Process) {
-        cleanTimers(action.slot, record);
-      }
+    } else if (action.op == CompletionPolicy::CompletionOp::Process) {
+      cleanTimers(action.slot, record);
     }
-    // We now broadcast the end of stream if it was requested
-    if (mState.streaming == StreamingState::EndOfStreaming) {
-      for (auto& channel : mSpec.outputChannels) {
-        DataProcessingHelpers::sendEndOfStream(*this, channel);
-      }
-      switchState(StreamingState::Idle);
+  }
+  // We now broadcast the end of stream if it was requested
+  if (mState.streaming == StreamingState::EndOfStreaming) {
+    for (auto& channel : mSpec.outputChannels) {
+      DataProcessingHelpers::sendEndOfStream(*this, channel);
     }
+    switchState(StreamingState::Idle);
+  }
 
-    return true;
+  return true;
 }
 
 void DataProcessingDevice::error(const char* msg)
