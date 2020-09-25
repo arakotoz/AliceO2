@@ -32,6 +32,7 @@
 #include "GlobalTracking/MatchTPCITSParams.h"
 #include "ITStracking/IOUtils.h"
 #include "DetectorsCommonDataFormats/NameConf.h"
+#include "DataFormatsParameters/GRPObject.h"
 
 using namespace o2::framework;
 using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::MCCompLabel>;
@@ -47,10 +48,15 @@ void TPCITSMatchingDPL::init(InitContext& ic)
   mTimer.Reset();
   //-------- init geometry and field --------//
   o2::base::GeometryManager::loadGeometry();
-  o2::base::Propagator::initFieldFromGRP("o2sim_grp.root");
-
+  o2::base::Propagator::initFieldFromGRP(o2::base::NameConf::getGRPFileName());
+  std::unique_ptr<o2::parameters::GRPObject> grp{o2::parameters::GRPObject::loadFrom(o2::base::NameConf::getGRPFileName())};
+  mMatching.setITSTriggered(!grp->isDetContinuousReadOut(o2::detectors::DetID::ITS));
   const auto& alpParams = o2::itsmft::DPLAlpideParam<o2::detectors::DetID::ITS>::Instance();
-  mMatching.setITSROFrameLengthMUS(alpParams.roFrameLength / 1.e3); // ITS ROFrame duration in \mus
+  if (mMatching.isITSTriggered()) {
+    mMatching.setITSROFrameLengthMUS(alpParams.roFrameLengthTrig / 1.e3); // ITS ROFrame duration in \mus
+  } else {
+    mMatching.setITSROFrameLengthInBC(alpParams.roFrameLengthInBC); // ITS ROFrame duration in \mus
+  }
   mMatching.setMCTruthOn(mUseMC);
   //
   std::string dictPath = ic.options().get<std::string>("its-dictionary-path");
@@ -250,7 +256,7 @@ DataProcessorSpec getTPCITSMatchingSpec(bool useMC, const std::vector<int>& tpcC
   inputs.emplace_back("trackITSROF", "ITS", "ITSTrackROF", 0, Lifetime::Timeframe);
   inputs.emplace_back("clusITS", "ITS", "COMPCLUSTERS", 0, Lifetime::Timeframe);
   inputs.emplace_back("clusITSPatt", "ITS", "PATTERNS", 0, Lifetime::Timeframe);
-  inputs.emplace_back("clusITSROF", "ITS", "ITSClusterROF", 0, Lifetime::Timeframe);
+  inputs.emplace_back("clusITSROF", "ITS", "ClusterROF", 0, Lifetime::Timeframe);
   inputs.emplace_back("trackTPC", "TPC", "TRACKS", 0, Lifetime::Timeframe);
   inputs.emplace_back("trackTPCClRefs", "TPC", "CLUSREFS", 0, Lifetime::Timeframe);
 
