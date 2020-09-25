@@ -215,7 +215,6 @@ AlgorithmSpec AODReaderHelpers::rootFileReaderCallback()
   auto callback = AlgorithmSpec{adaptStateful([](ConfigParamRegistry const& options,
                                                  DeviceSpec const& spec) {
     auto filename = options.get<std::string>("aod-file");
-    checkAndEnableAlien(filename);
 
     // create a DataInputDirector
     auto didir = std::make_shared<DataInputDirector>(filename);
