@@ -52,13 +52,6 @@ __global__ void gGPUConstantMemBuffer_dummy(int* p) { *p = *(int*)&gGPUConstantM
 
 using namespace GPUCA_NAMESPACE::gpu;
 
-__global__ void gHIPMemSetWorkaround(char* ptr, char val, size_t size)
-{
-  for (size_t i = get_global_id(); i < size; i += get_global_size()) {
-    ptr[i] = val;
-  }
-}
-
 __global__ void dummyInitKernel(void* foo) {}
 
 #if defined(HAVE_O2HEADERS) && !defined(GPUCA_NO_ITS_TRAITS)
@@ -152,6 +145,13 @@ GPUg() void runKernelHIP(GPUCA_CONSMEM_PTR int iSlice_internal, Args... args)
 #include "GPUReconstructionKernels.h"
 #undef GPUCA_KRNL
 
+template <>
+void GPUReconstructionHIPBackend::runKernelBackendInternal<GPUMemClean16, 0>(krnlSetup& _xyz, void* const& ptr, unsigned long const& size)
+{
+  GPUDebugTiming timer(mDeviceProcessingSettings.debugLevel, nullptr, mInternals->Streams, _xyz, this);
+  GPUFailedMsg(hipMemsetAsync(ptr, 0, size, mInternals->Streams[_xyz.x.stream]));
+}
+
 template <class T, int I, typename... Args>
 void GPUReconstructionHIPBackend::runKernelBackendInternal(krnlSetup& _xyz, const Args&... args)
 {
@@ -236,8 +236,6 @@ int GPUReconstructionHIPBackend::InitDevice_Runtime()
     if (mDeviceProcessingSettings.debugLevel >= 2) {
       GPUInfo("Available HIP devices:");
     }
-    const int reqVerMaj = 2;
-    const int reqVerMin = 0;
     std::vector<bool> devicesOK(count, false);
     for (int i = 0; i < count; i++) {
       if (mDeviceProcessingSettings.debugLevel >= 4) {
@@ -254,13 +252,6 @@ int GPUReconstructionHIPBackend::InitDevice_Runtime()
       }
       int deviceOK = true;
       const char* deviceFailure = "";
-      if (hipDeviceProp.major >= 9) {
-        deviceOK = false;
-        deviceFailure = "Invalid Revision";
-      } else if (hipDeviceProp.major < reqVerMaj || (hipDeviceProp.major == reqVerMaj && hipDeviceProp.minor < reqVerMin)) {
-        deviceOK = false;
-        deviceFailure = "Too low device revision";
-      }
 
       deviceSpeed = (double)hipDeviceProp.multiProcessorCount * (double)hipDeviceProp.clockRate * (double)hipDeviceProp.warpSize * (double)hipDeviceProp.major * (double)hipDeviceProp.major;
       if (mDeviceProcessingSettings.debugLevel >= 2) {
@@ -280,8 +271,7 @@ int GPUReconstructionHIPBackend::InitDevice_Runtime()
       }
     }
     if (bestDevice == -1) {
-      GPUWarning("No %sHIP Device available, aborting HIP Initialisation", count ? "appropriate " : "");
-      GPUImportant("Requiring Revision %d.%d, Mem: %lld", reqVerMaj, reqVerMin, (long long int)mDeviceMemorySize);
+      GPUWarning("No %sHIP Device available, aborting HIP Initialisation (Required mem: %lld)", count ? "appropriate " : "", (long long int)mDeviceMemorySize);
       return (1);
     }
 
@@ -361,13 +351,9 @@ int GPUReconstructionHIPBackend::InitDevice_Runtime()
       GPUInfo("Memory ptrs: GPU (%lld bytes): %p - Host (%lld bytes): %p", (long long int)mDeviceMemorySize, mDeviceMemoryBase, (long long int)mHostMemorySize, mHostMemoryBase);
       memset(mHostMemoryBase, 0, mHostMemorySize);
       if (GPUFailedMsgI(hipMemset(mDeviceMemoryBase, 0xDD, mDeviceMemorySize))) {
-        GPUError("Error during HIP memset, trying workaround with kernel");
-        hipLaunchKernelGGL(HIP_KERNEL_NAME(gHIPMemSetWorkaround), dim3(mBlockCount), dim3(256), 0, 0, (char*)mDeviceMemoryBase, 0xDD, mDeviceMemorySize);
-        if (GPUFailedMsgI(hipGetLastError()) || GPUFailedMsgI(hipDeviceSynchronize())) {
-          GPUError("Error during HIP memset");
-          GPUFailedMsgI(hipDeviceReset());
-          return (1);
-        }
+        GPUError("Error during HIP memset");
+        GPUFailedMsgI(hipDeviceReset());
+        return (1);
       }
     }
 
