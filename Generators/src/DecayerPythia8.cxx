@@ -81,9 +81,10 @@ Int_t DecayerPythia8::ImportParticles(TClonesArray* particles)
 
   auto nParticles = mPythia.event.size();
   for (Int_t iparticle = 0; iparticle < nParticles; iparticle++) {
+    //  Do not import the decayed particle - start loop from 1
     auto particle = mPythia.event[iparticle];
     auto pdg = particle.id();
-    auto st = particle.statusHepMC();
+    auto st = particle.isFinal();
     auto px = particle.px();
     auto py = particle.py();
     auto pz = particle.pz();
