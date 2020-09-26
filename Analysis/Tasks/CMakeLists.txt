@@ -8,6 +8,12 @@
 # granted to it by virtue of its status as an Intergovernmental Organization or
 # submit itself to any jurisdiction.
 
+add_subdirectory(PWGCF)
+add_subdirectory(PWGDQ)
+add_subdirectory(PWGHF)
+add_subdirectory(PWGLF)
+add_subdirectory(PWGUD)
+
 o2_add_dpl_workflow(trackselection
                   SOURCES trackselection.cxx
                   PUBLIC_LINK_LIBRARIES O2::Framework O2::AnalysisDataModel O2::AnalysisCore
