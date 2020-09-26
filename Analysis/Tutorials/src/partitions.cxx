@@ -30,12 +30,16 @@ struct ATask {
   Configurable<float> etaup{"etaUp", 1.0f, "highest eta"};
   Filter etafilter = (aod::track::eta < etaup) && (aod::track::eta > etalow);
 
-  float philow = 1.0f;
-  float phiup = 2.0f;
   Configurable<float> philow{"phiLow", 1.0f, "lowest phi"};
   Configurable<float> phiup{"phiUp", 2.0f, "highest phi"};
 
-  void process(aod::Collision const& collision, soa::Filtered<aod::Tracks> const& tracks)
+  using myTracks = soa::Filtered<aod::Tracks>;
+
+  Partition<myTracks> leftPhi = aod::track::phiraw < philow;
+  Partition<myTracks> midPhi = aod::track::phiraw >= philow && aod::track::phiraw < phiup;
+  Partition<myTracks> rightPhi = aod::track::phiraw >= phiup;
+
+  void process(aod::Collision const& collision, myTracks const& tracks)
   {
     LOGF(INFO, "Collision: %d [N = %d] [left phis = %d] [mid phis = %d] [right phis = %d]",
          collision.globalIndex(), tracks.size(), leftPhi.size(), midPhi.size(), rightPhi.size());
