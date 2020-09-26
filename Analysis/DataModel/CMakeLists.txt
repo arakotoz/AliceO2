@@ -15,7 +15,34 @@ o2_add_library(AnalysisDataModel
                PUBLIC_LINK_LIBRARIES O2::Framework O2::ReconstructionDataFormats
               )
 
-o2_add_executable(dump-aod-data-model
+
+o2_target_root_dictionary(AnalysisDataModel
+                          HEADERS include/PIDBase/ParamBase.h
+                                  include/PIDBase/DetectorResponse.h
+                                  include/PID/PIDTOF.h
+                                  include/PID/TOFReso.h
+                                  include/PID/PIDTPC.h
+                                  include/PID/BetheBloch.h
+                                  include/PID/TPCReso.h
+                          LINKDEF src/AnalysisDataModelLinkDef.h
+                         )
+
+install(FILES
+        include/PIDBase/ParamBase.h
+        include/PIDBase/DetectorResponse.h
+        DESTINATION
+        include/PIDBase)
+
+install(FILES
+        include/PID/PIDTOF.h
+        include/PID/TOFReso.h
+        include/PID/PIDTPC.h
+        include/PID/BetheBloch.h
+        include/PID/TPCReso.h
+        DESTINATION
+        include/PID)
+
+o2_add_executable(aod-data-model-graph
                   SOURCES src/aodDataModelGraph.cxx
                   PUBLIC_LINK_LIBRARIES O2::Framework O2::AnalysisDataModel
                   )
