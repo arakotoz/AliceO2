@@ -84,8 +84,7 @@ struct TrackExtensionTask {
 
   Produces<aod::TracksExtended> extendedTrackQuantities;
 
-  void process(aod::Collision const& collision,
-               soa::Join<aod::Tracks, aod::TracksExtra, aod::TracksCov> const& tracks)
+  void process(aod::Collision const& collision, aod::FullTracks const& tracks)
   {
     float sinAlpha = 0.f;
     float cosAlpha = 0.f;
@@ -129,7 +128,7 @@ struct TrackSelectionTask {
     globalTrackswTOF = getGlobalTrackSelectionwTOF();
   }
 
-  void process(soa::Join<aod::Tracks, aod::TracksCov, aod::TracksExtra, aod::TracksExtended> const& tracks)
+  void process(soa::Join<aod::FullTracks, aod::TracksExtended> const& tracks)
   {
     for (auto& track : tracks) {
       filterTable((uint8_t)globalTracks.IsSelected(track),
@@ -253,9 +252,7 @@ struct TrackQATask {
 
   void init(o2::framework::InitContext&) {}
 
-  void process(aod::Collision const& collision,
-               soa::Join<aod::Tracks, aod::TracksExtra, aod::TracksCov, aod::TracksExtended,
-                         aod::TrackSelection> const& tracks)
+  void process(aod::Collision const& collision, soa::Join<aod::FullTracks, aod::TracksExtended, aod::TrackSelection> const& tracks)
   {
 
     collisionPos->Fill(collision.posX(), collision.posY());

@@ -13,110 +13,29 @@
 #include "Framework/ASoAHelpers.h"
 
 #include "Analysis/EventSelection.h"
+#include "Analysis/TrackSelectionTables.h"
 #include "Analysis/Centrality.h"
 #include "Analysis/StepTHn.h"
 #include "Analysis/CorrelationContainer.h"
-#include "Analysis/TrackSelectionTables.h"
 
 #include <TH1F.h>
 #include <cmath>
 #include <TDirectory.h>
 
-namespace o2::aod
-{
-namespace etaphi
-{
-DECLARE_SOA_COLUMN(Etam, etam, float);
-DECLARE_SOA_COLUMN(Phim, phim, float);
-DECLARE_SOA_COLUMN(Ptm, ptm, float);
-} // namespace etaphi
-DECLARE_SOA_TABLE(EtaPhi, "AOD", "ETAPHI",
-                  etaphi::Etam, etaphi::Phim, etaphi::Ptm);
-} // namespace o2::aod
-
-namespace o2::aod
-{
-namespace hash
-{
-DECLARE_SOA_COLUMN(Bin, bin, int);
-} // namespace hash
-DECLARE_SOA_TABLE(Hashes, "AOD", "HASH", hash::Bin);
-
-using Hash = Hashes::iterator;
-} // namespace o2::aod
-
 using namespace o2;
 using namespace o2::framework;
 using namespace o2::framework::expressions;
-
-struct ATask {
-  Produces<aod::EtaPhi> etaphi;
-
-  void process(aod::Tracks const& tracks)
-  {
-    for (auto& track : tracks) {
-      float eta = log(tan(0.25f * static_cast<float>(M_PI) - 0.5f * atan(track.tgl())));
-      float phi = asin(track.snp()) + track.alpha() + static_cast<float>(M_PI);
-      float pt = fabs(1.0f / track.signed1Pt());
-
-      etaphi(eta, phi, pt);
-    }
-  }
-};
-
-struct HashTask {
-  std::vector<float> vtxBins{-7.0f, -5.0f, -3.0f, -1.0f, 1.0f, 3.0f, 5.0f, 7.0f};
-  std::vector<float> multBins{0.0f, 20.0f, 40.0f, 60.0f, 80.0f, 100.0f};
-  Produces<aod::Hashes> hashes;
-
-  // Calculate hash for an element based on 2 properties and their bins.
-  int getHash(std::vector<float> const& vtxBins, std::vector<float> const& multBins, float vtx, float mult)
-  {
-    // underflow
-    if (vtx < vtxBins[0])
-      return -1;
-    if (mult < multBins[0])
-      return -1;
-
-    for (int i = 1; i < vtxBins.size(); i++) {
-      if (vtx < vtxBins[i]) {
-        for (int j = 1; j < multBins.size(); j++) {
-          if (mult < multBins[j]) {
-            return i + j * (vtxBins.size() + 1);
-          }
-        }
-      }
-    }
-    // overflow
-    return -1;
-  }
-
-  void process(soa::Join<aod::Collisions, aod::Cents> const& collisions)
-  {
-    for (auto& collision : collisions) {
-      int hash = getHash(vtxBins, multBins, collision.posZ(), collision.centV0M());
-      LOGF(info, "Collision: %d (%f, %f) hash: %d", collision.index(), collision.posZ(), collision.centV0M(), hash);
-      hashes(hash);
-    }
-  }
-};
 
 #define O2_DEFINE_CONFIGURABLE(NAME, TYPE, DEFAULT, HELP) Configurable<TYPE> NAME{#NAME, DEFAULT, HELP};
 
 struct CorrelationTask {
 
-  // Input definitions
-  using myTracks = soa::Filtered<soa::Join<aod::Tracks, aod::EtaPhi>>;
-
-  // Filters
-  Filter trackFilter = (aod::etaphi::etam > -0.8f) && (aod::etaphi::etam < 0.8f) && (aod::etaphi::ptm > 1.0f);
-
-  // Output definitions
-  OutputObj<CorrelationContainer> same{"sameEvent"};
-  OutputObj<CorrelationContainer> mixed{"mixedEvent"};
-  //OutputObj<TDirectory> qaOutput{"qa"};
-
   // Configuration
+  O2_DEFINE_CONFIGURABLE(cfgCutVertex, float, 7.0f, "Accepted z-vertex range")
+  O2_DEFINE_CONFIGURABLE(cfgCutPt, float, 0.5f, "Minimal pT for tracks")
+  O2_DEFINE_CONFIGURABLE(cfgCutEta, float, 0.8f, "Eta range for tracks")
+
+  O2_DEFINE_CONFIGURABLE(cfgPtOrder, int, 1, "Only consider pairs for which pT,1 < pT,2 (0 = OFF, 1 = ON)");
   O2_DEFINE_CONFIGURABLE(cfgTriggerCharge, int, 0, "Select on charge of trigger particle: 0 = all; 1 = positive; -1 = negative");
   O2_DEFINE_CONFIGURABLE(cfgAssociatedCharge, int, 0, "Select on charge of associated particle: 0 = all; 1 = positive; -1 = negative");
   O2_DEFINE_CONFIGURABLE(cfgPairCharge, int, 0, "Select on charge of particle pair: 0 = all; 1 = like sign; -1 = unlike sign");
@@ -129,6 +48,16 @@ struct CorrelationTask {
   O2_DEFINE_CONFIGURABLE(cfgPairCutLambda, float, -1, "Pair cut on Lambda: -1 = off; >0 otherwise distance value (suggested: 0.005)")
   O2_DEFINE_CONFIGURABLE(cfgPairCutPhi, float, -1, "Pair cut on Phi: -1 = off; >0 otherwise distance value")
   O2_DEFINE_CONFIGURABLE(cfgPairCutRho, float, -1, "Pair cut on Rho: -1 = off; >0 otherwise distance value")
+
+  // Filters and input definitions
+  Filter collisionFilter = nabs(aod::collision::posZ) < cfgCutVertex;
+  Filter trackFilter = (nabs(aod::track::eta) < cfgCutEta) && (aod::track::pt > cfgCutPt) && ((aod::track::isGlobalTrack == (uint8_t)1) || (aod::track::isGlobalTrackSDD == (uint8_t)1));
+  using myTracks = soa::Filtered<soa::Join<aod::Tracks, aod::TrackSelection>>;
+
+  // Output definitions
+  OutputObj<CorrelationContainer> same{"sameEvent"};
+  OutputObj<CorrelationContainer> mixed{"mixedEvent"};
+  //OutputObj<TDirectory> qaOutput{"qa"};
 
   enum PairCuts { Photon = 0,
                   K0,
@@ -146,28 +75,36 @@ struct CorrelationTask {
     TH2F* mControlConvResoncances = nullptr;  // control histograms for cuts on conversions and resonances
   } qa;
 
+  // HistogramRegistry registry{"qa", true, {
+  //   {"yields", "centrality vs pT vs eta",  {HistogramType::kTH3F, { {100, 0, 100, "centrality"}, {40, 0, 20, "p_{T}"}, {100, -2, 2, "#eta"} }}},
+  //   {"etaphi", "centrality vs eta vs phi", {HistogramType::kTH3F, { {100, 0, 100, "centrality"}, {100, -2, 2, "#eta"}, {200, 0, 2 * M_PI, "#varphi"} }}}
+  // }};
+
+  OutputObj<TH3F> yields{TH3F("yields", "centrality vs pT vs eta", 100, 0, 100, 40, 0, 20, 100, -2, 2)};
+  OutputObj<TH3F> etaphi{TH3F("etaphi", "centrality vs eta vs phi", 100, 0, 100, 100, -2, 2, 200, 0, 2 * M_PI)};
+
   void init(o2::framework::InitContext&)
   {
     // --- CONFIGURATION ---
     const char* binning =
-      "vertex: -7, -5, -3, -1, 1, 3, 5, 7\n"
-      "delta_phi: -1.570796, -1.483530, -1.396263, -1.308997, -1.221730, -1.134464, -1.047198, -0.959931, -0.872665, -0.785398, -0.698132, -0.610865, -0.523599, -0.436332, -0.349066, -0.261799, -0.174533, -0.087266, 0.0, 0.087266, 0.174533, 0.261799, 0.349066, 0.436332, 0.523599, 0.610865, 0.698132, 0.785398, 0.872665, 0.959931, 1.047198, 1.134464, 1.221730, 1.308997, 1.396263, 1.483530, 1.570796, 1.658063, 1.745329, 1.832596, 1.919862, 2.007129, 2.094395, 2.181662, 2.268928, 2.356194, 2.443461, 2.530727, 2.617994, 2.705260, 2.792527, 2.879793, 2.967060, 3.054326, 3.141593, 3.228859, 3.316126, 3.403392, 3.490659, 3.577925, 3.665191, 3.752458, 3.839724, 3.926991, 4.014257, 4.101524, 4.188790, 4.276057, 4.363323, 4.450590, 4.537856, 4.625123, 4.712389\n"
-      "delta_eta: -2.0, -1.9, -1.8, -1.7, -1.6, -1.5, -1.4, -1.3, -1.2, -1.1, -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0\n"
+      "vertex: 7 | -7, 7\n"
+      "delta_phi: 72 | -1.570796, 4.712389\n"
+      "delta_eta: 40 | -2.0, 2.0\n"
       "p_t_assoc: 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0\n"
       "p_t_trigger: 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 10.0\n"
       "multiplicity: 0, 5, 10, 20, 30, 40, 50, 100.1\n"
-      "eta: -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0\n"
-      "p_t_leading: 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5, 15.0, 15.5, 16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5, 20.0, 20.5, 21.0, 21.5, 22.0, 22.5, 23.0, 23.5, 24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5, 29.0, 29.5, 30.0, 30.5, 31.0, 31.5, 32.0, 32.5, 33.0, 33.5, 34.0, 34.5, 35.0, 35.5, 36.0, 36.5, 37.0, 37.5, 38.0, 38.5, 39.0, 39.5, 40.0, 40.5, 41.0, 41.5, 42.0, 42.5, 43.0, 43.5, 44.0, 44.5, 45.0, 45.5, 46.0, 46.5, 47.0, 47.5, 48.0, 48.5, 49.0, 49.5, 50.0\n"
+      "eta: 20 | -1.0, 1.0\n"
+      "p_t_leading: 100 | 0.0, 50.0\n"
       "p_t_leading_course: 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0\n"
       "p_t_eff: 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5, 3.75, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0\n"
-      "vertex_eff: -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10\n";
+      "vertex_eff: 10 | -10, 10\n";
 
     if (cfgPairCutPhoton > 0 || cfgPairCutK0 > 0 || cfgPairCutLambda > 0 || cfgPairCutPhi > 0 || cfgPairCutRho > 0)
       cfg.mPairCuts = true;
 
     // --- OBJECT INIT ---
-    same.setObject(new CorrelationContainer("sameEvent", "sameEvent", "NumberDensityPhiCentrality", binning));
-    mixed.setObject(new CorrelationContainer("mixedEvent", "mixedEvent", "NumberDensityPhiCentrality", binning));
+    same.setObject(new CorrelationContainer("sameEvent", "sameEvent", "NumberDensityPhiCentralityVtx", binning));
+    mixed.setObject(new CorrelationContainer("mixedEvent", "mixedEvent", "NumberDensityPhiCentralityVtx", binning));
     //qaOutput.setObject(new TDirectory("qa", "qa"));
 
     if (cfgTwoTrackCut > 0) {
@@ -183,87 +120,143 @@ struct CorrelationTask {
     }
   }
 
-  void process(soa::Join<aod::Collisions, aod::Hashes, aod::EvSels, aod::Cents>& collisions, myTracks const& tracks)
+  // Version with explicit nested loop
+  void process(soa::Filtered<soa::Join<aod::Collisions, aod::EvSels, aod::Cents>>::iterator const& collision, aod::BCs const& bcs, aod::Run2V0s const& vzeros, myTracks const& tracks)
   {
+    LOGF(info, "Tracks for collision: %d | Vertex: %.1f | INT7: %d | V0M: %.1f", tracks.size(), collision.posZ(), collision.sel7(), collision.centV0M());
+
+    const auto centrality = collision.centV0M();
+
+    same->fillEvent(centrality, CorrelationContainer::kCFStepAll);
+
+    if (!collision.sel7())
+      return;
+
+    same->fillEvent(centrality, CorrelationContainer::kCFStepTriggered);
+
+    // vertex already checked as filter
+    same->fillEvent(centrality, CorrelationContainer::kCFStepVertex);
+
+    same->fillEvent(centrality, CorrelationContainer::kCFStepReconstructed);
+
     int bSign = 1; // TODO magnetic field from CCDB
-    const float pTCut = 2.0;
 
-    collisions.bindExternalIndices(&tracks);
-    auto tracksTuple = std::make_tuple(tracks);
-    AnalysisDataProcessorBuilder::GroupSlicer slicer(collisions, tracksTuple);
+    for (auto& track1 : tracks) {
 
-    // Strictly upper categorised collisions, for 5 combinations per bin, skipping those in entry -1
-    for (auto& [collision1, collision2] : selfCombinations("fBin", 5, -1, collisions, collisions)) {
+      // LOGF(info, "Track %f | %f | %f  %d %d", track1.eta(), track1.phi(), track1.pt(), track1.isGlobalTrack(), track1.isGlobalTrackSDD());
 
-      LOGF(info, "Collisions bin: %d pair: %d (%f), %d (%f)", collision1.bin(), collision1.index(), collision1.posZ(), collision2.index(), collision2.posZ());
+      // control histograms
+      // ((TH3*) (registry.get("yields").get()))->Fill(centrality, track1.pt(), track1.eta());
+      // ((TH3*) (registry.get("etaphi").get()))->Fill(centrality, track1.eta(), track1.phi());
+      yields->Fill(centrality, track1.pt(), track1.eta());
+      etaphi->Fill(centrality, track1.eta(), track1.phi());
 
-      auto it1 = slicer.begin();
-      auto it2 = slicer.begin();
-      for (auto& slice : slicer) {
-        if (slice.groupingElement().index() == collision1.index()) {
-          it1 = slice;
-          break;
-        }
-      }
-      for (auto& slice : slicer) {
-        if (slice.groupingElement().index() == collision2.index()) {
-          it2 = slice;
-          break;
-        }
-      }
+      if (cfgTriggerCharge != 0 && cfgTriggerCharge * track1.charge() < 0)
+        continue;
 
-      auto tracks1 = std::get<myTracks>(it1.associatedTables());
-      tracks1.bindExternalIndices(&collisions);
-      auto tracks2 = std::get<myTracks>(it2.associatedTables());
-      tracks2.bindExternalIndices(&collisions);
+      double eventValues[3];
+      eventValues[0] = track1.pt();
+      eventValues[1] = centrality;
+      eventValues[2] = collision.posZ();
 
-      //       LOGF(info, "Tracks: %d and %d entries", tracks1.size(), tracks2.size());
+      same->getTriggerHist()->Fill(eventValues, CorrelationContainer::kCFStepReconstructed);
+      //mixed->getTriggerHist()->Fill(eventValues, CorrelationContainer::kCFStepReconstructed);
 
-      for (auto& track1 : tracks1) {
-
-        if (cfgTriggerCharge != 0 && cfgTriggerCharge * track1.charge() < 0)
+      for (auto& track2 : tracks) {
+        if (track1 == track2)
           continue;
 
-        //LOGF(info, "TRACK %f %f | %f %f | %f %f", track1.eta(), track1.etam(), track1.phi(), track1.phim(), track1.pt(), track1.ptm());
+        if (cfgPtOrder != 0 && track2.pt() >= track1.pt())
+          continue;
 
-        double eventValues[3];
-        eventValues[0] = track1.ptm();
-        eventValues[1] = collision1.centV0M();
-        eventValues[2] = collision1.posZ();
+        if (cfgAssociatedCharge != 0 && cfgAssociatedCharge * track2.charge() < 0)
+          continue;
+        if (cfgPairCharge != 0 && cfgPairCharge * track1.charge() * track2.charge() < 0)
+          continue;
 
-        mixed->getEventHist()->Fill(eventValues, CorrelationContainer::kCFStepReconstructed);
+        if (cfg.mPairCuts && conversionCuts(track1, track2))
+          continue;
 
-        for (auto& track2 : tracks2) {
+        if (cfgTwoTrackCut > 0 && twoTrackCut(track1, track2, bSign))
+          continue;
 
-          if (cfgAssociatedCharge != 0 && cfgAssociatedCharge * track2.charge() < 0)
-            continue;
-          if (cfgPairCharge != 0 && cfgPairCharge * track1.charge() * track2.charge() < 0)
-            continue;
+        double values[6] = {0};
 
-          if (cfg.mPairCuts && conversionCuts(track1, track2))
-            continue;
+        values[0] = track1.eta() - track2.eta();
+        values[1] = track2.pt();
+        values[2] = track1.pt();
+        values[3] = centrality;
 
-          if (cfgTwoTrackCut > 0 && twoTrackCut(track1, track2, bSign))
-            continue;
+        values[4] = track1.phi() - track2.phi();
+        if (values[4] > 1.5 * TMath::Pi())
+          values[4] -= TMath::TwoPi();
+        if (values[4] < -0.5 * TMath::Pi())
+          values[4] += TMath::TwoPi();
 
-          double values[6] = {0};
+        values[5] = collision.posZ();
 
-          values[0] = track1.etam() - track2.etam();
-          values[1] = track1.ptm();
-          values[2] = track2.ptm();
-          values[3] = collision1.centV0M();
-
-          values[4] = track1.phim() - track2.phim();
-          if (values[4] > 1.5 * TMath::Pi())
-            values[4] -= TMath::TwoPi();
-          if (values[4] < -0.5 * TMath::Pi())
-            values[4] += TMath::TwoPi();
-
-          values[5] = collision1.posZ();
-
-          mixed->getTrackHist()->Fill(values, CorrelationContainer::kCFStepReconstructed);
-        }
+        same->getPairHist()->Fill(values, CorrelationContainer::kCFStepReconstructed);
+        //mixed->getPairHist()->Fill(values, CorrelationContainer::kCFStepReconstructed);
       }
+    }
+  }
+
+  // Version with combinations
+  void process2(aod::Collision const& collision, soa::Filtered<aod::Tracks> const& tracks)
+  {
+    LOGF(info, "Tracks for collision (Combination run): %d", tracks.size());
+
+    int bSign = 1; // TODO magnetic field from CCDB
+
+    for (auto track1 = tracks.begin(); track1 != tracks.end(); ++track1) {
+
+      if (cfgTriggerCharge != 0 && cfgTriggerCharge * track1.charge() < 0)
+        continue;
+
+      //       LOGF(info, "TRACK %f %f | %f %f | %f %f", track1.eta(), track1.eta(), track1.phi(), track1.phi2(), track1.pt(), track1.pt());
+
+      double eventValues[3];
+      eventValues[0] = track1.pt();
+      eventValues[1] = 0; // collision.v0mult();
+      eventValues[2] = collision.posZ();
+
+      same->getTriggerHist()->Fill(eventValues, CorrelationContainer::kCFStepReconstructed);
+      //mixed->getTriggerHist()->Fill(eventValues, CorrelationContainer::kCFStepReconstructed);
+    }
+
+    for (auto& [track1, track2] : combinations(tracks, tracks)) {
+      //LOGF(info, "Combination %d %d", track1.index(), track2.index());
+
+      if (cfgTriggerCharge != 0 && cfgTriggerCharge * track1.charge() < 0)
+        continue;
+      if (cfgAssociatedCharge != 0 && cfgAssociatedCharge * track2.charge() < 0)
+        continue;
+      if (cfgPairCharge != 0 && cfgPairCharge * track1.charge() * track2.charge() < 0)
+        continue;
+
+      if (cfg.mPairCuts && conversionCuts(track1, track2))
+        continue;
+
+      if (cfgTwoTrackCut > 0 && twoTrackCut(track1, track2, bSign))
+        continue;
+
+      double values[6] = {0};
+
+      values[0] = track1.eta() - track2.eta();
+      values[1] = track1.pt();
+      values[2] = track2.pt();
+      values[3] = 0; // collision.v0mult();
+
+      values[4] = track1.phi() - track2.phi();
+      if (values[4] > 1.5 * TMath::Pi())
+        values[4] -= TMath::TwoPi();
+      if (values[4] < -0.5 * TMath::Pi())
+        values[4] += TMath::TwoPi();
+
+      values[5] = collision.posZ();
+
+      same->getPairHist()->Fill(values, CorrelationContainer::kCFStepReconstructed);
+      //mixed->getPairHist()->Fill(values, CorrelationContainer::kCFStepReconstructed);
     }
   }
 
@@ -295,7 +288,7 @@ struct CorrelationTask {
   template <typename T>
   bool conversionCut(T const& track1, T const& track2, PairCuts conv, double cut)
   {
-    //LOGF(info, "pt is %f %f", track1.ptm(), track2.ptm());
+    //LOGF(info, "pt is %f %f", track1.pt(), track2.pt());
 
     if (cut < 0)
       return false;
@@ -356,21 +349,21 @@ struct CorrelationTask {
 
     float tantheta1 = 1e10;
 
-    if (track1.etam() < -1e-10 || track1.etam() > 1e-10) {
-      float expTmp = TMath::Exp(-track1.etam());
+    if (track1.eta() < -1e-10 || track1.eta() > 1e-10) {
+      float expTmp = TMath::Exp(-track1.eta());
       tantheta1 = 2.0 * expTmp / (1.0 - expTmp * expTmp);
     }
 
     float tantheta2 = 1e10;
-    if (track2.etam() < -1e-10 || track2.etam() > 1e-10) {
-      float expTmp = TMath::Exp(-track2.etam());
+    if (track2.eta() < -1e-10 || track2.eta() > 1e-10) {
+      float expTmp = TMath::Exp(-track2.eta());
       tantheta2 = 2.0 * expTmp / (1.0 - expTmp * expTmp);
     }
 
-    float e1squ = m0_1 * m0_1 + track1.ptm() * track1.ptm() * (1.0 + 1.0 / tantheta1 / tantheta1);
-    float e2squ = m0_2 * m0_2 + track2.ptm() * track2.ptm() * (1.0 + 1.0 / tantheta2 / tantheta2);
+    float e1squ = m0_1 * m0_1 + track1.pt() * track1.pt() * (1.0 + 1.0 / tantheta1 / tantheta1);
+    float e2squ = m0_2 * m0_2 + track2.pt() * track2.pt() * (1.0 + 1.0 / tantheta2 / tantheta2);
 
-    float mass2 = m0_1 * m0_1 + m0_2 * m0_2 + 2 * (TMath::Sqrt(e1squ * e2squ) - (track1.ptm() * track2.ptm() * (TMath::Cos(track1.phim() - track2.phim()) + 1.0 / tantheta1 / tantheta2)));
+    float mass2 = m0_1 * m0_1 + m0_2 * m0_2 + 2 * (TMath::Sqrt(e1squ * e2squ) - (track1.pt() * track2.pt() * (TMath::Cos(track1.phi() - track2.phi()) + 1.0 / tantheta1 / tantheta2)));
 
     // Printf(Form("%f %f %f %f %f %f %f %f %f", pt1, eta1, phi1, pt2, eta2, phi2, m0_1, m0_2, mass2));
 
@@ -382,12 +375,12 @@ struct CorrelationTask {
   {
     // calculate inv mass squared approximately
 
-    const float eta1 = track1.etam();
-    const float eta2 = track2.etam();
-    const float phi1 = track1.phim();
-    const float phi2 = track2.phim();
-    const float pt1 = track1.ptm();
-    const float pt2 = track2.ptm();
+    const float eta1 = track1.eta();
+    const float eta2 = track2.eta();
+    const float phi1 = track1.phi();
+    const float phi2 = track2.phi();
+    const float pt1 = track1.pt();
+    const float pt2 = track2.pt();
 
     float tantheta1 = 1e10;
 
@@ -433,7 +426,7 @@ struct CorrelationTask {
     // the variables & cuthave been developed by the HBT group
     // see e.g. https://indico.cern.ch/materialDisplay.py?contribId=36&sessionId=6&materialId=slides&confId=142700
 
-    auto deta = track1.etam() - track2.etam();
+    auto deta = track1.eta() - track2.eta();
 
     // optimization
     if (TMath::Abs(deta) < cfgTwoTrackCut * 2.5 * 3) {
@@ -457,14 +450,14 @@ struct CorrelationTask {
           }
         }
 
-        qa.mTwoTrackDistancePt[0]->Fill(deta, dphistarmin, TMath::Abs(track1.ptm() - track2.ptm()));
+        qa.mTwoTrackDistancePt[0]->Fill(deta, dphistarmin, TMath::Abs(track1.pt() - track2.pt()));
 
         if (dphistarminabs < cfgTwoTrackCut && TMath::Abs(deta) < cfgTwoTrackCut) {
-          //Printf("Removed track pair %ld %ld with %f %f %f %f %d %f %f %d %d", track1.index(), track2.index(), deta, dphistarminabs, track1.phim(), track1.ptm(), track1.charge(), track2.phim(), track2.ptm(), track2.charge(), bSign);
+          //Printf("Removed track pair %ld %ld with %f %f %f %f %d %f %f %d %d", track1.index(), track2.index(), deta, dphistarminabs, track1.phi2(), track1.pt(), track1.charge(), track2.phi2(), track2.pt(), track2.charge(), bSign);
           return true;
         }
 
-        qa.mTwoTrackDistancePt[1]->Fill(deta, dphistarmin, TMath::Abs(track1.ptm() - track2.ptm()));
+        qa.mTwoTrackDistancePt[1]->Fill(deta, dphistarmin, TMath::Abs(track1.pt() - track2.pt()));
       }
     }
 
@@ -478,12 +471,12 @@ struct CorrelationTask {
     // calculates dphistar
     //
 
-    auto phi1 = track1.phim();
-    auto pt1 = track1.ptm();
+    auto phi1 = track1.phi();
+    auto pt1 = track1.pt();
     auto charge1 = track1.charge();
 
-    auto phi2 = track2.phim();
-    auto pt2 = track2.ptm();
+    auto phi2 = track2.phi();
+    auto pt2 = track2.pt();
     auto charge2 = track2.charge();
 
     float dphistar = phi1 - phi2 - charge1 * bSign * TMath::ASin(0.075 * radius / pt1) + charge2 * bSign * TMath::ASin(0.075 * radius / pt2);
@@ -499,25 +492,10 @@ struct CorrelationTask {
 
     return dphistar;
   }
-
-  //   template<typename... Ts>
-  //   unsigned int getFilterBit(soa::Table<Ts...>::iterator const& track)
-  //   {
-  //     if constexpr(!has_type_v<aod::track::X, pack<Ts...>>)
-  //       static_assert("Need to pass aod::track");
-  //
-  //
-  // //     LOGF(info, "pt %f", track1.ptm());
-  //     return false;
-  //   }
-
-  //   float getInvMassSquared(float pt1, float eta1, float phi1, float pt2, float eta2, float phi2, float m0_1, float m0_2)
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const&)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<ATask>("produce-etaphi"),
-    adaptAnalysisTask<HashTask>("produce-hashes"),
     adaptAnalysisTask<CorrelationTask>("correlation-task")};
 }
