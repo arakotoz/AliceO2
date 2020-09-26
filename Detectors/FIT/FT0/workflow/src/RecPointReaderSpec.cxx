@@ -8,36 +8,36 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file  RecPointReaderSpec.cxx
+/// @file   RecPointReaderSpec.cxx
 
 #include <vector>
 
 #include "TTree.h"
 
-#include "Framework/ControlService.h"
 #include "Framework/ConfigParamRegistry.h"
+#include "Framework/ControlService.h"
 #include "Framework/Logger.h"
-#include "FDDWorkflow/RecPointReaderSpec.h"
+#include "FT0Workflow/RecPointReaderSpec.h"
 
 using namespace o2::framework;
-using namespace o2::fdd;
+using namespace o2::ft0;
 
 namespace o2
 {
-namespace fdd
+namespace ft0
 {
 
 RecPointReader::RecPointReader(bool useMC)
 {
   mUseMC = useMC;
   if (useMC) {
-    LOG(WARNING) << "FDD RecPoint reader at the moment does not process MC";
+    LOG(WARNING) << "FT0 RecPoint reader at the moment does not process MC";
   }
 }
 
 void RecPointReader::init(InitContext& ic)
 {
-  mInputFileName = ic.options().get<std::string>("fdd-recpoints-infile");
+  mInputFileName = ic.options().get<std::string>("ft0-recpoints-infile");
   connectTree(mInputFileName);
 }
 
@@ -47,7 +47,7 @@ void RecPointReader::run(ProcessingContext& pc)
   assert(ent < mTree->GetEntries()); // this should not happen
   mTree->GetEntry(ent);
 
-  LOG(INFO) << "FDD RecPointReader pushes " << mRecPoints->size() << " recpoints at entry " << ent;
+  LOG(INFO) << "FT0 RecPointReader pushes " << mRecPoints->size() << " recpoints at entry " << ent;
   pc.outputs().snapshot(Output{mOrigin, "RECPOINTS", 0, Lifetime::Timeframe}, *mRecPoints);
 
   if (mTree->GetReadEntry() + 1 >= mTree->GetEntries()) {
@@ -66,29 +66,29 @@ void RecPointReader::connectTree(const std::string& filename)
 
   mTree->SetBranchAddress(mRecPointBranchName.c_str(), &mRecPoints);
   if (mUseMC) {
-    LOG(WARNING) << "MC-truth is not supported for FDD recpoints currently";
+    LOG(WARNING) << "MC-truth is not supported for FT0 recpoints currently";
     mUseMC = false;
   }
 
-  LOG(INFO) << "Loaded FDD RecPoints tree from " << filename << " with " << mTree->GetEntries() << " entries";
+  LOG(INFO) << "Loaded FT0 RecPoints tree from " << filename << " with " << mTree->GetEntries() << " entries";
 }
 
-DataProcessorSpec getFDDRecPointReaderSpec(bool useMC)
+DataProcessorSpec getRecPointReaderSpec(bool useMC)
 {
   std::vector<OutputSpec> outputSpec;
-  outputSpec.emplace_back(o2::header::gDataOriginFDD, "RECPOINTS", 0, Lifetime::Timeframe);
+  outputSpec.emplace_back(o2::header::gDataOriginFT0, "RECPOINTS", 0, Lifetime::Timeframe);
   if (useMC) {
-    LOG(WARNING) << "MC-truth is not supported for FDD recpoints currently";
+    LOG(WARNING) << "MC-truth is not supported for FT0 recpoints currently";
   }
 
   return DataProcessorSpec{
-    "fdd-recpoints-reader",
+    "ft0-recpoints-reader",
     Inputs{},
     outputSpec,
     AlgorithmSpec{adaptFromTask<RecPointReader>()},
     Options{
-      {"fdd-recpoints-infile", VariantType::String, "o2reco_fdd.root", {"Name of the input file"}}}};
+      {"ft0-recpoints-infile", VariantType::String, "o2reco_ft0.root", {"Name of the input file"}}}};
 }
 
-} // namespace fdd
+} // namespace ft0
 } // namespace o2
