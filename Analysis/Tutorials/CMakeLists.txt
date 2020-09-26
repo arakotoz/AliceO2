@@ -112,3 +112,11 @@ o2_add_dpl_workflow(custom-index
                   PUBLIC_LINK_LIBRARIES O2::Framework O2::AnalysisCore O2::AnalysisDataModel
                   COMPONENT_NAME AnalysisTutorial)
 
+o2_add_dpl_workflow(extended-columns
+                  SOURCES src/extendedColumns.cxx
+                  PUBLIC_LINK_LIBRARIES O2::Framework
+                  COMPONENT_NAME AnalysisTutorial)
+
+o2_add_dpl_workflow(zdc-vzero-iteration
+                  SOURCES src/ZDCVZeroIteration.cxx
+                  COMPONENT_NAME AnalysisTutorial)
