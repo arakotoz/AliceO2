@@ -8,7 +8,11 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 #include "Framework/AnalysisDataModel.h"
-#include "Analysis/SecondaryVertex.h"
+#include "Analysis/SecondaryVertexHF.h"
+#include "PID/PIDResponse.h"
+#include "Analysis/Multiplicity.h"
+#include "Analysis/Centrality.h"
+#include "Analysis/TrackSelectionTables.h"
 #include "Analysis/Jet.h"
 #include "Analysis/StrangenessTables.h"
 #include <fmt/printf.h>
