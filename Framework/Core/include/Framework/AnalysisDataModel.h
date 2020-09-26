@@ -260,6 +260,9 @@ using Track = Tracks::iterator;
 using TrackCov = TracksCov::iterator;
 using TrackExtra = TracksExtra::iterator;
 
+using FullTracks = soa::Join<Tracks, TracksCov, TracksExtra>;
+using FullTrack = FullTracks::iterator;
+
 namespace unassignedtracks
 {
 DECLARE_SOA_INDEX_COLUMN(Collision, collision);
@@ -333,6 +336,16 @@ DECLARE_SOA_DYNAMIC_COLUMN(Phi, phi, [](float thetaX, float thetaY) -> float {
   constexpr float twopi = 2.0f * static_cast<float>(M_PI);
   return (phi >= 0.0 ? phi : phi + twopi);
 });
+DECLARE_SOA_DYNAMIC_COLUMN(RAtAbsorberEnd, rAtAbsorberEnd, [](float bendingCoor, float nonBendingCoor, float zMu, float thetaX, float thetaY) -> float {
+  // linear extrapolation of the coordinates of the track to the position of the end of the absorber (-505 cm)
+  float dZ = -505. - zMu;
+  float NonBendingSlope = std::tan(thetaX);
+  float BendingSlope = std::tan(thetaY);
+  float xAbs = nonBendingCoor + NonBendingSlope * dZ;
+  float yAbs = bendingCoor + BendingSlope * dZ;
+  float rAtAbsorberEnd = std::sqrt(xAbs * xAbs + yAbs * yAbs);
+  return rAtAbsorberEnd;
+});
 DECLARE_SOA_EXPRESSION_COLUMN(Pt, pt, float, nsqrt(1.0f + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) * nsqrt(ntan(aod::muon::thetaX) * ntan(aod::muon::thetaX) + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) / nabs(aod::muon::inverseBendingMomentum));
 DECLARE_SOA_EXPRESSION_COLUMN(Px, px, float, -1.0f * ntan(aod::muon::thetaX) * nsqrt(1.0f + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) / nabs(aod::muon::inverseBendingMomentum));
 DECLARE_SOA_EXPRESSION_COLUMN(Py, py, float, -1.0f * ntan(aod::muon::thetaY) * nsqrt(1.0f + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) / nabs(aod::muon::inverseBendingMomentum));
@@ -347,6 +360,7 @@ DECLARE_SOA_TABLE_FULL(StoredMuons, "Muons", "AOD", "MUON",
                        muon::Chi2, muon::Chi2MatchTrigger,
                        muon::Eta<muon::InverseBendingMomentum, muon::ThetaX, muon::ThetaY>,
                        muon::Phi<muon::ThetaX, muon::ThetaY>,
+                       muon::RAtAbsorberEnd<muon::BendingCoor, muon::NonBendingCoor, muon::ThetaX, muon::ThetaY, muon::ZMu>,
                        muon::Charge<muon::InverseBendingMomentum>);
 
 DECLARE_SOA_EXTENDED_TABLE(Muons, StoredMuons, "MUON",
@@ -415,7 +429,7 @@ DECLARE_SOA_COLUMN(TimeC, timeC, float);
 DECLARE_SOA_COLUMN(BCSignal, triggerSignal, uint8_t);
 } // namespace ft0
 
-DECLARE_SOA_TABLE(FT0s, "AOD", "FT0", ft0::BCId,
+DECLARE_SOA_TABLE(FT0s, "AOD", "FT0", o2::soa::Index<>, ft0::BCId,
                   ft0::Amplitude, ft0::TimeA, ft0::TimeC,
                   ft0::BCSignal);
 using FT0 = FT0s::iterator;
@@ -428,7 +442,7 @@ DECLARE_SOA_COLUMN(TimeA, timeA, float);
 DECLARE_SOA_COLUMN(BCSignal, triggerSignal, uint8_t);
 } // namespace fv0
 
-DECLARE_SOA_TABLE(FV0s, "AOD", "FV0", fv0::BCId,
+DECLARE_SOA_TABLE(FV0s, "AOD", "FV0", o2::soa::Index<>, fv0::BCId,
                   fv0::Amplitude, fv0::TimeA, fv0::BCSignal);
 using FV0 = FV0s::iterator;
 
@@ -441,15 +455,16 @@ DECLARE_SOA_COLUMN(TimeC, timeC, float);
 DECLARE_SOA_COLUMN(BCSignal, triggerSignal, uint8_t);
 } // namespace fdd
 
-DECLARE_SOA_TABLE(FDDs, "AOD", "FDD", fdd::BCId,
+DECLARE_SOA_TABLE(FDDs, "AOD", "FDD", o2::soa::Index<>, fdd::BCId,
                   fdd::Amplitude, fdd::TimeA, fdd::TimeC,
                   fdd::BCSignal);
 using FDD = FDDs::iterator;
 
 namespace v0
 {
-DECLARE_SOA_INDEX_COLUMN_FULL(PosTrack, posTrack, int, Tracks, "fPosTrackID");
-DECLARE_SOA_INDEX_COLUMN_FULL(NegTrack, negTrack, int, Tracks, "fNegTrackID");
+DECLARE_SOA_INDEX_COLUMN_FULL(PosTrack, posTrack, int, FullTracks, "fPosTrackID");
+DECLARE_SOA_INDEX_COLUMN_FULL(NegTrack, negTrack, int, FullTracks, "fNegTrackID");
+DECLARE_SOA_INDEX_COLUMN(Collision, collision);
 } // namespace v0
 
 DECLARE_SOA_TABLE(StoredV0s, "AOD", "V0", o2::soa::Index<>, v0::PosTrackId, v0::NegTrackId);
@@ -461,11 +476,15 @@ using V0 = V0s::iterator;
 namespace cascade
 {
 DECLARE_SOA_INDEX_COLUMN(V0, v0);
-DECLARE_SOA_INDEX_COLUMN_FULL(Bachelor, bachelor, int, Tracks, "fTracksID");
+DECLARE_SOA_INDEX_COLUMN_FULL(Bachelor, bachelor, int, FullTracks, "fTracksID");
+DECLARE_SOA_INDEX_COLUMN(Collision, collision);
 } // namespace cascade
 
 DECLARE_SOA_TABLE(StoredCascades, "AOD", "CASCADE", o2::soa::Index<>, cascade::V0Id, cascade::BachelorId);
 DECLARE_SOA_TABLE(TransientCascades, "AOD", "CASCADEINDEX", cascade::CollisionId);
+
+using Cascades = soa::Join<TransientCascades, StoredCascades>;
+using Cascade = Cascades::iterator;
 
 // ---- LEGACY tables ----
 
@@ -483,7 +502,7 @@ DECLARE_SOA_COLUMN(BBFlag, bbFlag, uint64_t);
 DECLARE_SOA_COLUMN(BGFlag, bgFlag, uint64_t);
 } // namespace run2v0
 
-DECLARE_SOA_TABLE(Run2V0s, "AOD", "RUN2V0", o2::soa::Index<>, run2v0::BCId,
+DECLARE_SOA_TABLE(Run2V0s, "RN2", "V0", o2::soa::Index<>, run2v0::BCId,
                   run2v0::Adc, run2v0::Time, run2v0::Width,
                   run2v0::MultA, run2v0::MultC,
                   run2v0::TimeA, run2v0::TimeC,
@@ -584,6 +603,27 @@ DECLARE_SOA_COLUMN(LabelMask, labelMask, uint16_t);
 DECLARE_SOA_TABLE(McCollisionLabels, "AOD", "MCCOLLISLABEL",
                   mccollisionlabel::LabelId, mccollisionlabel::LabelMask);
 using McCollisionLabel = McCollisionLabels::iterator;
+
+// --- Matching between collisions and other tables through BC ---
+
+namespace indices
+{
+DECLARE_SOA_INDEX_COLUMN(Collision, collision);
+DECLARE_SOA_INDEX_COLUMN(BC, bc);
+DECLARE_SOA_INDEX_COLUMN(Zdc, zdc);
+DECLARE_SOA_INDEX_COLUMN(FT0, ft0);
+DECLARE_SOA_INDEX_COLUMN(FV0, fv0);
+DECLARE_SOA_INDEX_COLUMN(FDD, fdd);
+DECLARE_SOA_INDEX_COLUMN(Run2V0, run2v0);
+} // namespace indices
+
+#define INDEX_LIST_RUN2 indices::CollisionId, indices::ZdcId, indices::BCId, indices::Run2V0Id
+DECLARE_SOA_INDEX_TABLE(Run2MatchedExclusive, BCs, "MATCHED", INDEX_LIST_RUN2);
+DECLARE_SOA_INDEX_TABLE(Run2MatchedSparse, BCs, "MATCHED", INDEX_LIST_RUN2);
+
+#define INDEX_LIST_RUN3 indices::CollisionId, indices::ZdcId, indices::BCId, indices::FT0Id, indices::FV0Id, indices::FDDId
+DECLARE_SOA_INDEX_TABLE(Run3MatchedExclusive, BCs, "MATCHED", INDEX_LIST_RUN3);
+DECLARE_SOA_INDEX_TABLE(Run3MatchedSparse, BCs, "MATCHED", INDEX_LIST_RUN3);
 
 } // namespace aod
 
