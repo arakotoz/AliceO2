@@ -17,6 +17,8 @@
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/ControlService.h"
 #include "FITWorkflow/FT0RecPointReaderSpec.h"
+#include "Framework/Logger.h"
+
 
 using namespace o2::framework;
 using namespace o2::ft0;

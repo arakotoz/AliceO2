@@ -17,6 +17,8 @@
 #include "DataFormatsFT0/Digit.h"
 #include "DataFormatsFT0/ChannelData.h"
 #include "DataFormatsFT0/MCLabel.h"
+#include "Framework/Logger.h"
+
 
 using namespace o2::framework;
 

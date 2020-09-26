@@ -10,6 +10,8 @@
 
 #include "FITWorkflow/RecoWorkflow.h"
 #include "CommonUtils/ConfigurableParam.h"
+#include "Framework/Logger.h"
+
 
 using namespace o2::framework;
 

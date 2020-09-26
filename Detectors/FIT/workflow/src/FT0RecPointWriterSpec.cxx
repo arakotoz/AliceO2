@@ -15,6 +15,8 @@
 #include "FITWorkflow/FT0RecPointWriterSpec.h"
 #include "DPLUtils/MakeRootTreeWriterSpec.h"
 #include "DataFormatsFT0/RecPoints.h"
+#include "Framework/Logger.h"
+
 
 using namespace o2::framework;
 
