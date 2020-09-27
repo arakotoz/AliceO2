@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <fstream>
+#include "Framework/Logger.h"
 
 // A simple tool which verifies timeframe files
 int main(int argc, char** argv)

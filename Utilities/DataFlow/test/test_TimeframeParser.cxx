@@ -14,6 +14,7 @@
 #include <FairMQParts.h>
 #include <istream>
 #include <cstdlib>
+#include "Framework/Logger.h"
 
 struct OneShotReadBuf : public std::streambuf {
   OneShotReadBuf(char* s, std::size_t n)
