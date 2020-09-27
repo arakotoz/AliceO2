@@ -24,6 +24,7 @@
 
 #include <options/FairMQProgOptions.h>
 #include <FairMQParts.h>
+#include "Framework/Logger.h"
 
 using DataHeader = o2::header::DataHeader;
 using DataDescription = o2::header::DataDescription;
