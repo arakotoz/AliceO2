@@ -27,22 +27,24 @@ using namespace o2::framework;
 /// Reconstruction of heavy-flavour 3-prong decay candidates
 struct HFCandidateCreator3Prong {
   Produces<aod::HfCandProng3Base> rowCandidateBase;
-  Configurable<double> magneticField{"d_bz", 5.0, "magnetic field"};
+
+  Configurable<double> magneticField{"d_bz", 5., "magnetic field"};
   Configurable<bool> b_propdca{"b_propdca", true, "create tracks version propagated to PCA"};
   Configurable<double> d_maxr{"d_maxr", 200., "reject PCA's above this radius"};
   Configurable<double> d_maxdzini{"d_maxdzini", 4., "reject (if>0) PCA candidate if tracks DZ exceeds threshold"};
   Configurable<double> d_minparamchange{"d_minparamchange", 1.e-3, "stop iterations if largest change of any X is smaller than this"};
   Configurable<double> d_minrelchi2change{"d_minrelchi2change", 0.9, "stop iterations is chi2/chi2old > this"};
   Configurable<bool> b_dovalplots{"b_dovalplots", true, "do validation plots"};
+
   OutputObj<TH1F> hmass3{TH1F("hmass3", "3-track inv mass", 500, 1.6, 2.1)};
-  OutputObj<TH1F> hCovPVXX{TH1F("hCovPVXX", "XX element of PV cov. matrix", 100, 0., 1.0e-4)};
+  OutputObj<TH1F> hCovPVXX{TH1F("hCovPVXX", "XX element of PV cov. matrix", 100, 0., 1.e-4)};
   OutputObj<TH1F> hCovSVXX{TH1F("hCovSVXX", "XX element of SV cov. matrix", 100, 0., 0.2)};
 
   double massPi = RecoDecay::getMassPDG(kPiPlus);
   double massK = RecoDecay::getMassPDG(kKPlus);
-  double massPiKPi{0};
+  double massPiKPi{0.};
 
-  void process(aod::Collision const& collision,
+  void process(aod::Collisions const& collisions,
                aod::HfTrackIndexProng3 const& rowsTrackIndexProng3,
                aod::BigTracks const& tracks)
   {
@@ -61,6 +63,7 @@ struct HFCandidateCreator3Prong {
       auto trackParVar0 = getTrackParCov(rowTrackIndexProng3.index0());
       auto trackParVar1 = getTrackParCov(rowTrackIndexProng3.index1());
       auto trackParVar2 = getTrackParCov(rowTrackIndexProng3.index2());
+      auto collision = rowTrackIndexProng3.index0().collision();
 
       // reconstruct the 3-prong secondary vertex
       if (df.process(trackParVar0, trackParVar1, trackParVar2) == 0)
@@ -80,10 +83,6 @@ struct HFCandidateCreator3Prong {
       trackParVar0.getPxPyPzGlo(pvec0);
       trackParVar1.getPxPyPzGlo(pvec1);
       trackParVar2.getPxPyPzGlo(pvec2);
-
-      // calculate invariant mass
-      auto arrayMomenta = array{pvec0, pvec1, pvec2};
-      massPiKPi = RecoDecay::M(arrayMomenta, array{massPi, massK, massPi});
 
       // get track impact parameters
       // This modifies track momenta!
@@ -117,6 +116,9 @@ struct HFCandidateCreator3Prong {
 
       // fill histograms
       if (b_dovalplots) {
+        // calculate invariant mass
+        auto arrayMomenta = array{pvec0, pvec1, pvec2};
+        massPiKPi = RecoDecay::M(std::move(arrayMomenta), array{massPi, massK, massPi});
         hmass3->Fill(massPiKPi);
       }
     }
