@@ -204,8 +204,9 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEvent(int eventNumber)
 //______________________________________________________________________________
 inline CalibRawBase::ProcessStatus CalibRawBase::processEventGBT()
 {
-  if (!mGBTFrameContainers.size())
+  if (!mGBTFrameContainers.size()) {
     return ProcessStatus::NoReaders;
+  }
   resetEvent();
 
   // loop over raw readers, fill digits for 500 time bins and process
@@ -231,8 +232,9 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEventGBT()
           // row is local in region (CRU)
           const int row = digi.getRow();
           const int pad = digi.getPad();
-          if (row == 255 || pad == 255)
+          if (row == 255 || pad == 255) {
             continue;
+          }
 
           int rowOffset = 0;
           switch (mPadSubset) {
@@ -285,8 +287,9 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEventGBT()
 //______________________________________________________________________________
 inline CalibRawBase::ProcessStatus CalibRawBase::processEventRawReader(int eventNumber)
 {
-  if (!mRawReaders.size())
+  if (!mRawReaders.size()) {
     return ProcessStatus::NoReaders;
+  }
   resetEvent();
 
   // loop over raw readers, fill digits for 500 time bins and process
@@ -317,8 +320,9 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEventRawReader(int event
 
     o2::tpc::PadPos padPos;
     while (std::shared_ptr<std::vector<uint16_t>> data = reader->getNextData(padPos)) {
-      if (!data)
+      if (!data) {
         continue;
+      }
 
       mProcessedTimeBins = std::max(mProcessedTimeBins, data->size());
 
@@ -331,8 +335,9 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEventRawReader(int event
       // row is local in region (CRU)
       const int row = padPos.getRow();
       const int pad = padPos.getPad();
-      if (row == 255 || pad == 255)
+      if (row == 255 || pad == 255) {
         continue;
+      }
 
       int timeBin = 0;
       for (const auto& signalI : *data) {
@@ -387,8 +392,9 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEventRawReader(int event
 //______________________________________________________________________________
 inline CalibRawBase::ProcessStatus CalibRawBase::processEventRawReaderCRU(int eventNumber)
 {
-  if (!mRawReaderCRUManager.getNumberOfReaders())
+  if (!mRawReaderCRUManager.getNumberOfReaders()) {
     return ProcessStatus::NoReaders;
+  }
   resetEvent();
 
   mRawReaderCRUManager.init();
@@ -422,94 +428,8 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEventRawReaderCRU(int ev
 
   const bool skipEvent = mSkipIncomplete && !isPresentEventComplete();
   if (!skipEvent) {
-    for (auto& reader_ptr : mRawReaderCRUManager.getReaders()) {
-      auto reader = reader_ptr.get();
-
-      LOG(INFO) << "Processing event number " << eventNumber << " (" << mNevents << ") - RawReader#: " << processedReaders << " ptr: " << reader;
-
-      if (eventNumber >= 0) {
-        mPresentEventNumber = eventNumber;
-      } else if (eventNumber == -1) {
-        if (mPresentEventNumber == std::numeric_limits<size_t>::max()) {
-          mPresentEventNumber = 0;
-        } else {
-          mPresentEventNumber = (reader->getEventNumber() + 1) % reader->getNumberOfEvents();
-        }
-      } else if (eventNumber == -2) {
-        auto readerNumber = reader->getEventNumber();
-        if (readerNumber > 0) {
-          mPresentEventNumber = readerNumber - 1;
-        } else {
-          mPresentEventNumber = reader->getNumberOfEvents() - 1;
-        }
-      }
-      reader->setEventNumber(mPresentEventNumber);
-
-      // process data
-      reader->processLinks();
-      hasData = true;
-
-      const auto& cru = reader->getCRU();
-      const int roc = cru.roc();
-
-      // TODO: OROC case needs subtraction of number of pad rows in IROC
-      const PadRegionInfo& regionInfo = mMapper.getPadRegionInfo(cru.region());
-      const PartitionInfo& partInfo = mMapper.getPartitionInfo(cru.partition());
-
-      //LOG(INFO) << "  Found ADC values: " << reader->getADCMap().size();
-      // loop over pads
-      for (const auto& pair : reader->getADCMap()) {
-        const auto& padPos = pair.first;
-        const auto& dataVector = pair.second;
-
-        // TODO: fix this?
-        mProcessedTimeBins = std::max(mProcessedTimeBins, dataVector.size());
-
-        // row is local in region (CRU)
-        const int row = padPos.getRow();
-        const int pad = padPos.getPad();
-        if (row == 255 || pad == 255)
-          continue;
-
-        int timeBin = 0;
-
-        int rowOffset = 0;
-        switch (mPadSubset) {
-          case PadSubset::ROC: {
-            rowOffset = regionInfo.getGlobalRowOffset();
-            rowOffset -= (cru.isOROC()) * nRowIROC;
-            break;
-          }
-          case PadSubset::Region: {
-            break;
-          }
-          case PadSubset::Partition: {
-            rowOffset = regionInfo.getGlobalRowOffset();
-            rowOffset -= partInfo.getGlobalRowOffset();
-            break;
-          }
-        }
-
-        //const FECInfo& fecInfo = mMapper.getFECInfo(PadROCPos(roc, row, pad));
-
-        for (const auto& signalI : dataVector) {
-          // modify row depending on the calibration type used
-          const float signal = float(signalI);
-          //printf("Call update: %d, %d (%d), %d, %d, %.3f -- cru: %03d, reg: %02d -- FEC: %02d, Chip: %02d, Chn: %02d\n", roc, row, rowOffset, pad, timeBin, signal, cru.number(), cru.region(), fecInfo.getIndex(), fecInfo.getSampaChip(), fecInfo.getSampaChannel());
-          updateCRU(cru, row, pad, timeBin, signal);
-          updateROC(roc, row + rowOffset, pad, timeBin, signal);
-          ++timeBin;
-          hasData = true;
-        }
-      }
-      LOG(INFO) << "Found time bins: " << mProcessedTimeBins << "\n";
-
-      reader->clearMap();
-
-      // notify that one raw reader processing finalized for this event
-      endReader();
-      ++processedReaders;
-    }
+    hasData = true;
+    mRawReaderCRUManager.processEvent(mPresentEventNumber, [this]() { endReader(); });
     // set status, don't overwrite decision
     if (!hasData) {
       return ProcessStatus::NoMoreData;
@@ -600,8 +520,9 @@ inline CalibRawBase::ProcessStatus CalibRawBase::processEventDigitTree(int event
       const PadRegionInfo& regionInfo = mMapper.getPadRegionInfo(cru.region());
       const PartitionInfo& partInfo = mMapper.getPartitionInfo(cru.partition());
 
-      if (row == 255 || pad == 255)
+      if (row == 255 || pad == 255) {
         continue;
+      }
 
       int rowOffset = 0;
       switch (mPadSubset) {

@@ -66,8 +66,10 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   specs.emplace_back(o2::vertexing::getPrimaryVertexingSpec(validateWithFT0, useMC));
 
   if (!disableMatching) {
-    specs.emplace_back(o2::its::getITSTrackReaderSpec(false));
-    specs.emplace_back(o2::tpc::getTPCTrackReaderSpec(false));
+    if (!disableRootInp) {
+      specs.emplace_back(o2::its::getITSTrackReaderSpec(false));
+      specs.emplace_back(o2::tpc::getTPCTrackReaderSpec(false));
+    }
     specs.emplace_back(o2::vertexing::getVertexTrackMatcherSpec());
   }
 

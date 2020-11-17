@@ -24,6 +24,19 @@ namespace framework
 {
 using namespace rapidjson;
 
+struct FileNameHolder {
+  std::string fileName;
+  int numberOfTimeFrames = 0;
+  std::vector<uint64_t> listOfTimeFrameNumbers;
+  std::vector<std::string> listOfTimeFrameKeys;
+};
+FileNameHolder* makeFileNameHolder(std::string fileName);
+
+struct FileAndFolder {
+  TFile* file = nullptr;
+  std::string folderName = "";
+};
+
 struct DataInputDescriptor {
   /// Holds information concerning the reading of an aod table.
   /// The information includes the table specification, treename,
@@ -44,20 +57,23 @@ struct DataInputDescriptor {
   void setFilenamesRegex(std::string fn) { mFilenameRegex = fn; }
   void setFilenamesRegex(std::string* fnptr) { mFilenameRegexPtr = fnptr; }
 
-  void setDefaultInputfiles(std::vector<std::string>* difnptr) { mdefaultFilenamesPtr = difnptr; }
+  void setDefaultInputfiles(std::vector<FileNameHolder*>* difnptr) { mdefaultFilenamesPtr = difnptr; }
 
-  void addFilename(std::string fn);
+  void addFileNameHolder(FileNameHolder* fn);
   int fillInputfiles();
+  bool setFile(int counter);
 
   // getters
   std::string getInputfilesFilename();
   std::string getFilenamesRegexString();
   std::regex getFilenamesRegex();
   int getNumberInputfiles() { return mfilenames.size(); }
+  int getNumberTimeFrames() { return mtotalNumberTimeFrames; }
 
-  TFile* getInputFile(int counter);
+  uint64_t getTimeFrameNumber(int counter, int numTF);
+  FileAndFolder getFileFolder(int counter, int numTF);
+
   void closeInputFile();
-  std::string getInputFilename(int counter);
   bool isAlienSupportOn() { return mAlienSupport; }
 
  private:
@@ -65,10 +81,12 @@ struct DataInputDescriptor {
   std::string* minputfilesFilePtr = nullptr;
   std::string mFilenameRegex = "";
   std::string* mFilenameRegexPtr = nullptr;
-  std::vector<std::string> mfilenames;
-  std::vector<std::string>* mdefaultFilenamesPtr = nullptr;
+  std::vector<FileNameHolder*> mfilenames;
+  std::vector<FileNameHolder*>* mdefaultFilenamesPtr = nullptr;
   TFile* mcurrentFile = nullptr;
   bool mAlienSupport = false;
+
+  int mtotalNumberTimeFrames = 0;
 };
 
 struct DataInputDirector {
@@ -93,10 +111,12 @@ struct DataInputDirector {
 
   // getters
   DataInputDescriptor* getDataInputDescriptor(header::DataHeader dh);
-  std::unique_ptr<TTreeReader> getTreeReader(header::DataHeader dh, int counter, std::string treeName);
-  std::string getInputFilename(header::DataHeader dh, int counter);
-  TTree* getDataTree(header::DataHeader dh, int counter);
   int getNumberInputDescriptors() { return mdataInputDescriptors.size(); }
+
+  std::unique_ptr<TTreeReader> getTreeReader(header::DataHeader dh, int counter, int numTF, std::string treeName);
+  TTree* getDataTree(header::DataHeader dh, int counter, int numTF);
+  uint64_t getTimeFrameNumber(header::DataHeader dh, int counter, int numTF);
+  FileAndFolder getFileFolder(header::DataHeader dh, int counter, int numTF);
 
  private:
   std::string minputfilesFile;
@@ -104,7 +124,7 @@ struct DataInputDirector {
   std::string mFilenameRegex;
   std::string* const mFilenameRegexPtr = &mFilenameRegex;
   DataInputDescriptor* mdefaultDataInputDescriptor = nullptr;
-  std::vector<std::string> mdefaultInputFiles;
+  std::vector<FileNameHolder*> mdefaultInputFiles;
   std::vector<DataInputDescriptor*> mdataInputDescriptors;
 
   bool mDebugMode = false;

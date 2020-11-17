@@ -130,6 +130,7 @@ class GPUTPCGMPropagator
   GPUd() void GetErr2(float& err2Y, float& err2Z, const GPUParam& param, float posZ, int iRow, short clusterState) const;
 
   GPUd() float GetAlpha() const { return mAlpha; }
+  GPUd() void SetAlpha(float v) { mAlpha = v; }
   GPUd() float GetQPt0() const { return mT0.GetQPt(); }
   GPUd() float GetSinPhi0() const { return mT0.GetSinPhi(); }
   GPUd() float GetCosPhi0() const { return mT0.GetCosPhi(); }
@@ -186,12 +187,16 @@ class GPUTPCGMPropagator
 
 GPUdi() void GPUTPCGMPropagator::GetBxByBz(float Alpha, float X, float Y, float Z, float B[3]) const
 {
-  GetBxByBzBase(CAMath::Cos(Alpha), CAMath::Sin(Alpha), X, Y, Z, B);
+  float c, s;
+  CAMath::SinCos(Alpha, s, c);
+  GetBxByBzBase(c, s, X, Y, Z, B);
 }
 
 GPUdi() float GPUTPCGMPropagator::GetBz(float Alpha, float X, float Y, float Z) const
 {
-  return GetBzBase(CAMath::Cos(Alpha), CAMath::Sin(Alpha), X, Y, Z);
+  float c, s;
+  CAMath::SinCos(Alpha, s, c);
+  return GetBzBase(c, s, X, Y, Z);
 }
 
 GPUdi() void GPUTPCGMPropagator::GetBxByBz(float X, float Y, float Z, float B[3]) const
@@ -220,8 +225,7 @@ GPUdi() void GPUTPCGMPropagator::SetTrack(GPUTPCGMTrackParam* GPUrestrict() trac
   }
   mT0.Set(*mT);
   mAlpha = Alpha;
-  mCosAlpha = CAMath::Cos(mAlpha);
-  mSinAlpha = CAMath::Sin(mAlpha);
+  CAMath::SinCos(mAlpha, mSinAlpha, mCosAlpha);
   CalculateMaterialCorrection();
 }
 

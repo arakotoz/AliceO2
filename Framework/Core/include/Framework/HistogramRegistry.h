@@ -20,98 +20,156 @@
 #include "Framework/SerializationMethods.h"
 #include "Framework/StringHelpers.h"
 #include "Framework/TableBuilder.h"
+#include "Framework/RuntimeError.h"
 
-#include "TClass.h"
-#include "TH1.h"
-#include "TH2.h"
-#include "TH3.h"
-#include "THn.h"
-#include "THnSparse.h"
-#include "TFolder.h"
+#include <TH1.h>
+#include <TH2.h>
+#include <TH3.h>
+#include <THn.h>
+#include <THnSparse.h>
+#include <TProfile.h>
+#include <TProfile2D.h>
+#include <TProfile3D.h>
+#include <TList.h>
+#include <TDataMember.h>
+#include <TDataType.h>
 
 #include <string>
 #include <variant>
-namespace o2
-{
+#include <deque>
 
-namespace framework
+namespace o2::framework
 {
-// Most common histogram types
-enum HistogramType : unsigned int {
-  kTH1D = 0,
-  kTH1F = 1,
-  kTH1I = 2,
-  kTH2D = 3,
-  kTH2F = 4,
-  kTH2I = 5,
-  kTH3D = 6,
-  kTH3F = 7,
-  kTH3I = 8
+// Available root histogram types
+enum HistType : unsigned int {
+  kUndefinedHist = 0,
+  kTH1D,
+  kTH1F,
+  kTH1I,
+  kTH1C,
+  kTH1S,
+  kTH2D,
+  kTH2F,
+  kTH2I,
+  kTH2C,
+  kTH2S,
+  kTH3D,
+  kTH3F,
+  kTH3I,
+  kTH3C,
+  kTH3S,
+  kTHnD,
+  kTHnF,
+  kTHnI,
+  kTHnC,
+  kTHnS,
+  kTHnL,
+  kTHnSparseD,
+  kTHnSparseF,
+  kTHnSparseI,
+  kTHnSparseC,
+  kTHnSparseS,
+  kTHnSparseL,
+  kTProfile,
+  kTProfile2D,
+  kTProfile3D,
+  kStepTHnF, // FIXME: for these two to work we need to align StepTHn ctors with the root THn ones
+  kStepTHnD
 };
 
-/// Description of a single histogram axis
+// variant of all possible root pointers; here we use only the interface types since the underlying data representation (int,float,double,long,char) is irrelevant
+using HistPtr = std::variant<std::shared_ptr<THn>, std::shared_ptr<THnSparse>, std::shared_ptr<TH3>, std::shared_ptr<TH2>, std::shared_ptr<TH1>, std::shared_ptr<TProfile3D>, std::shared_ptr<TProfile2D>, std::shared_ptr<TProfile>>;
+
+//**************************************************************************************************
+/**
+ * Specification of an Axis.
+ */
+//**************************************************************************************************
 struct AxisSpec {
-  AxisSpec(int nBins_, std::vector<double> bins_, std::string label_ = "")
-    : nBins(nBins_),
-      bins(bins_),
-      binsEqual(false),
-      label(label_)
+  AxisSpec(std::vector<double> binEdges_, std::optional<std::string> title_ = std::nullopt, std::optional<std::string> name_ = std::nullopt)
+    : nBins(std::nullopt),
+      binEdges(binEdges_),
+      title(title_),
+      name(name_)
   {
   }
 
-  AxisSpec(int nBins_, double binMin_, double binMax_, std::string label_ = "")
+  AxisSpec(int nBins_, double binMin_, double binMax_, std::optional<std::string> title_ = std::nullopt, std::optional<std::string> name_ = std::nullopt)
     : nBins(nBins_),
-      bins({binMin_, binMax_}),
-      binsEqual(true),
-      label(label_)
+      binEdges({binMin_, binMax_}),
+      title(title_),
+      name(name_)
   {
   }
 
-  AxisSpec() : nBins(1), binsEqual(false), bins(), label("") {}
-
-  int nBins;
-  std::vector<double> bins;
-  bool binsEqual; // if true, then bins specify min and max for equidistant binning
-  std::string label;
+  std::optional<int> nBins{};
+  std::vector<double> binEdges{};
+  std::optional<std::string> title{};
+  std::optional<std::string> name{}; // optional axis name for ndim histograms
 };
 
-/// Data sctructure that will allow to construct a fully qualified TH* histogram
+//**************************************************************************************************
+/**
+ * Specification of a histogram configuration.
+ */
+//**************************************************************************************************
 struct HistogramConfigSpec {
-  HistogramConfigSpec(HistogramType type_, std::vector<AxisSpec> axes_)
+  HistogramConfigSpec(HistType type_, std::vector<AxisSpec> axes_)
     : type(type_),
-      axes(axes_),
-      binsEqual(axes.size() > 0 ? axes[0].binsEqual : false)
+      axes(axes_)
   {
   }
-
-  HistogramConfigSpec()
-    : type(HistogramType::kTH1F),
-      axes(),
-      binsEqual(false)
-  {
-  }
+  HistogramConfigSpec() = default;
   HistogramConfigSpec(HistogramConfigSpec const& other) = default;
   HistogramConfigSpec(HistogramConfigSpec&& other) = default;
 
-  HistogramType type;
-  std::vector<AxisSpec> axes;
-  bool binsEqual;
+  void addAxis(const AxisSpec& axis)
+  {
+    axes.push_back(axis);
+  }
+
+  void addAxis(int nBins_, double binMin_, double binMax_, std::optional<std::string> title_ = std::nullopt, std::optional<std::string> name_ = std::nullopt)
+  {
+    axes.push_back({nBins_, binMin_, binMax_, title_, name_});
+  }
+
+  void addAxis(std::vector<double> binEdges_, std::optional<std::string> title_ = std::nullopt, std::optional<std::string> name_ = std::nullopt)
+  {
+    axes.push_back({binEdges_, title_, name_});
+  }
+
+  void addAxes(std::vector<AxisSpec> axes_)
+  {
+    axes.insert(axes.end(), axes_.begin(), axes_.end());
+  }
+
+  // add axes defined in other HistogramConfigSpec object
+  void addAxes(const HistogramConfigSpec& other)
+  {
+    axes.insert(axes.end(), other.axes.begin(), other.axes.end());
+  }
+
+  HistType type{HistType::kUndefinedHist};
+  std::vector<AxisSpec> axes{};
 };
 
-/// Data structure containing histogram specification for the HistogramRegistry
-/// Contains hashed name as id for fast lookup
+//**************************************************************************************************
+/**
+ * Specification of a histogram.
+ */
+//**************************************************************************************************
 struct HistogramSpec {
-  HistogramSpec(char const* const name_, char const* const readableName_, HistogramConfigSpec config_)
+  HistogramSpec(char const* const name_, char const* const title_, HistogramConfigSpec config_, bool callSumw2_ = false)
     : name(name_),
-      readableName(readableName_),
       id(compile_time_hash(name_)),
-      config(config_)
+      title(title_),
+      config(config_),
+      callSumw2(callSumw2_)
   {
   }
 
   HistogramSpec()
     : name(""),
-      readableName(""),
       id(0),
       config()
   {
@@ -119,283 +177,500 @@ struct HistogramSpec {
   HistogramSpec(HistogramSpec const& other) = default;
   HistogramSpec(HistogramSpec&& other) = default;
 
-  std::string name;
-  std::string readableName;
-  uint32_t id;
-  HistogramConfigSpec config;
+  std::string name{};
+  uint32_t id{};
+  std::string title{};
+  HistogramConfigSpec config{};
+  bool callSumw2{}; // wether or not hist needs heavy error structure produced by Sumw2()
 };
 
-template <typename T>
-std::unique_ptr<TH1> createTH1FromSpec(HistogramSpec const& spec)
-{
-  if (spec.config.axes.size() == 0) {
-    throw std::runtime_error("No arguments available in spec to create a histogram");
-  }
-  if (spec.config.binsEqual) {
-    return std::make_unique<T>(spec.name.data(), spec.readableName.data(), spec.config.axes[0].nBins, spec.config.axes[0].bins[0], spec.config.axes[0].bins[1]);
-  }
-  return std::make_unique<T>(spec.name.data(), spec.readableName.data(), spec.config.axes[0].nBins, spec.config.axes[0].bins.data());
-}
+//**************************************************************************************************
+/**
+ * Static helper class to generate histograms from the specifications.
+ * Also provides functions to obtain pointer to the created histogram casted to the correct alternative of the std::variant HistPtr that is used in HistogramRegistry.
+ */
+//**************************************************************************************************
+struct HistFactory {
 
-template <typename T>
-std::unique_ptr<TH2> createTH2FromSpec(HistogramSpec const& spec)
-{
-  if (spec.config.axes.size() == 0) {
-    throw std::runtime_error("No arguments available in spec to create a histogram");
-  }
-  if (spec.config.binsEqual) {
-    return std::make_unique<T>(spec.name.data(), spec.readableName.data(), spec.config.axes[0].nBins, spec.config.axes[0].bins[0], spec.config.axes[0].bins[1], spec.config.axes[1].nBins, spec.config.axes[1].bins[0], spec.config.axes[1].bins[1]);
-  }
-  return std::make_unique<T>(spec.name.data(), spec.readableName.data(), spec.config.axes[0].nBins, spec.config.axes[0].bins.data(), spec.config.axes[1].nBins, spec.config.axes[1].bins.data());
-}
-
-template <typename T>
-std::unique_ptr<TH3> createTH3FromSpec(HistogramSpec const& spec)
-{
-  if (spec.config.axes.size() == 0) {
-    throw std::runtime_error("No arguments available in spec to create a histogram");
-  }
-  if (spec.config.binsEqual) {
-    return std::make_unique<T>(spec.name.data(), spec.readableName.data(), spec.config.axes[0].nBins, spec.config.axes[0].bins[0], spec.config.axes[0].bins[1], spec.config.axes[1].nBins, spec.config.axes[1].bins[0], spec.config.axes[1].bins[1], spec.config.axes[2].nBins, spec.config.axes[2].bins[0], spec.config.axes[2].bins[1]);
-  }
-  return std::make_unique<T>(spec.name.data(), spec.readableName.data(), spec.config.axes[0].nBins, spec.config.axes[0].bins.data(), spec.config.axes[1].nBins, spec.config.axes[1].bins.data(), spec.config.axes[2].nBins, spec.config.axes[2].bins.data());
-}
-
-/// Helper functions to fill histograms with expressions
-template <typename C1, typename C2, typename C3, typename T>
-void fill(TH1* hist, const T& table, const o2::framework::expressions::Filter& filter)
-{
-  auto filtered = o2::soa::Filtered<T>{{table.asArrowTable()}, o2::framework::expressions::createSelection(table.asArrowTable(), filter)};
-  for (auto& t : filtered) {
-    hist->Fill(*(static_cast<C1>(t).getIterator()), *(static_cast<C2>(t).getIterator()), *(static_cast<C3>(t).getIterator()));
-  }
-}
-
-template <typename C1, typename C2, typename T>
-void fill(TH1* hist, const T& table, const o2::framework::expressions::Filter& filter)
-{
-  auto filtered = o2::soa::Filtered<T>{{table.asArrowTable()}, o2::framework::expressions::createSelection(table.asArrowTable(), filter)};
-  for (auto& t : filtered) {
-    hist->Fill(*(static_cast<C1>(t).getIterator()), *(static_cast<C2>(t).getIterator()));
-  }
-}
-
-template <typename C, typename T>
-void fill(TH1* hist, const T& table, const o2::framework::expressions::Filter& filter)
-{
-  auto filtered = o2::soa::Filtered<T>{{table.asArrowTable()}, o2::framework::expressions::createSelection(table.asArrowTable(), filter)};
-  for (auto& t : filtered) {
-    hist->Fill(*(static_cast<C>(t).getIterator()));
-  }
-}
-
-using HistogramCreationCallback = std::function<std::unique_ptr<TH1>(HistogramSpec const& spec)>;
-
-// Wrapper to avoid multiple function definitinions error
-struct HistogramCallbacks {
-  static HistogramCreationCallback createTH1D()
+  // create histogram of type T with the axes defined in HistogramSpec
+  template <typename T>
+  static std::shared_ptr<T> createHist(const HistogramSpec& histSpec)
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH1FromSpec<TH1D>(spec);
-    };
+    constexpr std::size_t MAX_DIM{10};
+    const std::size_t nAxes{histSpec.config.axes.size()};
+    if (nAxes == 0 || nAxes > MAX_DIM) {
+      LOGF(FATAL, "The histogram specification contains no (or too many) axes.");
+      return nullptr;
+    }
+
+    int nBins[MAX_DIM]{0};
+    double lowerBounds[MAX_DIM]{0.};
+    double upperBounds[MAX_DIM]{0.};
+
+    // first figure out number of bins and dimensions
+    for (std::size_t i = 0; i < nAxes; i++) {
+      nBins[i] = (histSpec.config.axes[i].nBins) ? *histSpec.config.axes[i].nBins : histSpec.config.axes[i].binEdges.size() - 1;
+      lowerBounds[i] = histSpec.config.axes[i].binEdges.front();
+      upperBounds[i] = histSpec.config.axes[i].binEdges.back();
+    }
+
+    // create histogram
+    std::shared_ptr<T> hist{generateHist<T>(histSpec.name, histSpec.title, nAxes, nBins, lowerBounds, upperBounds)};
+    if (!hist) {
+      LOGF(FATAL, "The number of dimensions specified for histogram %s does not match the type.", histSpec.name);
+      return nullptr;
+    }
+
+    // set axis properties
+    for (std::size_t i = 0; i < nAxes; i++) {
+      TAxis* axis{getAxis(i, hist)};
+      if (axis) {
+        if (histSpec.config.axes[i].title) {
+          axis->SetTitle((*histSpec.config.axes[i].title).data());
+        }
+
+        // this helps to have axes not only called 0,1,2... in ndim histos
+        if constexpr (std::is_base_of_v<THnBase, T>) {
+          if (histSpec.config.axes[i].name) {
+            axis->SetName((std::string(axis->GetName()) + "-" + *histSpec.config.axes[i].name).data());
+          }
+        }
+
+        // move the bin edges in case a variable binning was requested
+        if (!histSpec.config.axes[i].nBins) {
+          if (!std::is_sorted(std::begin(histSpec.config.axes[i].binEdges), std::end(histSpec.config.axes[i].binEdges))) {
+            LOGF(FATAL, "The bin edges in histogram %s are not in increasing order!", histSpec.name);
+            return nullptr;
+          }
+          axis->Set(nBins[i], histSpec.config.axes[i].binEdges.data());
+        }
+      }
+    }
+    if (histSpec.callSumw2) {
+      hist->Sumw2();
+    }
+
+    return hist;
   }
 
-  static HistogramCreationCallback createTH1F()
+  // create histogram and return it casted to the correct alternative held in HistPtr variant
+  template <typename T>
+  static HistPtr createHistVariant(const HistogramSpec& histSpec)
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH1FromSpec<TH1F>(spec);
-    };
+    if (auto hist = castToVariant(createHist<T>(histSpec))) {
+      return *hist;
+    } else {
+      throw runtime_error("Histogram was not created properly.");
+    }
   }
 
-  static HistogramCreationCallback createTH1I()
+  // runtime version of the above
+  static HistPtr createHistVariant(const HistogramSpec& histSpec)
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH1FromSpec<TH1I>(spec);
-    };
+    if (histSpec.config.type == HistType::kUndefinedHist) {
+      throw runtime_error("Histogram type was not specified.");
+    } else {
+      return HistogramCreationCallbacks.at(histSpec.config.type)(histSpec);
+    }
   }
 
-  static HistogramCreationCallback createTH2D()
+  // helper function to get the axis via index for any type of root histogram
+  template <typename T>
+  static TAxis* getAxis(const int i, std::shared_ptr<T>& hist)
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH2FromSpec<TH2D>(spec);
-    };
+    if constexpr (std::is_base_of_v<THnBase, T>) {
+      return hist->GetAxis(i);
+    } else {
+      return (i == 0) ? hist->GetXaxis()
+                      : (i == 1) ? hist->GetYaxis()
+                                 : (i == 2) ? hist->GetZaxis()
+                                            : nullptr;
+    }
   }
 
-  static HistogramCreationCallback createTH2F()
+ private:
+  static const std::map<HistType, std::function<HistPtr(const HistogramSpec&)>> HistogramCreationCallbacks;
+
+  // helper function to generate the actual histograms
+  template <typename T>
+  static T* generateHist(const std::string& name, const std::string& title, const std::size_t nDim,
+                         const int nBins[], const double lowerBounds[], const double upperBounds[])
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH2FromSpec<TH2F>(spec);
-    };
+    if constexpr (std::is_base_of_v<THnBase, T>) {
+      return new T(name.data(), title.data(), nDim, nBins, lowerBounds, upperBounds);
+    } else if constexpr (std::is_base_of_v<TH3, T>) {
+      return (nDim != 3) ? nullptr
+                         : new T(name.data(), title.data(), nBins[0], lowerBounds[0],
+                                 upperBounds[0], nBins[1], lowerBounds[1], upperBounds[1],
+                                 nBins[2], lowerBounds[2], upperBounds[2]);
+    } else if constexpr (std::is_base_of_v<TH2, T>) {
+      return (nDim != 2) ? nullptr
+                         : new T(name.data(), title.data(), nBins[0], lowerBounds[0],
+                                 upperBounds[0], nBins[1], lowerBounds[1], upperBounds[1]);
+    } else if constexpr (std::is_base_of_v<TH1, T>) {
+      return (nDim != 1)
+               ? nullptr
+               : new T(name.data(), title.data(), nBins[0], lowerBounds[0], upperBounds[0]);
+    }
+    return nullptr;
   }
 
-  static HistogramCreationCallback createTH2I()
+  // helper function to cast the actual histogram type (e.g. TH2F) to the correct interface type (e.g. TH2) that is stored in the HistPtr variant
+  template <typename T>
+  static std::optional<HistPtr> castToVariant(std::shared_ptr<TObject> obj)
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH2FromSpec<TH2I>(spec);
-    };
+    if (obj->InheritsFrom(T::Class())) {
+      return std::static_pointer_cast<T>(obj);
+    }
+    return std::nullopt;
   }
 
-  static HistogramCreationCallback createTH3D()
+  template <typename T, typename Next, typename... Rest>
+  static std::optional<HistPtr> castToVariant(std::shared_ptr<TObject> obj)
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH3FromSpec<TH3D>(spec);
-    };
+    if (auto hist = castToVariant<T>(obj)) {
+      return hist;
+    }
+    return castToVariant<Next, Rest...>(obj);
   }
 
-  static HistogramCreationCallback createTH3F()
+  static std::optional<HistPtr> castToVariant(std::shared_ptr<TObject> obj)
   {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH3FromSpec<TH3F>(spec);
-    };
-  }
-
-  static HistogramCreationCallback createTH3I()
-  {
-    return [](HistogramSpec const& spec) -> std::unique_ptr<TH1> {
-      return createTH3FromSpec<TH3I>(spec);
-    };
+    if (obj) {
+      // TProfile3D is TH3, TProfile2D is TH2, TH3 is TH1, TH2 is TH1, TProfile is TH1
+      return castToVariant<THn, THnSparse, TProfile3D, TH3, TProfile2D, TH2, TProfile, TH1>(obj);
+    }
+    return std::nullopt;
   }
 };
 
-/// Histogram registry for an analysis task that allows to define needed histograms
-/// and serves as the container/wrapper to fill them
+//**************************************************************************************************
+/**
+ * Static helper class to fill existing root histograms of any type.
+ * Contains functionality to fill once per call or a whole (filtered) table at once.
+ */
+//**************************************************************************************************
+struct HistFiller {
+  // fill any type of histogram (if weight was requested it must be the last argument)
+  template <typename T, typename... Ts>
+  static void fillHistAny(std::shared_ptr<T>& hist, const Ts&... positionAndWeight)
+  {
+    constexpr int nArgs = sizeof...(Ts);
+
+    constexpr bool validTH3 = (std::is_same_v<TH3, T> && (nArgs == 3 || nArgs == 4));
+    constexpr bool validTH2 = (std::is_same_v<TH2, T> && (nArgs == 2 || nArgs == 3));
+    constexpr bool validTH1 = (std::is_same_v<TH1, T> && (nArgs == 1 || nArgs == 2));
+    constexpr bool validTProfile3D = (std::is_same_v<TProfile3D, T> && (nArgs == 4 || nArgs == 5));
+    constexpr bool validTProfile2D = (std::is_same_v<TProfile2D, T> && (nArgs == 3 || nArgs == 4));
+    constexpr bool validTProfile = (std::is_same_v<TProfile, T> && (nArgs == 2 || nArgs == 3));
+
+    constexpr bool validSimpleFill = validTH1 || validTH2 || validTH3 || validTProfile || validTProfile2D || validTProfile3D;
+    // unfortunately we dont know at compile the dimension of THn(Sparse)
+    constexpr bool validComplexFill = std::is_base_of_v<THnBase, T>;
+
+    if constexpr (validSimpleFill) {
+      hist->Fill(static_cast<double>(positionAndWeight)...);
+    } else if constexpr (validComplexFill) {
+      double tempArray[] = {static_cast<double>(positionAndWeight)...};
+      double weight{1.};
+      if (hist->GetNdimensions() == nArgs - 1) {
+        weight = tempArray[nArgs - 1];
+      } else if (hist->GetNdimensions() != nArgs) {
+        LOGF(FATAL, "The number of arguments in fill function called for histogram %s is incompatible with histogram dimensions.", hist->GetName());
+      }
+      hist->Fill(tempArray, weight);
+    } else {
+      LOGF(FATAL, "The number of arguments in fill function called for histogram %s is incompatible with histogram dimensions.", hist->GetName());
+    }
+  }
+
+  // fill any type of histogram with columns (Cs) of a filtered table (if weight is requested it must reside the last specified column)
+  template <typename... Cs, typename R, typename T>
+  static void fillHistAny(std::shared_ptr<R>& hist, const T& table, const o2::framework::expressions::Filter& filter)
+  {
+    auto filtered = o2::soa::Filtered<T>{{table.asArrowTable()}, o2::framework::expressions::createSelection(table.asArrowTable(), filter)};
+    for (auto& t : filtered) {
+      fillHistAny(hist, (*(static_cast<Cs>(t).getIterator()))...);
+    }
+  }
+
+  // function that returns rough estimate for the size of a histogram in MB
+  template <typename T>
+  static double getSize(std::shared_ptr<T>& hist, double fillFraction = 1.)
+  {
+    double size{0.};
+    if constexpr (std::is_base_of_v<TH1, T>) {
+      size = hist->GetNcells() * (HistFiller::getBaseElementSize(hist.get()) + ((hist->GetSumw2()->fN) ? sizeof(double) : 0.));
+    } else if constexpr (std::is_base_of_v<THn, T>) {
+      size = hist->GetNbins() * (HistFiller::getBaseElementSize(hist.get()) + ((hist->GetSumw2() != -1.) ? sizeof(double) : 0.));
+    } else if constexpr (std::is_base_of_v<THnSparse, T>) {
+      // THnSparse has massive overhead and should only be used when histogram is large and a very small fraction of bins is filled
+      double nBinsTotal = 1.;
+      int compCoordSize = 0; // size required to store a compact coordinate representation
+      for (int d = 0; d < hist->GetNdimensions(); ++d) {
+        int nBins = hist->GetAxis(d)->GetNbins() + 2;
+        nBinsTotal *= nBins;
+
+        // number of bits needed to store compact coordinates
+        int b = 1;
+        while (nBins /= 2) {
+          ++b;
+        }
+        compCoordSize += b;
+      }
+      compCoordSize = (compCoordSize + 7) / 8; // turn bits into bytes
+
+      // THnSparse stores the data in an array of chunks (THnSparseArrayChunk), each containing a fixed number of bins (e.g. 1024 * 16)
+      double nBinsFilled = fillFraction * nBinsTotal;
+      int nCunks = ceil(nBinsFilled / hist->GetChunkSize());
+      int chunkOverhead = sizeof(THnSparseArrayChunk);
+
+      // each chunk holds array of compact bin-coordinates and an array of bin content (+ one of bin error if requested)
+      double binSize = compCoordSize + HistFiller::getBaseElementSize(hist.get()) + ((hist->GetSumw2() != -1.) ? sizeof(double) : 0.);
+      size = nCunks * (chunkOverhead + hist->GetChunkSize() * binSize);
+      // since THnSparse must keep track of all the stored bins, it stores a map that
+      // relates the compact bin coordinates (or a hash thereof) to a linear index
+      // this index determines in which chunk and therein at which position to find / store bin coordinate and content
+      size += nBinsFilled * 3 * sizeof(Long64_t); // hash, key, value; not sure why 3 are needed here...
+    }
+    return size / 1048576.;
+  }
+
+ private:
+  // helper function to determine base element size of histograms (in bytes)
+  // the complicated casting gymnastics are needed here since we only store the interface types in the registry
+  template <typename T>
+  static int getBaseElementSize(T* ptr)
+  {
+    if constexpr (std::is_base_of_v<TH1, T> || std::is_base_of_v<THnSparse, T>) {
+      return getBaseElementSize<TArrayD, TArrayF, TArrayC, TArrayI, TArrayC, TArrayL>(ptr);
+    } else {
+      return getBaseElementSize<double, float, int, short, char, long>(ptr);
+    }
+  }
+
+  template <typename T, typename Next, typename... Rest, typename P>
+  static int getBaseElementSize(P* ptr)
+  {
+    if (auto size = getBaseElementSize<T>(ptr)) {
+      return size;
+    }
+    return getBaseElementSize<Next, Rest...>(ptr);
+  }
+
+  template <typename B, typename T>
+  static int getBaseElementSize(T* ptr)
+  {
+    if constexpr (std::is_base_of_v<THn, T>) {
+      if (dynamic_cast<THnT<B>*>(ptr)) {
+        return sizeof(B);
+      }
+    } else if constexpr (std::is_base_of_v<THnSparse, T>) {
+      if (dynamic_cast<THnSparseT<B>*>(ptr)) {
+        TDataMember* dm = B::Class()->GetDataMember("fArray");
+        return dm ? dm->GetDataType()->Size() : 0;
+      }
+    } else if constexpr (std::is_base_of_v<TH1, T>) {
+      if (auto arrayPtr = dynamic_cast<B*>(ptr)) {
+        return sizeof(arrayPtr->At(0));
+      }
+    }
+    return 0;
+  };
+};
+
+//**************************************************************************************************
+/**
+ * Histogram registry that can be used to store and fill histograms of any type.
+ */
+//**************************************************************************************************
 class HistogramRegistry
 {
  public:
-  HistogramRegistry(char const* const name_, bool enable, std::vector<HistogramSpec> specs, OutputObjHandlingPolicy policy_ = OutputObjHandlingPolicy::AnalysisObject)
-    : name(name_),
-      policy(policy_),
-      enabled(enable),
-      mRegistryKey(),
-      mRegistryValue(),
-      mHistogramCreationCallbacks({HistogramCallbacks::createTH1D(),
-                                   HistogramCallbacks::createTH1F(),
-                                   HistogramCallbacks::createTH1I(),
-                                   HistogramCallbacks::createTH2D(),
-                                   HistogramCallbacks::createTH2F(),
-                                   HistogramCallbacks::createTH2I(),
-                                   HistogramCallbacks::createTH3D(),
-                                   HistogramCallbacks::createTH3F(),
-                                   HistogramCallbacks::createTH3I()})
+  HistogramRegistry(char const* const name, std::vector<HistogramSpec> histSpecs = {}, OutputObjHandlingPolicy policy = OutputObjHandlingPolicy::AnalysisObject, bool sortHistos = true, bool createRegistryDir = false)
+    : mName(name), mPolicy(policy), mRegistryKey(), mRegistryValue(), mSortHistos(sortHistos), mCreateRegistryDir(createRegistryDir)
   {
     mRegistryKey.fill(0u);
-    for (auto& spec : specs) {
-      insert(spec);
+    for (auto& histSpec : histSpecs) {
+      insert(histSpec);
+    }
+  }
+
+  // functions to add histograms to the registry
+  void add(const HistogramSpec& histSpec);
+  void add(char const* const name, char const* const title, const HistogramConfigSpec& histConfigSpec, bool callSumw2 = false);
+  void add(char const* const name, char const* const title, HistType histType, std::vector<AxisSpec> axes, bool callSumw2 = false);
+  void addClone(const std::string& source, const std::string& target);
+
+  // function to query if name is already in use
+  bool contains(char const* const name)
+  {
+    return contains(compile_time_hash(name), name);
+  }
+
+  // gets the underlying histogram pointer
+  // we cannot automatically infer type here so it has to be explicitly specified
+  // -> get<TH1>(), get<TH2>(), get<TH3>(), get<THn>(), get<THnSparse>(), get<TProfile>(), get<TProfile2D>(), get<TProfile3D>()
+  /// @return the histogram registered with name @a name
+  template <typename T>
+  auto& get(char const* const name)
+  {
+    if (auto histPtr = std::get_if<std::shared_ptr<T>>(&mRegistryValue[getHistIndex(name)])) {
+      return *histPtr;
+    } else {
+      throw runtime_error("Histogram type specified in get() does not match actual histogram type!");
     }
   }
 
   /// @return the histogram registered with name @a name
-  auto& get(char const* const name) const
+  template <typename T>
+  auto& operator()(char const* const name)
   {
-    const uint32_t id = compile_time_hash(name);
-    const uint32_t i = imask(id);
-    if (O2_BUILTIN_LIKELY(id == mRegistryKey[i])) {
-      return mRegistryValue[i];
-    }
-    for (auto j = 1u; j < MAX_REGISTRY_SIZE; ++j) {
-      if (id == mRegistryKey[imask(j + i)]) {
-        return mRegistryValue[imask(j + i)];
-      }
-    }
-    throw std::runtime_error("No match found!");
-  }
-
-  /// @return the histogram registered with name @a name
-  auto& operator()(char const* const name) const
-  {
-    return get(name);
+    return get<T>(name);
   }
 
   /// @return the associated OutputSpec
   OutputSpec const spec()
   {
-    ConcreteDataMatcher matcher{"HIST", "\0", 0};
-    strncpy(matcher.description.str, this->name.data(), 16);
-    return OutputSpec{OutputLabel{this->name}, matcher};
+    ConcreteDataMatcher matcher{"ATSK", "\0", 0};
+    strncpy(matcher.description.str, mName.data(), 16);
+    return OutputSpec{OutputLabel{mName}, matcher};
   }
 
   OutputRef ref()
   {
-    return OutputRef{std::string{this->name}, 0, o2::header::Stack{OutputObjHeader{policy, taskHash}}};
+    return OutputRef{std::string{mName}, 0, o2::header::Stack{OutputObjHeader{mPolicy, mTaskHash}}};
   }
+
   void setHash(uint32_t hash)
   {
-    taskHash = hash;
+    mTaskHash = hash;
   }
 
-  TFolder* operator*()
+  TList* operator*();
+
+  // fill hist with values
+  template <typename... Ts>
+  void fill(char const* const name, Ts&&... positionAndWeight)
   {
-    TFolder* folder = new TFolder(this->name.c_str(), this->name.c_str());
+    std::visit([&positionAndWeight...](auto&& hist) { HistFiller::fillHistAny(hist, std::forward<Ts>(positionAndWeight)...); }, mRegistryValue[getHistIndex(name)]);
+  }
+
+  // fill hist with content of (filtered) table columns
+  template <typename... Cs, typename T>
+  void fill(char const* const name, const T& table, const o2::framework::expressions::Filter& filter)
+  {
+    std::visit([&table, &filter](auto&& hist) { HistFiller::fillHistAny<Cs...>(hist, table, filter); }, mRegistryValue[getHistIndex(name)]);
+  }
+
+  // get rough estimate for size of histogram stored in registry
+  double getSize(char const* const name, double fillFraction = 1.)
+  {
+    double size{};
+    std::visit([&fillFraction, &size](auto&& hist) { size = HistFiller::getSize(hist, fillFraction); }, mRegistryValue[getHistIndex(name)]);
+    return size;
+  }
+
+  // get rough estimate for size of all histograms stored in registry
+  double getSize(double fillFraction = 1.)
+  {
+    double size{};
     for (auto j = 0u; j < MAX_REGISTRY_SIZE; ++j) {
-      if (mRegistryValue[j].get() != nullptr) {
-        auto hist = mRegistryValue[j].get();
-        folder->Add(hist);
-      }
+      std::visit([&fillFraction, &size](auto&& hist) { if(hist) { size += HistFiller::getSize(hist, fillFraction);} }, mRegistryValue[j]);
     }
-    folder->SetOwner();
-    return folder;
+    return size;
   }
 
-  /// fill the histogram with an expression
-  template <typename C1, typename C2, typename C3, typename T>
-  void fill(char const* const name, const T& table, const o2::framework::expressions::Filter& filter)
-  {
-    TH1* hist = get(name).get();
-    framework::fill<C1, C2, C3>(hist, table, filter);
-  }
+  // print summary of the histograms stored in registry
+  void print(bool showAxisDetails = false);
 
-  template <typename C1, typename C2, typename T>
-  void fill(char const* const name, const T& table, const o2::framework::expressions::Filter& filter)
-  {
-    TH1* hist = get(name).get();
-    framework::fill<C1, C2>(hist, table, filter);
-  }
-
-  template <typename C, typename T>
-  void fill(char const* const name, const T& table, const o2::framework::expressions::Filter& filter)
-  {
-    TH1* hist = get(name).get();
-    framework::fill<C>(hist, table, filter);
-  }
-
-  /// lookup distance counter for benchmarking
+  // lookup distance counter for benchmarking
   mutable uint32_t lookup = 0;
 
  private:
-  void insert(HistogramSpec& spec)
+  // create histogram from specification and insert it into the registry
+  void insert(const HistogramSpec& histSpec)
   {
-    uint32_t i = imask(spec.id);
+    const uint32_t i = imask(histSpec.id);
     for (auto j = 0u; j < MAX_REGISTRY_SIZE; ++j) {
-      if (mRegistryValue[imask(j + i)].get() == nullptr) {
-        mRegistryKey[imask(j + i)] = spec.id;
-        mRegistryValue[imask(j + i)] = mHistogramCreationCallbacks[spec.config.type](spec);
+      TObject* rawPtr = nullptr;
+      std::visit([&](const auto& sharedPtr) { rawPtr = sharedPtr.get(); }, mRegistryValue[imask(j + i)]);
+      if (!rawPtr) {
+        registerName(histSpec.name);
+        mRegistryKey[imask(j + i)] = histSpec.id;
+        mRegistryValue[imask(j + i)] = HistFactory::createHistVariant(histSpec);
         lookup += j;
         return;
       }
     }
-    throw std::runtime_error("Internal array is full.");
+    LOGF(FATAL, "Internal array of HistogramRegistry %s is full.", mName);
   }
 
-  inline constexpr uint32_t imask(uint32_t i) const
+  // clone an existing histogram and insert it into the registry
+  template <typename T>
+  void insertClone(char const* const name, const std::shared_ptr<T>& originalHist)
   {
-    return i & mask;
+    const uint32_t id = compile_time_hash(name);
+    const uint32_t i = imask(id);
+    for (auto j = 0u; j < MAX_REGISTRY_SIZE; ++j) {
+      TObject* rawPtr = nullptr;
+      std::visit([&](const auto& sharedPtr) { rawPtr = sharedPtr.get(); }, mRegistryValue[imask(j + i)]);
+      if (!rawPtr) {
+        registerName(name);
+        mRegistryKey[imask(j + i)] = id;
+        mRegistryValue[imask(j + i)] = std::shared_ptr<T>(static_cast<T*>(originalHist->Clone(name)));
+        lookup += j;
+        return;
+      }
+    }
+    LOGF(FATAL, "Internal array of HistogramRegistry %s is full.", mName);
   }
-  std::string name;
-  bool enabled;
-  OutputObjHandlingPolicy policy;
-  uint32_t taskHash;
 
-  /// The maximum number of histograms in buffer is currently set to 512
-  /// which seems to be both reasonably large and allowing for very fast lookup
-  static constexpr uint32_t mask = 0x1FF;
-  static constexpr uint32_t MAX_REGISTRY_SIZE = mask + 1;
-  std::array<uint32_t, MAX_REGISTRY_SIZE> mRegistryKey;
-  std::array<std::unique_ptr<TH1>, MAX_REGISTRY_SIZE> mRegistryValue;
-  std::vector<HistogramCreationCallback> mHistogramCreationCallbacks;
+  constexpr uint32_t imask(uint32_t i) const
+  {
+    return i & MASK;
+  }
+
+  uint32_t getHistIndex(char const* const name)
+  {
+    const uint32_t id = compile_time_hash(name);
+    const uint32_t i = imask(id);
+    if (O2_BUILTIN_LIKELY(id == mRegistryKey[i])) {
+      return i;
+    }
+    for (auto j = 1u; j < MAX_REGISTRY_SIZE; ++j) {
+      if (id == mRegistryKey[imask(j + i)]) {
+        return imask(j + i);
+      }
+    }
+    throw runtime_error("No matching histogram found in HistogramRegistry!");
+  }
+
+  bool contains(const uint32_t id, char const* const name);
+
+  // helper function to create resp. find the subList defined by path
+  TList* getSubList(TList* list, std::deque<std::string>& path);
+
+  // helper function to split user defined path/to/hist/name string
+  std::deque<std::string> splitPath(const std::string& pathAndNameUser);
+
+  // helper function that checks if name of histogram is reasonable and keeps track of names already in use
+  void registerName(const std::string& name);
+
+  std::string mName{};
+  OutputObjHandlingPolicy mPolicy{};
+  bool mCreateRegistryDir{};
+  bool mSortHistos{};
+  uint32_t mTaskHash{};
+  std::vector<std::string> mRegisteredNames{};
+
+  // The maximum number of histograms in buffer is currently set to 512
+  // which seems to be both reasonably large and allowing for very fast lookup
+  static constexpr uint32_t MASK{0x1FF};
+  static constexpr uint32_t MAX_REGISTRY_SIZE{MASK + 1};
+  std::array<uint32_t, MAX_REGISTRY_SIZE> mRegistryKey{};
+  std::array<HistPtr, MAX_REGISTRY_SIZE> mRegistryValue{};
 };
 
-} // namespace framework
-
-} // namespace o2
-
+} // namespace o2::framework
 #endif // FRAMEWORK_HISTOGRAMREGISTRY_H_

@@ -30,8 +30,10 @@
 
 namespace o2
 {
+class MCCompLabel;
 namespace dataformats
 {
+
 /// @struct MCTruthHeaderElement
 /// @brief Simple struct having information about truth elements for particular indices:
 /// how many associations we have and where they start in the storage
@@ -265,7 +267,7 @@ class MCTruthContainer
       // fix headers
       for (uint32_t i = dataindex + 1; i < mHeaderArray.size(); ++i) {
         auto oldindex = mHeaderArray[i].index;
-        mHeaderArray[i].index = (oldindex != -1) ? oldindex + 1 : oldindex;
+        mHeaderArray[i].index = (oldindex != (uint32_t)-1) ? oldindex + 1 : oldindex;
       }
     }
   }
@@ -414,6 +416,8 @@ class MCTruthContainer
 
   ClassDefNV(MCTruthContainer, 2);
 }; // end class
+
+using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::MCCompLabel>;
 
 } // namespace dataformats
 } // namespace o2

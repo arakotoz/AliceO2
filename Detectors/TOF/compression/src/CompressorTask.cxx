@@ -57,9 +57,8 @@ void CompressorTask<RDH, verbose>::run(ProcessingContext& pc)
   LOG(DEBUG) << "Compressor run";
 
   /** set encoder output buffer **/
-  char bufferOut[1048576];
-  mCompressor.setEncoderBuffer(bufferOut);
-  mCompressor.setEncoderBufferSize(1048576);
+  mCompressor.setEncoderBuffer(mBufferOut);
+  mCompressor.setEncoderBufferSize(mBufferOutSize);
 
   auto device = pc.services().get<o2::framework::RawDeviceService>().device();
   auto outputRoutes = pc.services().get<o2::framework::RawDeviceService>().spec().outputs;
@@ -67,8 +66,9 @@ void CompressorTask<RDH, verbose>::run(ProcessingContext& pc)
 
   /** loop over inputs routes **/
   for (auto iit = pc.inputs().begin(), iend = pc.inputs().end(); iit != iend; ++iit) {
-    if (!iit.isValid())
+    if (!iit.isValid()) {
       continue;
+    }
 
     /** prepare output parts **/
     FairMQParts parts;
@@ -87,7 +87,7 @@ void CompressorTask<RDH, verbose>::run(ProcessingContext& pc)
       mCompressor.run();
       auto payloadOutSize = mCompressor.getEncoderByteCounter();
       auto payloadMessage = device->NewMessage(payloadOutSize);
-      std::memcpy(payloadMessage->GetData(), bufferOut, payloadOutSize);
+      std::memcpy(payloadMessage->GetData(), mBufferOut, payloadOutSize);
 
       /** output **/
       auto headerOut = *headerIn;

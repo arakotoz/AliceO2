@@ -32,7 +32,7 @@
 #endif
 #endif
 
-#include "GPUDisplayConfig.h"
+#include "GPUSettings.h"
 #include "GPUDisplayBackend.h"
 
 namespace GPUCA_NAMESPACE
@@ -53,11 +53,9 @@ namespace gpu
 class GPUDisplay
 {
  public:
-  GPUDisplay(GPUDisplayBackend* backend, GPUChainTracking* rec, GPUQA* qa) {}
+  GPUDisplay(GPUDisplayBackend* backend, GPUChainTracking* chain, GPUQA* qa) {}
   ~GPUDisplay() = default;
   GPUDisplay(const GPUDisplay&) = delete;
-
-  typedef GPUDisplayConfig configDisplay;
 
   int StartDisplay() { return 1; }
   void ShowNextEvent() {}
@@ -96,11 +94,9 @@ struct GPUParam;
 class GPUDisplay
 {
  public:
-  GPUDisplay(GPUDisplayBackend* backend, GPUChainTracking* rec, GPUQA* qa);
+  GPUDisplay(GPUDisplayBackend* backend, GPUChainTracking* chain, GPUQA* qa);
   ~GPUDisplay() = default;
   GPUDisplay(const GPUDisplay&) = delete;
-
-  typedef GPUDisplayConfig configDisplay;
 
   int StartDisplay();
   void ShowNextEvent();
@@ -238,6 +234,7 @@ class GPUDisplay
   void SetInfo(Args... args)
   {
     snprintf(mInfoText2, 1024, args...);
+    GPUInfo("%s", mInfoText2);
     mInfoText2Timer.ResetStart();
   }
   void PrintGLHelpText(float colorValue);
@@ -260,6 +257,7 @@ class GPUDisplay
   void SetColorGlobalTracks();
   void SetColorFinal();
   void SetColorGrid();
+  void SetColorGridTRD();
   void SetColorMarked();
   void SetCollisionColor(int col);
   void setQuality();
@@ -281,6 +279,7 @@ class GPUDisplay
   vboList DrawTracks(const GPUTPCTracker& tracker, int global);
   void DrawFinal(int iSlice, int /*iCol*/, GPUTPCGMPropagator* prop, std::array<vecpod<int>, 2>& trackList, threadVertexBuffer& threadBuffer);
   vboList DrawGrid(const GPUTPCTracker& tracker);
+  vboList DrawGridTRD(int sector);
   void DoScreenshot(char* filename, float mAnimateTime = -1.f);
   void PrintHelp();
   void createQuaternionFromMatrix(float* v, const float* mat);
@@ -294,7 +293,7 @@ class GPUDisplay
 
   GPUDisplayBackend* mBackend;
   GPUChainTracking* mChain;
-  const configDisplay& mConfig;
+  const GPUSettingsDisplay& mConfig;
   OpenGLConfig mCfg;
   GPUQA* mQA;
   const GPUTPCGMMerger& mMerger;
@@ -354,6 +353,7 @@ class GPUDisplay
   int mHideRejectedTracks = 1;
   int mMarkAdjacentClusters = 0;
   int mMarkFakeClusters = 0;
+  int mTrackFilter = 0;
 
   vecpod<std::array<int, 37>> mCollisionClusters;
   int mNCollissions = 1;
@@ -406,6 +406,7 @@ class GPUDisplay
   vecpod<std::array<vboList, N_FINAL_TYPE>> mGlDLFinal[NSLICES];
   vecpod<vboList> mGlDLPoints[NSLICES][N_POINTS_TYPE];
   vboList mGlDLGrid[NSLICES];
+  vboList mGlDLGridTRD[NSLICES / 2];
   vecpod<DrawArraysIndirectCommand> mCmdBuffer;
 };
 } // namespace gpu

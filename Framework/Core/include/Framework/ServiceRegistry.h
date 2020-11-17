@@ -15,15 +15,14 @@
 #include "Framework/ServiceRegistryHelpers.h"
 #include "Framework/CompilerBuiltins.h"
 #include "Framework/TypeIdHelpers.h"
+#include "Framework/RuntimeError.h"
 
 #include <algorithm>
 #include <array>
-#include <exception>
 #include <functional>
 #include <string>
 #include <type_traits>
 #include <typeinfo>
-#include <stdexcept>
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -93,6 +92,8 @@ struct ServiceRegistry {
   std::vector<ServiceEOSHandle> mPreEOSHandles;
   /// Callbacks for services to be executed after every EOS user callback invokation
   std::vector<ServiceEOSHandle> mPostEOSHandles;
+  /// Callbacks for services to be executed after every dispatching
+  std::vector<ServiceDispatchingHandle> mPostDispatchingHandles;
 
  public:
   using hash_type = decltype(TypeIdHelpers::uniqueId<void>());
@@ -131,6 +132,10 @@ struct ServiceRegistry {
   void preEOSCallbacks(EndOfStreamContext&);
   /// Invoke callbacks to be executed after every EOS user callback invokation
   void postEOSCallbacks(EndOfStreamContext&);
+  /// Invoke callbacks to monitor inputs after dispatching, regardless of them
+  /// being discarded, consumed or processed.
+  void postDispatchingCallbacks(ProcessingContext&);
+
   /// Declare a service by its ServiceSpec. If of type Global
   /// / Serial it will be immediately registered for tid 0,
   /// so that subsequent gets will ultimately use it.
@@ -158,7 +163,6 @@ struct ServiceRegistry {
   // This method should NEVER register a new service, event when requested.
   int getPos(uint32_t typeHash, uint64_t threadId) const
   {
-    auto id = typeHash & MAX_SERVICES_MASK;
     auto threadHashId = (typeHash ^ threadId) & MAX_SERVICES_MASK;
     std::atomic_thread_fence(std::memory_order_acquire);
     for (uint8_t i = 0; i < MAX_DISTANCE; ++i) {
@@ -281,9 +285,8 @@ struct ServiceRegistry {
         return *reinterpret_cast<T*>(ptr);
       }
     }
-    throw std::runtime_error(std::string("Unable to find service of kind ") +
-                             typeid(T).name() +
-                             ". Make sure you use const / non-const correctly.");
+    throw runtime_error_f("Unable to find service of kind %s. Make sure you use const / non-const correctly.",
+                          typeid(T).name());
   }
 };
 

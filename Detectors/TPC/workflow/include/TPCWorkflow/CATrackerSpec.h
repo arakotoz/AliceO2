@@ -14,6 +14,7 @@
 /// @brief  Processor spec for running TPC CA tracking
 
 #include "Framework/DataProcessorSpec.h"
+#include "RecoWorkflow.h"
 #include <utility> // std::forward
 
 namespace o2
@@ -40,7 +41,9 @@ enum struct Operation {
   OutputCAClusters,       // publish the clusters produced by CA clusterer
   OutputCompClusters,     // publish CompClusters container
   OutputCompClustersFlat, // publish CompClusters container
+  OutputQA,               // Ship QA histograms to QC
   ProcessMC,              // process MC labels
+  SendClustersPerSector,  // Send clusters and clusters mc labels per sector
   Noop,                   // skip argument on the constructor
 };
 
@@ -86,8 +89,14 @@ struct Config {
       case Operation::OutputCAClusters:
         outputCAClusters = true;
         break;
+      case Operation::OutputQA:
+        outputQA = true;
+        break;
       case Operation::ProcessMC:
         processMC = true;
+        break;
+      case Operation::SendClustersPerSector:
+        sendClustersPerSector = true;
         break;
       case Operation::Noop:
         break;
@@ -111,7 +120,9 @@ struct Config {
   bool outputCompClusters = false;
   bool outputCompClustersFlat = false;
   bool outputCAClusters = false;
+  bool outputQA = false;
   bool processMC = false;
+  bool sendClustersPerSector = false;
 };
 
 } // namespace ca
@@ -132,7 +143,7 @@ struct Config {
 ///
 /// @param specconfig configuration options for the processor spec
 /// @param tpcsectors list of sector numbers
-framework::DataProcessorSpec getCATrackerSpec(ca::Config const& specconfig, std::vector<int> const& tpcsectors);
+framework::DataProcessorSpec getCATrackerSpec(o2::tpc::reco_workflow::CompletionPolicyData* policyData, ca::Config const& specconfig, std::vector<int> const& tpcsectors);
 
 o2::framework::CompletionPolicy getCATrackerCompletionPolicy();
 } // end namespace tpc

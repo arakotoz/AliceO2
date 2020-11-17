@@ -40,6 +40,14 @@ o2_add_test(fv0
             SOURCES test/test_ctf_io_fv0.cxx
             COMPONENT_NAME ctf
             LABELS ctf)
+	    
+o2_add_test(fdd
+            PUBLIC_LINK_LIBRARIES O2::CTFWorkflow
+                                  O2::FDDReconstruction
+	                          O2::DataFormatsFDD
+            SOURCES test/test_ctf_io_fdd.cxx
+            COMPONENT_NAME ctf
+            LABELS ctf)
 
 o2_add_test(tof
             PUBLIC_LINK_LIBRARIES O2::CTFWorkflow
@@ -55,5 +63,13 @@ o2_add_test(mid
                                   O2::DataFormatsMID
                                   O2::MIDCTF
             SOURCES test/test_ctf_io_mid.cxx
+            COMPONENT_NAME ctf
+            LABELS ctf)
+          
+o2_add_test(emcal
+            PUBLIC_LINK_LIBRARIES O2::CTFWorkflow
+                                  O2::DataFormatsEMCAL
+                                  O2::EMCALReconstruction
+            SOURCES test/test_ctf_io_emcal.cxx
             COMPONENT_NAME ctf
             LABELS ctf)

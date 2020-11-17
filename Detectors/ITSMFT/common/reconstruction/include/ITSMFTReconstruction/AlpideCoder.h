@@ -115,11 +115,10 @@ class AlpideCoder
   static bool isEmptyChip(uint8_t b) { return (b & CHIPEMPTY) == CHIPEMPTY; }
 
   static void setNoisyPixels(const NoiseMap* noise) { mNoisyPixels = noise; }
-  static void setNoiseThreshold(int t) { mNoiseThreshold = t; }
 
   /// decode alpide data for the next non-empty chip from the buffer
-  template <class T>
-  static int decodeChip(ChipPixelData& chipData, T& buffer)
+  template <class T, typename CG>
+  static int decodeChip(ChipPixelData& chipData, T& buffer, CG cidGetter)
   {
     // read record for single non-empty chip, updating on change module and cycle.
     // return number of records filled (>0), EOFFlag or Error
@@ -141,7 +140,7 @@ class AlpideCoder
       uint8_t dataCM = dataC & (~MaskChipID);
       //
       if ((expectInp & ExpectChipEmpty) && dataCM == CHIPEMPTY) { // empty chip was expected
-        //chipData.setChipID(dataC & MaskChipID);                   // here we set the chip ID within the module // now set upstream
+        chipData.setChipID(cidGetter(dataC & MaskChipID));        // here we set the global chip ID
         if (!buffer.next(timestamp)) {
 #ifdef ALPIDE_DECODING_STAT
           chipData.setError(ChipStat::TruncatedChipEmpty);
@@ -153,7 +152,7 @@ class AlpideCoder
       }
 
       if ((expectInp & ExpectChipHeader) && dataCM == CHIPHEADER) { // chip header was expected
-        //chipData.setChipID(dataC & MaskChipID);                     // here we set the chip ID within the module // now set upstream
+        chipData.setChipID(cidGetter(dataC & MaskChipID));          // here we set the global chip ID
         if (!buffer.next(timestamp)) {
 #ifdef ALPIDE_DECODING_STAT
           chipData.setError(ChipStat::TruncatedChipHeader);
@@ -323,13 +322,6 @@ class AlpideCoder
   //
   void print() const;
   void reset();
-  //
-  template <class T>
-  static int getChipID(T& buffer)
-  {
-    uint8_t id = 0;
-    return (buffer.current(id) && isChipHeaderOrEmpty(id)) ? (id & AlpideCoder::MaskChipID) : -1;
-  }
 
  private:
   /// Output a non-noisy fired pixel
@@ -337,7 +329,7 @@ class AlpideCoder
   {
     if (mNoisyPixels) {
       auto chipID = chipData.getChipID();
-      if (mNoisyPixels->getNoiseLevel(chipID, row, col) > mNoiseThreshold) {
+      if (mNoisyPixels->isNoisy(chipID, row, col)) {
         return;
       }
     }
@@ -423,13 +415,12 @@ class AlpideCoder
   //
 
   static const NoiseMap* mNoisyPixels;
-  static int mNoiseThreshold;
 
   // cluster map used for the ENCODING only
   std::vector<int> mFirstInRow;     //! entry of 1st pixel of each non-empty row in the mPix2Encode
   std::vector<PixLink> mPix2Encode; //! pool of links: fired pixel + index of the next one in the row
   //
-  ClassDefNV(AlpideCoder, 2);
+  ClassDefNV(AlpideCoder, 3);
 };
 
 } // namespace itsmft

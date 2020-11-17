@@ -52,12 +52,14 @@ class MatLayerCylSet;
 } // namespace base
 namespace trd
 {
-class TRDGeometryFlat;
+class GeometryFlat;
 } // namespace trd
 namespace dataformats
 {
 template <class T>
 class MCTruthContainer;
+template <class T>
+class ConstMCTruthContainerView;
 } // namespace dataformats
 } // namespace o2
 
@@ -67,7 +69,7 @@ namespace gpu
 {
 class TPCFastTransform;
 class TPCdEdxCalibrationSplines;
-class TPCCFCalibration;
+struct TPCCFCalibration;
 } // namespace gpu
 } // namespace GPUCA_NAMESPACE
 
@@ -122,6 +124,7 @@ class GPUDataTypes
                              TPCdEdx = 64,
                              TPCClusterFinding = 128,
                              TPCDecompression = 256,
+                             Refit = 512,
                              AllRecoSteps = 0x7FFFFFFF,
                              NoRecoStep = 0 };
   enum ENUM_CLASS InOutType { TPCClusters = 1,
@@ -170,7 +173,7 @@ template <template <typename T> class S>
 struct GPUCalibObjectsTemplate {
   typename S<TPCFastTransform>::type* fastTransform = nullptr;
   typename S<o2::base::MatLayerCylSet>::type* matLUT = nullptr;
-  typename S<o2::trd::TRDGeometryFlat>::type* trdGeometry = nullptr;
+  typename S<o2::trd::GeometryFlat>::type* trdGeometry = nullptr;
   typename S<TPCdEdxCalibrationSplines>::type* dEdxSplines = nullptr;
   typename S<TPCCFCalibration>::type* tpcCalibration = nullptr;
 };
@@ -228,6 +231,7 @@ struct GPUTrackingInOutPointers {
   const GPUTPCGMMergedTrackHitXYZ* mergedTrackHitsXYZ = nullptr;
   unsigned int nMergedTrackHits = 0;
   unsigned int* mergedTrackHitAttachment = nullptr;
+  unsigned char* mergedTrackHitStates = nullptr;
   const o2::tpc::CompressedClustersFlat* tpcCompressedClusters = nullptr;
   const GPUTRDTrackletWord* trdTracklets = nullptr;
   unsigned int nTRDTracklets = 0;

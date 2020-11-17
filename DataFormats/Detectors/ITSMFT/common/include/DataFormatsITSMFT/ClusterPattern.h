@@ -57,8 +57,9 @@ class ClusterPattern
     mBitmap[1] = *pattIt++;
     int nbits = mBitmap[0] * mBitmap[1];
     int nBytes = nbits / 8;
-    if (((nbits) % 8) != 0)
+    if (((nbits) % 8) != 0) {
       nBytes++;
+    }
     memcpy(&mBitmap[2], &(*pattIt), nBytes);
     pattIt += nBytes;
   }
@@ -81,7 +82,7 @@ class ClusterPattern
   /// Sets the whole bitmask: the number of rows, the number of columns and the pattern
   void setPattern(const unsigned char bitmask[kExtendedPatternBytes]);
   /// Static: Compute pattern's COG position. Returns the number of fired pixels
-  static int getCOG(int nRow, int nCol, const unsigned char patt[MaxPatternBytes], float& xCOG, float& zCOG);
+  static int getCOG(int rowSpan, int colSpan, const unsigned char patt[MaxPatternBytes], float& xCOG, float& zCOG);
   /// Compute pattern's COG position. Returns the number of fired pixels
   int getCOG(float& xCOG, float& zCOG) const;
 

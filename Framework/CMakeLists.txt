@@ -18,3 +18,4 @@ add_subdirectory(Utils)
 
 add_subdirectory(TestWorkflows) 
 
+add_subdirectory(AnalysisTools) 

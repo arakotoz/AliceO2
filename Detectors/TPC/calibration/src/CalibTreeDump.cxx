@@ -20,7 +20,7 @@
 #include "TTree.h"
 #include "TMath.h"
 
-#include "MathUtils/MathBase.h"
+#include "MathUtils/fit.h"
 #include "TPCBase/CalArray.h"
 #include "TPCBase/CalDet.h"
 #include "TPCBase/CRU.h"
@@ -30,7 +30,7 @@
 
 #include "TPCCalibration/CalibTreeDump.h"
 
-using o2::math_utils::math_base::median;
+using o2::math_utils::median;
 
 using namespace o2::tpc;
 
@@ -257,8 +257,9 @@ void CalibTreeDump::readTraceLengths(std::string_view mappingDir)
   std::string inputDir = mappingDir.data();
   if (!inputDir.size()) {
     const char* aliceO2env = std::getenv("O2_ROOT");
-    if (aliceO2env)
+    if (aliceO2env) {
       inputDir = aliceO2env;
+    }
     inputDir += "/share/Detectors/TPC/files";
   }
 

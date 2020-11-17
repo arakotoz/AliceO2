@@ -108,48 +108,21 @@ class GPUTRDTracker_t : public GPUProcessor
   GPUhd() void OverrideGPUGeometry(TRD_GEOMETRY_CONST GPUTRDGeometry* geo) { mGeo = geo; }
   void Reset();
   GPUd() int LoadTracklet(const GPUTRDTrackletWord& tracklet, const int* labels = nullptr);
-  //template <class T>
-  GPUd() int LoadTrack(const TRDTRK& trk, const int label = -1, const int* nTrkltsOffline = nullptr, const int labelOffline = -1)
+  template <class T>
+  GPUd() bool PreCheckTrackTRDCandidate(const T& trk) const
   {
-    if (mNTracks >= mNMaxTracks) {
-#ifndef GPUCA_GPUCODE
-      GPUError("Error: Track dropped (no memory available) -> must not happen");
-#endif
-      return (1);
-    }
-    if (!trk.CheckNumericalQuality()) {
-      return (0);
-    }
-    if (CAMath::Abs(trk.getEta()) > mMaxEta) {
-      return (0);
-    }
-    if (trk.getPt() < mMinPt) {
-      return (0);
-    }
-#ifdef GPUCA_ALIROOT_LIB
-    new (&mTracks[mNTracks]) TRDTRK(trk); // We need placement new, since the class is virtual
-#else
-    mTracks[mNTracks] = trk;
-#endif
-    mTracks[mNTracks].SetTPCtrackId(mNTracks);
-    if (label >= 0) {
-      mTracks[mNTracks].SetLabel(label);
-    }
-    if (nTrkltsOffline) {
-      for (int i = 0; i < 4; ++i) {
-        mTracks[mNTracks].SetNtrackletsOffline(i, nTrkltsOffline[i]); // see GPUTRDTrack.h for information on the index
-      }
-    }
-    mTracks[mNTracks].SetLabelOffline(labelOffline);
-    mNTracks++;
-    return (0);
+    return true;
   }
+  GPUd() bool PreCheckTrackTRDCandidate(const GPUTPCGMMergedTrack& trk) const { return trk.OK() && !trk.Looper(); }
+  GPUd() bool CheckTrackTRDCandidate(const TRDTRK& trk) const;
+  GPUd() int LoadTrack(const TRDTRK& trk, const int label = -1, const int* nTrkltsOffline = nullptr, const int labelOffline = -1, int tpcTrackId = -1, bool checkTrack = true);
+
   GPUd() int GetCollisionID(float trkTime) const;
   GPUd() void DoTrackingThread(int iTrk, int threadId = 0);
   GPUd() bool CalculateSpacePoints(int iCollision = 0);
   GPUd() bool FollowProlongation(PROP* prop, TRDTRK* t, int threadId, int collisionId);
   GPUd() int GetDetectorNumber(const float zPos, const float alpha, const int layer) const;
-  GPUd() bool AdjustSector(PROP* prop, TRDTRK* t, const int layer) const;
+  GPUd() bool AdjustSector(PROP* prop, TRDTRK* t) const;
   GPUd() int GetSector(float alpha) const;
   GPUd() float GetAlphaOfSector(const int sec) const;
   GPUd() float GetRPhiRes(float snp) const { return (mRPhiA2 + mRPhiC2 * (snp - mRPhiB) * (snp - mRPhiB)); }           // parametrization obtained from track-tracklet residuals:
@@ -167,7 +140,7 @@ class GPUTRDTracker_t : public GPUProcessor
 
   // input from TRD trigger record
   GPUd() void SetNMaxCollisions(int nColl) { mNMaxCollisions = nColl; } // can this be fixed to a sufficiently large value?
-  GPUd() void SetNCollisions(int nColl) { mNCollisions = nColl; }
+  GPUd() void SetNCollisions(int nColl);
   GPUd() void SetTriggerRecordIndices(int* indices) { mTriggerRecordIndices = indices; }
   GPUd() void SetTriggerRecordTimes(float* times) { mTriggerRecordTimes = times; }
 
@@ -175,21 +148,13 @@ class GPUTRDTracker_t : public GPUProcessor
   GPUd() void SetProcessPerTimeFrame() { mProcessPerTimeFrame = true; }
   GPUd() void SetMCEvent(AliMCEvent* mc) { mMCEvent = mc; }
   GPUd() void EnableDebugOutput() { mDebugOutput = true; }
-  GPUd() void SetPtThreshold(float minPt) { mMinPt = minPt; }
   GPUd() void SetMaxEta(float maxEta) { mMaxEta = maxEta; }
-  GPUd() void SetChi2Threshold(float chi2) { mMaxChi2 = chi2; }
-  GPUd() void SetChi2Penalty(float chi2) { mChi2Penalty = chi2; }
-  GPUd() void SetMaxMissingLayers(int ly) { mMaxMissingLy = ly; }
   GPUd() void SetExtraRoadY(float extraRoadY) { mExtraRoadY = extraRoadY; }
   GPUd() void SetRoadZ(float roadZ) { mRoadZ = roadZ; }
 
   GPUd() AliMCEvent* GetMCEvent() const { return mMCEvent; }
   GPUd() bool GetIsDebugOutputOn() const { return mDebugOutput; }
-  GPUd() float GetPtThreshold() const { return mMinPt; }
   GPUd() float GetMaxEta() const { return mMaxEta; }
-  GPUd() float GetChi2Threshold() const { return mMaxChi2; }
-  GPUd() float GetChi2Penalty() const { return mChi2Penalty; }
-  GPUd() int GetMaxMissingLayers() const { return mMaxMissingLy; }
   GPUd() int GetNCandidates() const { return mNCandidates; }
   GPUd() float GetExtraRoadY() const { return mExtraRoadY; }
   GPUd() float GetRoadZ() const { return mRoadZ; }
@@ -242,13 +207,9 @@ class GPUTRDTracker_t : public GPUProcessor
   bool mDebugOutput;                       // store debug output
   float mTimeWindow;                       // max. deviation of the ITS-TPC track time w.r.t. TRD trigger record time stamp (in us, default is 100 ns)
   float mRadialOffset;                     // due to mis-calibration of t0
-  float mMinPt;                            // min pt of TPC tracks for tracking
   float mMaxEta;                           // TPC tracks with higher eta are ignored
   float mExtraRoadY;                       // addition to search road in r-phi to account for not exact radial match of tracklets and tracks in first iteration
   float mRoadZ;                            // in z, a constant search road is used
-  float mMaxChi2;                          // max chi2 for tracklets
-  int mMaxMissingLy;                       // max number of missing layers per track
-  float mChi2Penalty;                      // chi2 added to the track for no update
   float mZCorrCoefNRC;                     // tracklet z-position depends linearly on track dip angle
   AliMCEvent* mMCEvent;                    //! externaly supplied optional MC event
   GPUTRDTrackerDebug<TRDTRK>* mDebug;      // debug output

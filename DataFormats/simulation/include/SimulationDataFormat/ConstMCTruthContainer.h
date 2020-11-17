@@ -16,7 +16,9 @@
 #define O2_CONSTMCTRUTHCONTAINER_H
 
 #include <SimulationDataFormat/MCTruthContainer.h>
+#ifndef GPUCA_STANDALONE
 #include <Framework/Traits.h>
+#endif
 
 namespace o2
 {
@@ -59,7 +61,7 @@ class ConstMCTruthContainer : public std::vector<char>
   // return the number of original data indexed here
   size_t getIndexedSize() const { return size() >= sizeof(FlatHeader) ? getHeader().nofHeaderElements : 0; }
 
-  // return the number of labels  managed in this container
+  // return the number of labels managed in this container
   size_t getNElements() const { return size() >= sizeof(FlatHeader) ? getHeader().nofTruthElements : 0; }
 
  private:
@@ -77,14 +79,14 @@ class ConstMCTruthContainer : public std::vector<char>
   /// Restore internal vectors from a raw buffer
   /// The two vectors are resized according to the information in the \a FlatHeader
   /// struct at the beginning of the buffer. Data is copied to the vectors.
-  TruthElement const* const getLabelStart() const
+  TruthElement const* getLabelStart() const
   {
     auto* source = &(*this)[0];
     auto flatheader = getHeader();
     source += sizeof(FlatHeader);
     const size_t headerSize = flatheader.sizeofHeaderElement * flatheader.nofHeaderElements;
     source += headerSize;
-    return (TruthElement const* const)source;
+    return (TruthElement const*)source;
   }
 
   FlatHeader const& getHeader() const
@@ -94,11 +96,11 @@ class ConstMCTruthContainer : public std::vector<char>
     return flatheader;
   }
 
-  MCTruthHeaderElement const* const getHeaderStart() const
+  MCTruthHeaderElement const* getHeaderStart() const
   {
     auto* source = &(*this)[0];
     source += sizeof(FlatHeader);
-    return (MCTruthHeaderElement const* const)source;
+    return (MCTruthHeaderElement const*)source;
   }
 };
 } // namespace dataformats
@@ -108,12 +110,14 @@ class ConstMCTruthContainer : public std::vector<char>
 // In particular in enables
 // a) --> snapshot without ROOT dictionary (as a flat buffer)
 // b) --> requesting the resource in shared mem using make<T>
+#ifndef GPUCA_STANDALONE
 namespace o2::framework
 {
 template <typename T>
 struct is_specialization<o2::dataformats::ConstMCTruthContainer<T>, std::vector> : std::true_type {
 };
 } // namespace o2::framework
+#endif
 
 namespace o2
 {
@@ -126,6 +130,9 @@ class ConstMCTruthContainerView
 {
  public:
   ConstMCTruthContainerView(gsl::span<const char> const bufferview) : mStorage(bufferview){};
+  ConstMCTruthContainerView(ConstMCTruthContainer<TruthElement> const& cont) : mStorage(gsl::span<const char>(cont)){};
+  ConstMCTruthContainerView() : mStorage(nullptr, (gsl::span<const char>::index_type)0) { (void)0; } // be explicit that we want nullptr / 0 for an uninitialized container
+  ConstMCTruthContainerView(const ConstMCTruthContainerView&) = default;
 
   // const data access
   // get individual const "view" container for a given data index
@@ -146,10 +153,13 @@ class ConstMCTruthContainerView
   }
 
   // return the number of original data indexed here
-  size_t getIndexedSize() const { return mStorage.size() >= sizeof(FlatHeader) ? getHeader().nofHeaderElements : 0; }
+  size_t getIndexedSize() const { return (size_t)mStorage.size() >= sizeof(FlatHeader) ? getHeader().nofHeaderElements : 0; }
 
-  // return the number of labels  managed in this container
-  size_t getNElements() const { return mStorage.size() >= sizeof(FlatHeader) ? getHeader().nofTruthElements : 0; }
+  // return the number of labels managed in this container
+  size_t getNElements() const { return (size_t)mStorage.size() >= sizeof(FlatHeader) ? getHeader().nofTruthElements : 0; }
+
+  // return underlying buffer
+  const gsl::span<const char>& getBuffer() const { return mStorage; }
 
  private:
   gsl::span<const char> mStorage;
@@ -168,14 +178,14 @@ class ConstMCTruthContainerView
   /// Restore internal vectors from a raw buffer
   /// The two vectors are resized according to the information in the \a FlatHeader
   /// struct at the beginning of the buffer. Data is copied to the vectors.
-  TruthElement const* const getLabelStart() const
+  TruthElement const* getLabelStart() const
   {
     auto* source = &(mStorage)[0];
     auto flatheader = getHeader();
     source += sizeof(FlatHeader);
     const size_t headerSize = flatheader.sizeofHeaderElement * flatheader.nofHeaderElements;
     source += headerSize;
-    return (TruthElement const* const)source;
+    return (TruthElement const*)source;
   }
 
   FlatHeader const& getHeader() const
@@ -185,13 +195,16 @@ class ConstMCTruthContainerView
     return flatheader;
   }
 
-  MCTruthHeaderElement const* const getHeaderStart() const
+  MCTruthHeaderElement const* getHeaderStart() const
   {
     auto* source = &(mStorage)[0];
     source += sizeof(FlatHeader);
-    return (MCTruthHeaderElement const* const)source;
+    return (MCTruthHeaderElement const*)source;
   }
 };
+
+using ConstMCLabelContainer = o2::dataformats::ConstMCTruthContainer<o2::MCCompLabel>;
+using ConstMCLabelContainerView = o2::dataformats::ConstMCTruthContainerView<o2::MCCompLabel>;
 
 } // namespace dataformats
 } // namespace o2

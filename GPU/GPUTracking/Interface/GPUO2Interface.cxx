@@ -18,6 +18,7 @@
 #include "GPUOutputControl.h"
 #include "GPUO2InterfaceConfiguration.h"
 #include "GPUParam.inc"
+#include "GPUQA.h"
 #include <iostream>
 #include <fstream>
 #ifdef WITH_OPENMP
@@ -63,6 +64,13 @@ int GPUTPCO2Interface::Initialize(const GPUO2InterfaceConfiguration& config)
     mChain->SetOutputControlClustersNative(mOutputClustersNative.get());
     mOutputTPCTracks.reset(new GPUOutputControl);
     mChain->SetOutputControlTPCTracks(mOutputTPCTracks.get());
+    GPUOutputControl dummy;
+    dummy.set([](size_t size) -> void* {throw std::runtime_error("invalid output memory request, no common output buffer set"); return nullptr; });
+    mRec->SetOutputControl(dummy);
+  }
+  if (mConfig->configProcessing.runMC) {
+    mOutputTPCClusterLabels.reset(new GPUOutputControl);
+    mChain->SetOutputControlClusterLabels(mOutputTPCClusterLabels.get());
   }
 
   if (mRec->Init()) {
@@ -71,6 +79,7 @@ int GPUTPCO2Interface::Initialize(const GPUO2InterfaceConfiguration& config)
   if (!mRec->IsGPU() && mConfig->configProcessing.memoryAllocationStrategy == GPUMemoryResource::ALLOCATION_INDIVIDUAL) {
     mRec->MemoryScalers()->factor *= 2;
   }
+  mRec->MemoryScalers()->factor *= mConfig->configInterface.memoryBufferScaleFactor;
   mInitialized = true;
   return (0);
 }
@@ -131,6 +140,13 @@ int GPUTPCO2Interface::RunTracking(GPUTrackingInOutPointers* data, GPUInterfaceO
       mOutputTPCTracks->reset();
     }
   }
+  if (mConfig->configProcessing.runMC) {
+    if (outputs->clusterLabels.allocator) {
+      mOutputTPCClusterLabels->set(outputs->clusterLabels.allocator);
+    } else {
+      mOutputTPCClusterLabels->reset();
+    }
+  }
   int retVal = mRec->RunChains();
   if (retVal == 2) {
     retVal = 0; // 2 signals end of event display, ignore
@@ -143,6 +159,11 @@ int GPUTPCO2Interface::RunTracking(GPUTrackingInOutPointers* data, GPUInterfaceO
     outputs->compressedClusters.size = mOutputCompressedClusters->EndOfSpace ? 0 : mChain->mIOPtrs.tpcCompressedClusters->totalDataSize;
     outputs->clustersNative.size = mOutputClustersNative->EndOfSpace ? 0 : (mChain->mIOPtrs.clustersNative->nClustersTotal * sizeof(*mChain->mIOPtrs.clustersNative->clustersLinear));
     outputs->tpcTracks.size = mOutputCompressedClusters->EndOfSpace ? 0 : (size_t)((char*)mOutputCompressedClusters->OutputPtr - (char*)mOutputCompressedClusters->OutputBase);
+  }
+  if (mConfig->configQA.shipToQC) {
+    outputs->qa.hist1 = &mChain->GetQA()->getHistograms1D();
+    outputs->qa.hist2 = &mChain->GetQA()->getHistograms2D();
+    outputs->qa.hist3 = &mChain->GetQA()->getHistograms1Dd();
   }
   *data = mChain->mIOPtrs;
 

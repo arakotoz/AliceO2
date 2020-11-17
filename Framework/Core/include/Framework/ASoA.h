@@ -18,6 +18,7 @@
 #include "Framework/Traits.h"
 #include "Framework/Expressions.h"
 #include "Framework/ArrowTypes.h"
+#include "Framework/RuntimeError.h"
 #include <arrow/table.h>
 #include <arrow/array.h>
 #include <arrow/util/variant.h>
@@ -25,6 +26,8 @@
 #include <gandiva/selection_vector.h>
 #include <cassert>
 #include <fmt/format.h>
+
+using o2::framework::runtime_error_f;
 
 namespace o2::soa
 {
@@ -813,6 +816,7 @@ class Table
  public:
   using table_t = Table<C...>;
   using columns = framework::pack<C...>;
+  using column_types = framework::pack<typename C::type...>;
   using persistent_columns_t = framework::selected_pack<is_persistent_t, C...>;
 
   template <typename IP, typename Parent, typename... T>
@@ -908,10 +912,10 @@ class Table
 
   Table(std::shared_ptr<arrow::Table> table, uint64_t offset = 0)
     : mTable(table),
-      mEnd{table == nullptr ? 0 : static_cast<uint64_t>(table->num_rows())},
+      mEnd{static_cast<uint64_t>(table->num_rows())},
       mOffset(offset)
   {
-    if ((mTable == nullptr) or (mTable->num_rows() == 0)) {
+    if (mTable->num_rows() == 0) {
       for (size_t ci = 0; ci < sizeof...(C); ++ci) {
         mColumnChunks[ci] = nullptr;
       }
@@ -952,7 +956,7 @@ class Table
     return filtered_iterator(mColumnChunks, {selection, mOffset});
   }
 
-  unfiltered_iterator iteratorAt(uint64_t i)
+  unfiltered_iterator iteratorAt(uint64_t i) const
   {
     return mBegin + (i - mOffset);
   }
@@ -1004,7 +1008,7 @@ class Table
       auto label = T::columnLabel();
       auto index = mTable->schema()->GetFieldIndex(label);
       if (index == -1) {
-        throw std::runtime_error(std::string("Unable to find column with label ") + label);
+        throw runtime_error_f("Unable to find column with label %s", label);
       }
       return mTable->column(index).get();
     } else {
@@ -1047,6 +1051,7 @@ class TableMetadata
   static constexpr char const* tableLabel() { return INHERIT::mLabel; }
   static constexpr char const (&origin())[4] { return INHERIT::mOrigin; }
   static constexpr char const (&description())[16] { return INHERIT::mDescription; }
+  static std::string sourceSpec() { return fmt::format("{}/{}/{}", INHERIT::mLabel, INHERIT::mOrigin, INHERIT::mDescription); };
 };
 
 template <typename... C1, typename... C2>
@@ -1374,7 +1379,7 @@ constexpr auto is_binding_compatible_v()
 #define DECLARE_SOA_EXTENDED_TABLE_USER(_Name_, _Table_, _Description_, ...) \
   DECLARE_SOA_EXTENDED_TABLE_FULL(_Name_, _Table_, "AOD", _Description_, __VA_ARGS__)
 
-#define DECLARE_SOA_INDEX_TABLE_FULL(_Name_, _Key_, _Origin_, _Description_, ...)                                                \
+#define DECLARE_SOA_INDEX_TABLE_FULL(_Name_, _Key_, _Origin_, _Description_, _Exclusive_, ...)                                   \
   struct _Name_ : o2::soa::IndexTable<_Key_, __VA_ARGS__> {                                                                      \
     _Name_(std::shared_ptr<arrow::Table> table, uint64_t offset = 0) : o2::soa::IndexTable<_Key_, __VA_ARGS__>(table, offset){}; \
     _Name_(_Name_ const&) = default;                                                                                             \
@@ -1390,6 +1395,7 @@ constexpr auto is_binding_compatible_v()
     static constexpr char const* mLabel = #_Name_;                                                                               \
     static constexpr char const mOrigin[4] = _Origin_;                                                                           \
     static constexpr char const mDescription[16] = _Description_;                                                                \
+    static constexpr bool exclusive = _Exclusive_;                                                                               \
   };                                                                                                                             \
                                                                                                                                  \
   template <>                                                                                                                    \
@@ -1403,7 +1409,16 @@ constexpr auto is_binding_compatible_v()
   };
 
 #define DECLARE_SOA_INDEX_TABLE(_Name_, _Key_, _Description_, ...) \
-  DECLARE_SOA_INDEX_TABLE_FULL(_Name_, _Key_, "AOD", _Description_, __VA_ARGS__)
+  DECLARE_SOA_INDEX_TABLE_FULL(_Name_, _Key_, "IDX", _Description_, false, __VA_ARGS__)
+
+#define DECLARE_SOA_INDEX_TABLE_EXCLUSIVE(_Name_, _Key_, _Description_, ...) \
+  DECLARE_SOA_INDEX_TABLE_FULL(_Name_, _Key_, "IDX", _Description_, true, __VA_ARGS__)
+
+#define DECLARE_SOA_INDEX_TABLE_USER(_Name_, _Key_, _Description_, ...) \
+  DECLARE_SOA_INDEX_TABLE_FULL(_Name_, _Key_, "AOD", _Description_, false, __VA_ARGS__)
+
+#define DECLARE_SOA_INDEX_TABLE_EXCLUSIVE_USER(_Name_, _Key_, _Description_, ...) \
+  DECLARE_SOA_INDEX_TABLE_FULL(_Name_, _Key_, "AOD", _Description_, true, __VA_ARGS__)
 
 namespace o2::soa
 {
@@ -1753,40 +1768,6 @@ auto filter(T&& t, framework::expressions::Filter const& expr)
   return Filtered<T>(t.asArrowTable(), expr);
 }
 
-/// Expression-based column generator to materialize columns
-template <typename... C>
-auto spawner(framework::pack<C...> columns, arrow::Table* atable)
-{
-  arrow::TableBatchReader reader(*atable);
-  std::shared_ptr<arrow::RecordBatch> batch;
-  arrow::ArrayVector v;
-  std::array<arrow::ArrayVector, sizeof...(C)> chunks;
-
-  static auto projectors = framework::expressions::createProjectors(columns, atable->schema());
-  while (true) {
-    auto s = reader.ReadNext(&batch);
-    if (!s.ok()) {
-      throw std::runtime_error(fmt::format("Cannot read batches from table: {}", s.ToString()));
-    }
-    if (batch == nullptr) {
-      break;
-    }
-    s = projectors->Evaluate(*batch, arrow::default_memory_pool(), &v);
-    if (!s.ok()) {
-      throw std::runtime_error(fmt::format("Cannot apply projector: {}", s.ToString()));
-    }
-    for (auto i = 0u; i < sizeof...(C); ++i) {
-      chunks[i].emplace_back(v.at(i));
-    }
-  }
-  std::vector<std::shared_ptr<arrow::ChunkedArray>> arrays;
-  for (auto i = 0u; i < sizeof...(C); ++i) {
-    arrays.push_back(std::make_shared<arrow::ChunkedArray>(chunks[i]));
-  }
-  static auto new_schema = o2::soa::createSchemaFromColumns(columns);
-  return arrow::Table::Make(new_schema, arrays);
-}
-
 /// Template for building an index table to access matching rows from non-
 /// joinable, but compatible tables, e.g. Collisions and ZDCs.
 /// First argument is the key table (BCs for the Collisions+ZDCs case), the rest
@@ -1798,6 +1779,7 @@ struct IndexTable : Table<soa::Index<>, H, Ts...> {
   using indexing_t = Key;
   using first_t = typename H::binding_t;
   using rest_t = framework::pack<typename Ts::binding_t...>;
+  using sources_t = framework::pack<Key, typename H::binding_t, typename Ts::binding_t...>;
 
   IndexTable(std::shared_ptr<arrow::Table> table, uint64_t offset = 0)
     : base_t{table, offset}
@@ -1815,29 +1797,6 @@ struct IndexTable : Table<soa::Index<>, H, Ts...> {
 
 template <typename T>
 using is_soa_index_table_t = typename framework::is_base_of_template<soa::IndexTable, T>;
-
-/// On-the-fly adding of expression columns
-template <typename T, typename... Cs>
-auto Extend(T const& table)
-{
-  static_assert((soa::is_type_spawnable_v<Cs> && ...), "You can only extend a table with expression columns");
-  using output_t = Join<T, soa::Table<Cs...>>;
-  if (table.tableSize() > 0) {
-    return output_t{{spawner(framework::pack<Cs...>{}, table.asArrowTable().get()), table.asArrowTable()}, 0};
-  }
-  return output_t{{nullptr}, 0};
-}
-
-/// Template function to attach dynamic columns on-the-fly (e.g. inside
-/// process() function). Dynamic columns need to be compatible with the table.
-template <typename T, typename... Cs>
-auto Attach(T const& table)
-{
-  static_assert((framework::is_base_of_template<o2::soa::DynamicColumn, Cs>::value && ...), "You can only attach dynamic columns");
-  using output_t = Join<T, o2::soa::Table<Cs...>>;
-  return output_t{{table.asArrowTable()}, table.offset()};
-}
-
 } // namespace o2::soa
 
 #endif // O2_FRAMEWORK_ASOA_H_

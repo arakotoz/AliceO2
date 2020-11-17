@@ -97,8 +97,9 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
                                                     o2::framework::OutputSpec{"PHS", ""}}, // it empty, do not create
                                                   propagateMC, false));
 
-    if (enableDigitsPrinter)
+    if (enableDigitsPrinter) {
       specs.emplace_back(o2::phos::reco_workflow::getPhosDigitsPrinterSpec());
+    }
 
     if (isEnabled(OutputType::Cells)) {
       // add converter for cells
@@ -192,14 +193,13 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
 
   // if (isEnabled(OutputType::Raw)) {
   //   using RawOutputType = std::vector<o2::phos::Raw>;
-  //   using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::phos::MCLabel>;
   //   specs.push_back(makeWriterSpec("phos-raw-writer",
   //                                  inputType == InputType::Digits ? "phos-raw.root" : "phosrawcells.root",
   //                                  "o2sim",
   //                                  BranchDefinition<DigitOutputType>{o2::framework::InputSpec{"data", "PHS", "RAW", 0},
   //                                                                    "PHSRaw",
   //                                                                    "raw-branch-name"},
-  //                                  BranchDefinition<MCLabelContainer>{o2::framework::InputSpec{"mc", "PHS", "RAWMCTR", 0},
+  //                                  BranchDefinition<o2::dataformats::MCTruthContainer<o2::phos::MCLabel>>{o2::framework::InputSpec{"mc", "PHS", "RAWMCTR", 0},
   //                                                                     "PHSRawMCTruth",
   //                                                                     "rawmc-branch-name"})());
   // }
@@ -207,7 +207,6 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
   if (isEnabled(OutputType::Digits)) {
     using DigitOutputType = std::vector<o2::phos::Digit>;
     using DTROutputType = std::vector<o2::phos::TriggerRecord>;
-    using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::phos::MCLabel>;
 
     specs.emplace_back(o2::framework::MakeRootTreeWriterSpec("phos-digits-writer", "phosdigits.root", "o2sim",
                                                              -1,
@@ -218,15 +217,14 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
                                                              BranchDefinition<DTROutputType>{o2::framework::InputSpec{"data", "PHS", "DIGITTRIGREC", 0},
                                                                                              "PHSDigTR",
                                                                                              "digittr-branch-name"},
-                                                             BranchDefinition<MCLabelContainer>{o2::framework::InputSpec{"mc", "PHS", "DIGITSMCTR", 0},
-                                                                                                "PHSDigitMCTruth",
-                                                                                                "digitmc-branch-name"})());
+                                                             BranchDefinition<o2::dataformats::MCTruthContainer<o2::phos::MCLabel>>{o2::framework::InputSpec{"mc", "PHS", "DIGITSMCTR", 0},
+                                                                                                                                    "PHSDigitMCTruth",
+                                                                                                                                    "digitmc-branch-name"})());
   }
 
   if (isEnabled(OutputType::Cells)) {
     using CellOutputType = std::vector<o2::phos::Cell>;
     using CTROutputType = std::vector<o2::phos::TriggerRecord>;
-    using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::phos::MCLabel>;
     specs.emplace_back(o2::framework::MakeRootTreeWriterSpec("phos-cells-writer", "phoscells.root", "o2sim", -1,
                                                              o2::framework::MakeRootTreeWriterSpec::TerminationCondition{checkReady},
                                                              BranchDefinition<CellOutputType>{o2::framework::InputSpec{"data", "PHS", "CELLS", 0},
@@ -235,9 +233,9 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
                                                              BranchDefinition<CTROutputType>{o2::framework::InputSpec{"data", "PHS", "CELLTRIGREC", 0},
                                                                                              "PHSCellTR",
                                                                                              "celltr-branch-name"},
-                                                             BranchDefinition<MCLabelContainer>{o2::framework::InputSpec{"mc", "PHS", "CELLSMCTR", 0},
-                                                                                                "PHSCellMCTruth",
-                                                                                                "cellmc-branch-name"},
+                                                             BranchDefinition<o2::dataformats::MCTruthContainer<o2::phos::MCLabel>>{o2::framework::InputSpec{"mc", "PHS", "CELLSMCTR", 0},
+                                                                                                                                    "PHSCellMCTruth",
+                                                                                                                                    "cellmc-branch-name"},
                                                              BranchDefinition<std::vector<uint>>{o2::framework::InputSpec{"mcmap", "PHS", "CELLSMCMAP", 0},
                                                                                                  "PHSCellMCMAP",
                                                                                                  "cellmcmap-branch-name"})());

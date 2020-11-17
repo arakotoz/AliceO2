@@ -14,6 +14,7 @@
 #include "Framework/OutputSpec.h"
 #include "Framework/ForwardRoute.h"
 #include "Framework/WorkflowSpec.h"
+#include "Framework/DataOutputDirector.h"
 #include "DataProcessorInfo.h"
 
 #include <cstddef>
@@ -22,6 +23,23 @@
 
 namespace o2::framework
 {
+
+inline static std::string debugWorkflow(std::vector<DataProcessorSpec> const& specs)
+{
+  std::ostringstream out;
+  for (auto& spec : specs) {
+    out << spec.name << "\n";
+    out << " Inputs:\n";
+    for (auto& ii : spec.inputs) {
+      out << "   - " << DataSpecUtils::describe(ii) << "\n";
+    }
+    //    out << "\n Outputs:\n";
+    //    for (auto& ii : spec.outputs) {
+    //      out << "   - " << DataSpecUtils::describe(ii) << "\n";
+    //    }
+  }
+  return out.str();
+}
 
 struct ConfigContext;
 // Structure to hold information which was derived
@@ -125,6 +143,11 @@ struct OutputObj {
   bool isdangling;
 };
 
+enum struct WorkflowParsingState : int {
+  Valid,
+  Empty,
+};
+
 /// A set of internal helper classes to manipulate a Workflow
 struct WorkflowHelpers {
   /// Topological sort for a graph of @a nodeCount nodes.
@@ -145,7 +168,7 @@ struct WorkflowHelpers {
 
   // Helper method to verify that a given workflow is actually valid e.g. that
   // it contains no empty labels.
-  static void verifyWorkflow(const WorkflowSpec& workflow);
+  [[nodiscard]] static WorkflowParsingState verifyWorkflow(const WorkflowSpec& workflow);
 
   // Depending on the workflow and the dangling inputs inside it, inject "fake"
   // devices to mark the fact we might need some extra action to make sure
@@ -172,6 +195,8 @@ struct WorkflowHelpers {
   static std::vector<EdgeAction> computeInEdgeActions(
     const std::vector<DeviceConnectionEdge>& edges,
     const std::vector<size_t>& index);
+
+  static std::shared_ptr<DataOutputDirector> getDataOutputDirector(ConfigParamRegistry const& options, std::vector<InputSpec> const& OutputsInputs, std::vector<unsigned char> const& outputTypes);
 
   /// Given @a workflow it gathers all the OutputSpec and in addition provides
   /// the information whether and output is dangling and/or of type AOD

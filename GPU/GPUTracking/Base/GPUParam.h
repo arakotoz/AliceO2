@@ -36,30 +36,26 @@ struct GPUParamSlice {
   float ZMin, ZMax;         // slice Z range
 };
 
-MEM_CLASS_PRE()
-struct GPUParam {
- public:
-  GPUSettingsRec rec;
+namespace internal
+{
+template <class T, class S>
+struct GPUParam_t {
+  T rec;
+  S par;
 
-  float DAlpha;           // angular size
-  float RMin, RMax;       // slice R range
-  float ErrX, ErrY, ErrZ; // default cluster errors
-  float PadPitch;         // pad pitch
-  float BzkG;             // constant magnetic field value in kG
-  float ConstBz;          // constant magnetic field value in kG*clight
-
-  char AssumeConstantBz;                   // Assume a constant magnetic field
-  char ToyMCEventsFlag;                    // events were build with home-made event generator
-  char ContinuousTracking;                 // Continuous tracking, estimate bz and errors for abs(z) = 125cm during seeding
-  char resetTimers;                        // Reset benchmark timers before event processing
-  char dodEdx;                             // Do dEdx computation
-  char earlyTpcTransform;                  // do Early TPC transformation
-  int debugLevel;                          // Debug level
-  int continuousMaxTimeBin;                // Max time bin for continuous tracking
   GPUTPCGeometry tpcGeometry;              // TPC Geometry
   GPUTPCGMPolynomialField polynomialField; // Polynomial approx. of magnetic field for TPC GM
 
   GPUParamSlice SliceParam[GPUCA_NSLICES];
+
+ protected:
+  float ParamRMS0[2][3][4];  // cluster shape parameterization coeficients
+  float ParamS0Par[2][3][6]; // cluster error parameterization coeficients
+};
+} // namespace internal
+
+MEM_CLASS_PRE()
+struct GPUParam : public internal::GPUParam_t<GPUSettingsRec, GPUSettingsParam> {
 
 #ifndef GPUCA_GPUCODE
   void SetDefaults(float solenoidBz);
@@ -76,7 +72,7 @@ struct GPUParam {
     if (iSlice >= GPUCA_NSLICES / 4) {
       iSlice -= GPUCA_NSLICES / 2;
     }
-    return 0.174533f + DAlpha * iSlice;
+    return 0.174533f + par.DAlpha * iSlice;
   }
   GPUd() float GetClusterRMS(int yz, int type, float z, float angle2) const;
   GPUd() void GetClusterRMS2(int row, float z, float sinPhi, float DzDs, float& ErrY2, float& ErrZ2) const;
@@ -87,10 +83,6 @@ struct GPUParam {
 
   GPUd() void Slice2Global(int iSlice, float x, float y, float z, float* X, float* Y, float* Z) const;
   GPUd() void Global2Slice(int iSlice, float x, float y, float z, float* X, float* Y, float* Z) const;
-
- protected:
-  float ParamRMS0[2][3][4];  // cluster shape parameterization coeficients
-  float ParamS0Par[2][3][6]; // cluster error parameterization coeficients
 };
 
 } // namespace gpu

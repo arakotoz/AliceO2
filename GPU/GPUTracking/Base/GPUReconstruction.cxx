@@ -45,6 +45,10 @@
 #define GPUCA_LOGGING_PRINTF
 #include "GPULogging.h"
 
+#ifdef GPUCA_O2_LIB
+#include "GPUO2InterfaceConfiguration.h"
+#endif
+
 namespace GPUCA_NAMESPACE
 {
 namespace gpu
@@ -229,9 +233,6 @@ int GPUReconstruction::InitPhaseBeforeDevice()
       mProcessingSettings.trackletSelectorSlices = 1;
     }
   }
-  if (mProcessingSettings.tpcCompressionGatherMode < 0) {
-    mProcessingSettings.tpcCompressionGatherMode = (mRecoStepsGPU & GPUDataTypes::RecoStep::TPCCompression) ? 2 : 0;
-  }
   if (!(mRecoStepsGPU & GPUDataTypes::RecoStep::TPCMerging)) {
     mProcessingSettings.mergerSortTracks = false;
   }
@@ -254,6 +255,9 @@ int GPUReconstruction::InitPhaseBeforeDevice()
   GPUCA_GPUReconstructionUpdateDefailts();
   if (!mProcessingSettings.trackletConstructorInPipeline) {
     mProcessingSettings.trackletSelectorInPipeline = false;
+  }
+  if (!mProcessingSettings.enableRTC) {
+    mProcessingSettings.rtcConstexpr = false;
   }
 
   mMemoryScalers->factor = mProcessingSettings.memoryScalingFactor;
@@ -284,15 +288,21 @@ int GPUReconstruction::InitPhaseBeforeDevice()
   mDeviceMemorySize = mHostMemorySize = 0;
   for (unsigned int i = 0; i < mChains.size(); i++) {
     mChains[i]->RegisterPermanentMemoryAndProcessors();
-    size_t memGpu, memHost;
-    mChains[i]->MemorySize(memGpu, memHost);
-    mDeviceMemorySize += memGpu;
-    mHostMemorySize += memHost;
+    size_t memPrimary, memPageLocked;
+    mChains[i]->MemorySize(memPrimary, memPageLocked);
+    if (!IsGPU() || mOutputControl.OutputType == GPUOutputControl::AllocateInternal) {
+      memPageLocked = memPrimary;
+    }
+    mDeviceMemorySize += memPrimary;
+    mHostMemorySize += memPageLocked;
   }
   if (mProcessingSettings.forceMemoryPoolSize && mProcessingSettings.forceMemoryPoolSize <= 2 && CanQueryMaxMemory()) {
     mDeviceMemorySize = mProcessingSettings.forceMemoryPoolSize;
   } else if (mProcessingSettings.forceMemoryPoolSize > 2) {
-    mDeviceMemorySize = mHostMemorySize = mProcessingSettings.forceMemoryPoolSize;
+    mDeviceMemorySize = mProcessingSettings.forceMemoryPoolSize;
+    if (!IsGPU() || mOutputControl.OutputType == GPUOutputControl::AllocateInternal) {
+      mHostMemorySize = mDeviceMemorySize;
+    }
   }
   if (mProcessingSettings.forceHostMemoryPoolSize) {
     mHostMemorySize = mProcessingSettings.forceHostMemoryPoolSize;
@@ -598,6 +608,9 @@ void* GPUReconstruction::AllocateVolatileDeviceMemory(size_t size)
   if (mVolatileMemoryStart == nullptr) {
     mVolatileMemoryStart = mDeviceMemoryPool;
   }
+  if (size == 0) {
+    return nullptr; // Future GPU memory allocation is volatile
+  }
   char* retVal;
   GPUProcessor::computePointerWithAlignment(mDeviceMemoryPool, retVal, size);
   if (mDeviceMemoryPool > mDeviceMemoryPoolEnd) {
@@ -676,8 +689,11 @@ void GPUReconstruction::PushNonPersistentMemory()
 
 void GPUReconstruction::PopNonPersistentMemory(RecoStep step)
 {
-  if (mProcessingSettings.debugLevel >= 3 || mProcessingSettings.allocDebugLevel) {
-    printf("Allocated memory after %30s: %'13lld (non temporary %'13lld, blocked %'13lld)\n", GPUDataTypes::RECO_STEP_NAMES[getRecoStepNum(step, true)], ptrDiff(mDeviceMemoryPool, mDeviceMemoryBase) + ptrDiff((char*)mDeviceMemoryBase + mDeviceMemorySize, mDeviceMemoryPoolEnd), ptrDiff(mDeviceMemoryPool, mDeviceMemoryBase), mDeviceMemoryPoolBlocked == nullptr ? 0ll : ptrDiff((char*)mDeviceMemoryBase + mDeviceMemorySize, mDeviceMemoryPoolBlocked));
+  if ((mProcessingSettings.debugLevel >= 3 || mProcessingSettings.allocDebugLevel) && (IsGPU() || mProcessingSettings.forceHostMemoryPoolSize)) {
+    if (IsGPU()) {
+      printf("Allocated Device memory after %30s: %'13lld (non temporary %'13lld, blocked %'13lld)\n", GPUDataTypes::RECO_STEP_NAMES[getRecoStepNum(step, true)], ptrDiff(mDeviceMemoryPool, mDeviceMemoryBase) + ptrDiff((char*)mDeviceMemoryBase + mDeviceMemorySize, mDeviceMemoryPoolEnd), ptrDiff(mDeviceMemoryPool, mDeviceMemoryBase), mDeviceMemoryPoolBlocked == nullptr ? 0ll : ptrDiff((char*)mDeviceMemoryBase + mDeviceMemorySize, mDeviceMemoryPoolBlocked));
+    }
+    printf("Allocated Host memory after  %30s: %'13lld (non temporary %'13lld, blocked %'13lld)\n", GPUDataTypes::RECO_STEP_NAMES[getRecoStepNum(step, true)], ptrDiff(mHostMemoryPool, mHostMemoryBase) + ptrDiff((char*)mHostMemoryBase + mHostMemorySize, mHostMemoryPoolEnd), ptrDiff(mHostMemoryPool, mHostMemoryBase), mHostMemoryPoolBlocked == nullptr ? 0ll : ptrDiff((char*)mHostMemoryBase + mHostMemorySize, mHostMemoryPoolBlocked));
   }
   if (mProcessingSettings.keepDisplayMemory || mProcessingSettings.disableMemoryReuse) {
     return;
@@ -940,12 +956,20 @@ int GPUReconstruction::ReadSettings(const char* dir)
   return 0;
 }
 
-void GPUReconstruction::SetSettings(float solenoidBz)
+void GPUReconstruction::SetSettings(float solenoidBz, const GPURecoStepConfiguration* workflow)
 {
+#ifdef GPUCA_O2_LIB
+  GPUO2InterfaceConfiguration config;
+  config.ReadConfigurableParam();
+  if (config.configEvent.solenoidBz <= -1e6f) {
+    config.configEvent.solenoidBz = solenoidBz;
+  }
+  SetSettings(&config.configEvent, &config.configReconstruction, &config.configProcessing, workflow);
+#else
   GPUSettingsEvent ev;
-  new (&ev) GPUSettingsEvent;
   ev.solenoidBz = solenoidBz;
-  SetSettings(&ev, nullptr, nullptr);
+  SetSettings(&ev, nullptr, nullptr, workflow);
+#endif
 }
 
 void GPUReconstruction::SetSettings(const GPUSettingsEvent* settings, const GPUSettingsRec* rec, const GPUSettingsProcessing* proc, const GPURecoStepConfiguration* workflow)

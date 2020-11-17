@@ -56,8 +56,10 @@ DataOutputDescriptor::DataOutputDescriptor(std::string inString)
   }
 
   // get the tree name
-  // defaul tree name is the table name
+  // default tree name is the O2 + table name (lower case)
   treename = tablename;
+  std::transform(treename.begin(), treename.end(), treename.begin(), [](unsigned char c) { return std::tolower(c); });
+  treename = std::string("O2") + treename;
   ++iter1;
   if (iter1 == end) {
     return;
@@ -112,8 +114,9 @@ void DataOutputDescriptor::printOut()
   } else {
     LOGP(INFO, "  Columns        : {}", colnames.size());
   }
-  for (auto cn : colnames)
+  for (auto cn : colnames) {
     LOGP(INFO, "    {}", cn);
+  }
 }
 
 std::string DataOutputDescriptor::remove_ws(const std::string& s)
@@ -139,7 +142,6 @@ void DataOutputDirector::reset()
   mtreeFilenames.clear();
   closeDataFiles();
   mfilePtrs.clear();
-  mfileCounts.clear();
   mfilenameBase = std::string("");
 };
 
@@ -181,10 +183,9 @@ void DataOutputDirector::readString(std::string const& keepString)
   auto last = std::unique(mfilenameBases.begin(), mfilenameBases.end());
   mfilenameBases.erase(last, mfilenameBases.end());
 
-  // prepare list mfilePtrs of TFile and mfileCounts
+  // prepare list mfilePtrs of TFile
   for (auto fn : mfilenameBases) {
     mfilePtrs.emplace_back(new TFile());
-    mfileCounts.emplace_back(-1);
   }
 }
 
@@ -305,6 +306,7 @@ std::tuple<std::string, std::string, int> DataOutputDirector::readJsonDocument(D
   if (dodirItem.HasMember(itemName)) {
     if (dodirItem[itemName].IsString()) {
       fmode = dodirItem[itemName].GetString();
+      setFileMode(fmode);
     } else {
       LOGP(ERROR, "Check the JSON document! Item \"{}\" must be a string!", itemName);
       return memptyanswer;
@@ -315,6 +317,7 @@ std::tuple<std::string, std::string, int> DataOutputDirector::readJsonDocument(D
   if (dodirItem.HasMember(itemName)) {
     if (dodirItem[itemName].IsNumber()) {
       ntfm = dodirItem[itemName].GetInt();
+      setNumberTimeFramesToMerge(ntfm);
     } else {
       LOGP(ERROR, "Check the JSON document! Item \"{}\" must be a number!", itemName);
       return memptyanswer;
@@ -425,42 +428,40 @@ std::vector<DataOutputDescriptor*> DataOutputDirector::getDataOutputDescriptors(
   return result;
 }
 
-TFile* DataOutputDirector::getDataOutputFile(DataOutputDescriptor* dodesc,
-                                             int ntf, int ntfmerge,
-                                             std::string filemode)
+FileAndFolder DataOutputDirector::getFileFolder(DataOutputDescriptor* dodesc, uint64_t folderNumber)
 {
   // initialisation
-  TFile* filePtr = nullptr;
+  FileAndFolder fileAndFolder;
 
   // search dodesc->filename in mfilenameBases and return corresponding filePtr
   auto it = std::find(mfilenameBases.begin(), mfilenameBases.end(), dodesc->getFilenameBase());
   if (it != mfilenameBases.end()) {
     int ind = std::distance(mfilenameBases.begin(), it);
-
-    // check if new version of file needs to be opened
-    int fcnt = (int)(ntf / ntfmerge);
-    if ((ntf % ntfmerge) == 0 && fcnt > mfileCounts[ind]) {
-      if (mfilePtrs[ind]) {
-        mfilePtrs[ind]->Close();
-      }
-
-      mfileCounts[ind] = fcnt;
-      auto fn = mfilenameBases[ind] + "_" + std::to_string(mfileCounts[ind]) + ".root";
-      mfilePtrs[ind] = new TFile(fn.c_str(), filemode.c_str());
+    if (!mfilePtrs[ind]->IsOpen()) {
+      auto fn = mfilenameBases[ind] + ".root";
+      mfilePtrs[ind] = new TFile(fn.c_str(), mfileMode.c_str());
     }
-    filePtr = mfilePtrs[ind];
-    filePtr->cd();
+    fileAndFolder.file = mfilePtrs[ind];
+
+    // check if folder TF_* exists
+    fileAndFolder.folderName = "TF_" + std::to_string(folderNumber) + "/";
+    auto key = fileAndFolder.file->GetKey(fileAndFolder.folderName.c_str());
+    if (!key) {
+      fileAndFolder.file->mkdir(fileAndFolder.folderName.c_str());
+    }
+    fileAndFolder.file->cd(fileAndFolder.folderName.c_str());
   }
 
-  return filePtr;
+  return fileAndFolder;
 }
 
 void DataOutputDirector::closeDataFiles()
 {
-  for (auto filePtr : mfilePtrs)
+  for (auto filePtr : mfilePtrs) {
     if (filePtr) {
       filePtr->Close();
     }
+  }
 }
 
 void DataOutputDirector::printOut()
@@ -470,12 +471,14 @@ void DataOutputDirector::printOut()
   LOGP(INFO, "  Number of files      : {}", mfilenameBases.size());
 
   LOGP(INFO, "  DataOutputDescriptors: {}", mDataOutputDescriptors.size());
-  for (auto const& ds : mDataOutputDescriptors)
+  for (auto const& ds : mDataOutputDescriptors) {
     ds->printOut();
+  }
 
   LOGP(INFO, "  File name bases      :");
-  for (auto const& fb : mfilenameBases)
+  for (auto const& fb : mfilenameBases) {
     LOGP(INFO, fb);
+  }
 }
 
 void DataOutputDirector::setFilenameBase(std::string dfn)
@@ -487,7 +490,6 @@ void DataOutputDirector::setFilenameBase(std::string dfn)
   mtreeFilenames.clear();
   closeDataFiles();
   mfilePtrs.clear();
-  mfileCounts.clear();
 
   // loop over DataOutputDescritors
   for (auto dodesc : mDataOutputDescriptors) {
@@ -500,7 +502,7 @@ void DataOutputDirector::setFilenameBase(std::string dfn)
   auto it = std::unique(mtreeFilenames.begin(), mtreeFilenames.end());
   if (it != mtreeFilenames.end()) {
     printOut();
-    LOG(FATAL) << "Dublicate tree names in a file!";
+    LOG(FATAL) << "Duplicate tree names in a file!";
   }
 
   // make unique/sorted list of filenameBases
@@ -508,10 +510,9 @@ void DataOutputDirector::setFilenameBase(std::string dfn)
   auto last = std::unique(mfilenameBases.begin(), mfilenameBases.end());
   mfilenameBases.erase(last, mfilenameBases.end());
 
-  // prepare list mfilePtrs of TFile and mfileCounts
+  // prepare list mfilePtrs of TFile
   for (auto fn : mfilenameBases) {
     mfilePtrs.emplace_back(new TFile());
-    mfileCounts.emplace_back(-1);
   }
 }
 

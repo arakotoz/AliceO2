@@ -84,7 +84,7 @@ GPUd() void GPUTPCTrackletConstructor::StoreTracklet(int /*nBlocks*/, int /*nThr
   GPUglobalref() MEM_GLOBAL(GPUTPCTracklet) & GPUrestrict() tracklet = tracker.Tracklets()[itrout];
 
   tracklet.SetNHits(r.mNHits);
-  CADEBUG(GPUInfo("    DONE %d hits", r.mNHits));
+  CADEBUG(printf("    DONE %d hits\n", r.mNHits));
 
   tracklet.SetFirstRow(r.mFirstRow);
   tracklet.SetLastRow(r.mLastRow);
@@ -140,7 +140,7 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int /*nBlocks*/, int
         tParam.SetX(x);
         tParam.SetY(y);
         r.mLastY = y;
-        if (tracker.Param().ContinuousTracking) {
+        if (tracker.Param().par.ContinuousTracking) {
           tParam.SetZ(0.f);
           r.mLastZ = 0.f;
           tParam.SetZOffset(z);
@@ -186,12 +186,12 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int /*nBlocks*/, int
         }
         CADEBUG(
           printf("%14s: FIT TRACK ROW %3d X %8.3f -", "", iRow, tParam.X()); for (int i = 0; i < 5; i++) { printf(" %8.3f", tParam.Par()[i]); } printf(" -"); for (int i = 0; i < 15; i++) { printf(" %8.3f", tParam.Cov()[i]); } printf("\n"));
-        if (!tParam.TransportToX(x, sinPhi, cosPhi, tracker.Param().ConstBz, GPUCA_MAX_SIN_PHI)) {
+        if (!tParam.TransportToX(x, sinPhi, cosPhi, tracker.Param().par.ConstBz, GPUCA_MAX_SIN_PHI)) {
           rowHit = CALINK_INVAL;
           break;
         }
         CADEBUG(
-          printf("%15s hits %3d: FIT PROP  ROW %3d X %8.3f -", "", r.mNHits, iRow, tParam.X()); for (int i = 0; i < 5; i++) { printf(" %8.3f", tParam.Par()[i]); } printf(" -"); for (int i = 0; i < 15; i++) { printf(" %8.3f", tParam.Cov()[i]); } printf("\n"));
+          printf("%5s hits %3d: FIT PROP  ROW %3d X %8.3f -", "", r.mNHits, iRow, tParam.X()); for (int i = 0; i < 5; i++) { printf(" %8.3f", tParam.Par()[i]); } printf(" -"); for (int i = 0; i < 15; i++) { printf(" %8.3f", tParam.Cov()[i]); } printf("\n"));
         tracker.GetErrors2Seeding(iRow, tParam.GetZ(), sinPhi, tParam.GetDzDs(), err2Y, err2Z);
 
         if (r.mNHits >= 10) {
@@ -257,7 +257,7 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int /*nBlocks*/, int
       float err2Y, err2Z;
       CADEBUG(
         printf("%14s: SEA TRACK ROW %3d X %8.3f -", "", iRow, tParam.X()); for (int i = 0; i < 5; i++) { printf(" %8.3f", tParam.Par()[i]); } printf(" -"); for (int i = 0; i < 15; i++) { printf(" %8.3f", tParam.Cov()[i]); } printf("\n"));
-      if (!tParam.TransportToX(x, tParam.SinPhi(), tParam.GetCosPhi(), tracker.Param().ConstBz, GPUCA_MAX_SIN_PHI_LOW)) {
+      if (!tParam.TransportToX(x, tParam.SinPhi(), tParam.GetCosPhi(), tracker.Param().par.ConstBz, GPUCA_MAX_SIN_PHI_LOW)) {
         r.mGo = 0;
         rowHit = CALINK_INVAL;
         break;
@@ -332,7 +332,7 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int /*nBlocks*/, int
       float y = y0 + hh.x * stepY;
       float z = z0 + hh.y * stepZ;
 
-      CADEBUG(GPUInfo("%14s: SEA Hit %5d, Res %f %f", "", best, tParam.Y() - y, tParam.Z() - z));
+      CADEBUG(printf("%14s: SEA Hit %5d (%8.3f %8.3f), Res %f %f\n", "", best, y, z, tParam.Y() - y, tParam.Z() - z));
 
       calink oldHit = (r.mStage == 2 && iRow >= r.mStartRow) ? rowHit : CALINK_INVAL;
       if (oldHit != best && !tParam.Filter(y, z, err2Y, err2Z, GPUCA_MAX_SIN_PHI_LOW, oldHit != CALINK_INVAL)) {
@@ -370,7 +370,6 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::DoTracklet(GPUconstantref() MEM_GLO
   }
   r.mStage = 0;
   r.mNHits = 0;
-  // if (tracker.Param().ISlice() != 35 && tracker.Param().ISlice() != 34 || r.mISH == CALINK_INVAL) {StoreTracklet( 0, 0, 0, 0, s, r, tracker, tParam );return;}
 
 #ifdef __HIPCC__ // Todo: fixme!
   for (int k = -1; ++k < 2; /*k++*/) {
@@ -392,7 +391,7 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::DoTracklet(GPUconstantref() MEM_GLO
       StoreTracklet(0, 0, 0, 0, s, r, tracker, tParam, rowHits);
     } else {
       r.mNMissed = 0;
-      if ((r.mGo = (tParam.TransportToX(tracker.Row(r.mEndRow).X(), tracker.Param().ConstBz, GPUCA_MAX_SIN_PHI) && tParam.Filter(r.mLastY, r.mLastZ, tParam.Err2Y() * 0.5f, tParam.Err2Z() * 0.5f, GPUCA_MAX_SIN_PHI_LOW, true)))) {
+      if ((r.mGo = (tParam.TransportToX(tracker.Row(r.mEndRow).X(), tracker.Param().par.ConstBz, GPUCA_MAX_SIN_PHI) && tParam.Filter(r.mLastY, r.mLastZ, tParam.Err2Y() * 0.5f, tParam.Err2Z() * 0.5f, GPUCA_MAX_SIN_PHI_LOW, true)))) {
         CADEBUG(
           printf("%14s: SEA BACK  ROW %3d X %8.3f -", "", iRow, tParam.X()); for (int i = 0; i < 5; i++) { printf(" %8.3f", tParam.Par()[i]); } printf(" -"); for (int i = 0; i < 15; i++) { printf(" %8.3f", tParam.Cov()[i]); } printf("\n"));
         float err2Y, err2Z;

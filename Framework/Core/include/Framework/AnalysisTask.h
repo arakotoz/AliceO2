@@ -24,6 +24,7 @@
 #include "Framework/FunctionalHelpers.h"
 #include "Framework/Traits.h"
 #include "Framework/VariantHelpers.h"
+#include "Framework/RuntimeError.h"
 
 #include <arrow/compute/kernel.h>
 #include <arrow/table.h>
@@ -52,13 +53,45 @@ struct AnalysisTask {
 // the contents of an AnalysisTask...
 
 struct AnalysisDataProcessorBuilder {
+  template <typename T>
+  static ConfigParamSpec getSpec()
+  {
+    if constexpr (soa::is_type_with_metadata_v<aod::MetadataTrait<T>>) {
+      return ConfigParamSpec{aod::MetadataTrait<T>::metadata::tableLabel(), VariantType::String, aod::MetadataTrait<T>::metadata::sourceSpec(), {"\"\""}};
+    } else {
+      using O1 = framework::pack_element_t<0, typename T::originals>;
+      return ConfigParamSpec{aod::MetadataTrait<T>::metadata::tableLabel(), VariantType::String, aod::MetadataTrait<O1>::metadata::sourceSpec(), {"\"\""}};
+    }
+  }
+
+  template <typename... T>
+  static std::vector<ConfigParamSpec> getInputSpecs(framework::pack<T...>)
+  {
+    return std::vector{getSpec<T>()...};
+  }
+
+  template <typename T>
+  static std::vector<ConfigParamSpec> getIndexSources()
+  {
+    static_assert(soa::is_soa_index_table_t<T>::value, "Can only be used with IndexTable");
+    return getInputSpecs(typename T::sources_t{});
+  }
+
   template <typename Arg>
   static void doAppendInputWithMetadata(std::vector<InputSpec>& inputs)
   {
     using metadata = typename aod::MetadataTrait<std::decay_t<Arg>>::metadata;
     static_assert(std::is_same_v<metadata, void> == false,
                   "Could not find metadata. Did you register your type?");
-    inputs.push_back({metadata::tableLabel(), metadata::origin(), metadata::description()});
+    if constexpr (soa::is_soa_index_table_t<std::decay_t<Arg>>::value) {
+      auto inputSources = getIndexSources<std::decay_t<Arg>>();
+      std::sort(inputSources.begin(), inputSources.end(), [](ConfigParamSpec const& a, ConfigParamSpec const& b) { return a.name < b.name; });
+      auto last = std::unique(inputSources.begin(), inputSources.end(), [](ConfigParamSpec const& a, ConfigParamSpec const& b) { return a.name == b.name; });
+      inputSources.erase(last, inputSources.end());
+      inputs.push_back(InputSpec{metadata::tableLabel(), metadata::origin(), metadata::description(), Lifetime::Timeframe, inputSources});
+    } else {
+      inputs.push_back({metadata::tableLabel(), metadata::origin(), metadata::description()});
+    }
   }
 
   template <typename... Args>
@@ -110,7 +143,11 @@ struct AnalysisDataProcessorBuilder {
   static auto extractTableFromRecord(InputRecord& record)
   {
     if constexpr (soa::is_type_with_metadata_v<aod::MetadataTrait<T>>) {
-      return record.get<TableConsumer>(aod::MetadataTrait<T>::metadata::tableLabel())->asArrowTable();
+      auto table = record.get<TableConsumer>(aod::MetadataTrait<T>::metadata::tableLabel())->asArrowTable();
+      if (table->num_rows() == 0) {
+        table = makeEmptyTable<T>();
+      }
+      return table;
     } else if constexpr (soa::is_type_with_originals_v<T>) {
       return extractFromRecord<T>(record, typename T::originals{});
     }
@@ -144,14 +181,16 @@ struct AnalysisDataProcessorBuilder {
 
     if constexpr (soa::is_soa_filtered_t<decayed>::value) {
       for (auto& info : infos) {
-        if (info.index == at)
+        if (info.index == at) {
           return extractFilteredFromRecord<decayed>(record, info, soa::make_originals_from_type<decayed>());
+        }
       }
     } else if constexpr (soa::is_soa_iterator_t<decayed>::value) {
       if constexpr (std::is_same_v<typename decayed::policy_t, soa::FilteredIndexPolicy>) {
         for (auto& info : infos) {
-          if (info.index == at)
+          if (info.index == at) {
             return extractFilteredFromRecord<decayed>(record, info, soa::make_originals_from_type<decayed>());
+          }
         }
       } else {
         return extractFromRecord<decayed>(record, soa::make_originals_from_type<decayed>());
@@ -237,17 +276,17 @@ struct AnalysisDataProcessorBuilder {
         auto splitter = [&](auto&& x) {
           using xt = std::decay_t<decltype(x)>;
           constexpr auto index = framework::has_type_at_v<std::decay_t<decltype(x)>>(associated_pack_t{});
-          if (hasIndexTo<std::decay_t<G>>(typename xt::persistent_columns_t{})) {
+          if (x.size() != 0 && hasIndexTo<std::decay_t<G>>(typename xt::persistent_columns_t{})) {
             auto result = o2::framework::sliceByColumn(indexColumnName.c_str(),
                                                        x.asArrowTable(),
                                                        static_cast<int32_t>(gt.tableSize()),
                                                        &groups[index],
                                                        &offsets[index]);
             if (result.ok() == false) {
-              throw std::runtime_error("Cannot split collection");
+              throw runtime_error("Cannot split collection");
             }
             if (groups[index].size() != gt.tableSize()) {
-              throw std::runtime_error(fmt::format("Splitting collection resulted in different group number ({}) than there is rows in the grouping table ({}).", groups[index].size(), gt.tableSize()));
+              throw runtime_error_f("Splitting collection resulted in different group number (%d) than there is rows in the grouping table (%d).", groups[index].size(), gt.tableSize());
             };
           }
         };
@@ -342,7 +381,7 @@ struct AnalysisDataProcessorBuilder {
       auto prepareArgument()
       {
         constexpr auto index = framework::has_type_at_v<A1>(associated_pack_t{});
-        if (hasIndexTo<G>(typename std::decay_t<A1>::persistent_columns_t{})) {
+        if (std::get<A1>(*mAt).size() != 0 && hasIndexTo<G>(typename std::decay_t<A1>::persistent_columns_t{})) {
           uint64_t pos;
           if constexpr (soa::is_soa_filtered_t<std::decay_t<G>>::value) {
             pos = (*groupSelection)[position];

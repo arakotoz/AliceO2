@@ -14,7 +14,7 @@
 #include "Framework/AnalysisTask.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/ASoAHelpers.h"
-#include "Analysis/SecondaryVertexHF.h"
+#include "Analysis/HFSecondaryVertex.h"
 #include "DetectorsVertexing/DCAFitterN.h"
 #include "ReconstructionDataFormats/Track.h"
 #include "Analysis/RecoDecay.h"
@@ -44,6 +44,59 @@ using namespace o2::framework::expressions;
 using std::array;
 using namespace ROOT::Math;
 
+namespace o2::aod
+{
+namespace v0goodpostracks
+{
+DECLARE_SOA_INDEX_COLUMN_FULL(GoodTrack, goodTrack, int, FullTracks, "fGoodTrackID");
+DECLARE_SOA_INDEX_COLUMN(Collision, collision);
+DECLARE_SOA_COLUMN(DCAXY, dcaXY, float);
+} // namespace v0goodpostracks
+DECLARE_SOA_TABLE(V0GoodPosTracks, "AOD", "V0GOODPOSTRACKS", o2::soa::Index<>, v0goodpostracks::GoodTrackId, v0goodpostracks::CollisionId, v0goodpostracks::DCAXY);
+namespace v0goodnegtracks
+{
+DECLARE_SOA_INDEX_COLUMN_FULL(GoodTrack, goodTrack, int, FullTracks, "fGoodTrackID");
+DECLARE_SOA_INDEX_COLUMN(Collision, collision);
+DECLARE_SOA_COLUMN(DCAXY, dcaXY, float);
+} // namespace v0goodnegtracks
+DECLARE_SOA_TABLE(V0GoodNegTracks, "AOD", "V0GOODNEGTRACKS", o2::soa::Index<>, v0goodnegtracks::GoodTrackId, v0goodnegtracks::CollisionId, v0goodnegtracks::DCAXY);
+} // namespace o2::aod
+
+struct lambdakzeroprefilter {
+  Configurable<float> dcanegtopv{"dcanegtopv", .1, "DCA Neg To PV"};
+  Configurable<float> dcapostopv{"dcapostopv", .1, "DCA Pos To PV"};
+  Configurable<int> mincrossedrows{"mincrossedrows", 70, "min crossed rows"};
+
+  Produces<aod::V0GoodPosTracks> v0GoodPosTracks;
+  Produces<aod::V0GoodNegTracks> v0GoodNegTracks;
+
+  Partition<soa::Join<aod::FullTracks, aod::TracksExtended>> goodPosTracks = aod::track::signed1Pt > 0.0f && aod::track::dcaXY > dcapostopv;
+  Partition<soa::Join<aod::FullTracks, aod::TracksExtended>> goodNegTracks = aod::track::signed1Pt < 0.0f && aod::track::dcaXY < -dcanegtopv;
+
+  void process(aod::Collision const& collision,
+               soa::Join<aod::FullTracks, aod::TracksExtended> const& tracks)
+  {
+    for (auto& t0 : goodPosTracks) {
+      if (!(t0.flags() & 0x40)) {
+        continue; //TPC refit
+      }
+      if (t0.tpcNClsCrossedRows() < mincrossedrows) {
+        continue;
+      }
+      v0GoodPosTracks(t0.globalIndex(), t0.collisionId(), t0.dcaXY());
+    }
+    for (auto& t0 : goodNegTracks) {
+      if (!(t0.flags() & 0x40)) {
+        continue; //TPC refit
+      }
+      if (t0.tpcNClsCrossedRows() < mincrossedrows) {
+        continue;
+      }
+      v0GoodNegTracks(t0.globalIndex(), t0.collisionId(), -t0.dcaXY());
+    }
+  }
+};
+
 struct lambdakzerofinder {
   Produces<aod::V0Data> v0data;
   Produces<aod::V0FinderData> v0finderdata;
@@ -57,32 +110,10 @@ struct lambdakzerofinder {
   //Selection criteria
   Configurable<double> v0cospa{"v0cospa", 0.995, "V0 CosPA"}; //double -> N.B. dcos(x)/dx = 0 at x=0)
   Configurable<float> dcav0dau{"dcav0dau", 1.0, "DCA V0 Daughters"};
-  Configurable<float> dcanegtopv{"dcanegtopv", .1, "DCA Neg To PV"};
-  Configurable<float> dcapostopv{"dcapostopv", .1, "DCA Pos To PV"};
   Configurable<float> v0radius{"v0radius", 5.0, "v0radius"};
 
-  //using myTracks = soa::Filtered<aod::Tracks>;
-  //using myTracks = soa::Filtered<aod::fullTracks>;
-
-  Partition<soa::Join<aod::FullTracks, aod::TracksExtended>> goodPosTracks = aod::track::signed1Pt > 0.0f && aod::track::dcaXY > dcapostopv;
-  Partition<soa::Join<aod::FullTracks, aod::TracksExtended>> goodNegTracks = aod::track::signed1Pt < 0.0f && aod::track::dcaXY < -dcanegtopv;
-
-  /// Extracts dca in the XY plane
-  /// \return dcaXY
-  template <typename T, typename U>
-  auto getdcaXY(const T& track, const U& coll)
-  {
-    //Calculate DCAs
-    auto sinAlpha = sin(track.alpha());
-    auto cosAlpha = cos(track.alpha());
-    auto globalX = track.x() * cosAlpha - track.y() * sinAlpha;
-    auto globalY = track.x() * sinAlpha + track.y() * cosAlpha;
-    return sqrt(pow((globalX - coll[0]), 2) +
-                pow((globalY - coll[1]), 2));
-  }
-
-  void process(aod::Collision const& collision,
-               soa::Join<aod::FullTracks, aod::TracksExtended> const& tracks)
+  void process(aod::Collision const& collision, aod::FullTracks const& tracks,
+               aod::V0GoodPosTracks const& ptracks, aod::V0GoodNegTracks const& ntracks)
   {
     //Define o2 fitter, 2-prong
     o2::vertexing::DCAFitterN<2> fitter;
@@ -99,44 +130,46 @@ struct lambdakzerofinder {
 
     std::array<float, 3> pVtx = {collision.posX(), collision.posY(), collision.posZ()};
 
-    for (auto& t0 : goodPosTracks) { //FIXME: turn into combination(...)
-      if (t0.tpcNClsCrossedRows() < 70)
-        continue; //FIXME: turn into extra filter
-      for (auto& t1 : goodNegTracks) {
-        if (t1.tpcNClsCrossedRows() < 70)
-          continue; //FIXME: turn into extra filter
-
-        auto Track1 = getTrackParCov(t0);
+    for (auto& t0id : ptracks) { //FIXME: turn into combination(...)
+      auto t0 = t0id.goodTrack();
+      auto Track1 = getTrackParCov(t0);
+      for (auto& t1id : ntracks) {
+        auto t1 = t1id.goodTrack();
         auto Track2 = getTrackParCov(t1);
 
         //Try to progate to dca
         int nCand = fitter.process(Track1, Track2);
-        if (nCand == 0)
+        if (nCand == 0) {
           continue;
+        }
         const auto& vtx = fitter.getPCACandidate();
 
         //Fiducial: min radius
         auto thisv0radius = TMath::Sqrt(TMath::Power(vtx[0], 2) + TMath::Power(vtx[1], 2));
-        if (thisv0radius < v0radius)
+        if (thisv0radius < v0radius) {
           continue;
+        }
 
         //DCA V0 daughters
         auto thisdcav0dau = fitter.getChi2AtPCACandidate();
-        if (thisdcav0dau > dcav0dau)
+        if (thisdcav0dau > dcav0dau) {
           continue;
+        }
 
         std::array<float, 3> pos = {0.};
         std::array<float, 3> pvec0;
         std::array<float, 3> pvec1;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 3; i++) {
           pos[i] = vtx[i];
+        }
         fitter.getTrack(0).getPxPyPzGlo(pvec0);
         fitter.getTrack(1).getPxPyPzGlo(pvec1);
 
         auto thisv0cospa = RecoDecay::CPA(array{collision.posX(), collision.posY(), collision.posZ()},
                                           array{vtx[0], vtx[1], vtx[2]}, array{pvec0[0] + pvec1[0], pvec0[1] + pvec1[1], pvec0[2] + pvec1[2]});
-        if (thisv0cospa < v0cospa)
+        if (thisv0cospa < v0cospa) {
           continue;
+        }
 
         lNCand++;
         v0finderdata(t0.globalIndex(), t1.globalIndex(), t0.collisionId());
@@ -144,7 +177,7 @@ struct lambdakzerofinder {
                pvec0[0], pvec0[1], pvec0[2],
                pvec1[0], pvec1[1], pvec1[2],
                fitter.getChi2AtPCACandidate(),
-               t0.dcaXY(), -t1.dcaXY());
+               t0id.dcaXY(), t1id.dcaXY());
       }
     }
     hCandPerEvent->Fill(lNCand);
@@ -172,37 +205,39 @@ struct lambdakzerofinderQA {
   OutputObj<TH3F> h3dMassLambda{TH3F("h3dMassLambda", "", 20, 0, 100, 200, 0, 10, 200, 1.115 - 0.100, 1.115 + 0.100)};
   OutputObj<TH3F> h3dMassAntiLambda{TH3F("h3dMassAntiLambda", "", 20, 0, 100, 200, 0, 10, 200, 1.115 - 0.100, 1.115 + 0.100)};
 
-  OutputObj<TH1F> hTest{TH1F("hTest", "", 1000, 0, 1000)};
-
-  Filter preFilterV0 = aod::v0data::dcapostopv > dcapostopv&&
-                                                   aod::v0data::dcanegtopv > dcanegtopv&& aod::v0data::dcaV0daughters < dcav0dau;
+  //FIXME: figure out why this does not work?
+  //Filter preFilter1 = aod::v0data::dcapostopv > dcapostopv;
+  //Filter preFilter2 = aod::v0data::dcanegtopv > dcanegtopv;
+  //Filter preFilter3 = aod::v0data::dcaV0daughters < dcav0dau;
 
   ///Connect to V0FinderData: newly indexed, note: V0DataExt table incompatible with standard V0 table!
-  void process(soa::Join<aod::Collisions, aod::EvSels, aod::Cents>::iterator const& collision, aod::FullTracks const& tracks,
-               soa::Filtered<soa::Join<aod::V0FinderData, aod::V0DataExt>> const& fullV0s)
+  void process(soa::Join<aod::Collisions, aod::EvSels, aod::Cents>::iterator const& collision,
+               //             soa::Filtered<soa::Join<aod::V0FinderData, aod::V0DataExt>> const& fullV0s)
+               soa::Join<aod::V0FinderData, aod::V0DataExt> const& fullV0s)
   {
-    if (!collision.alias()[kINT7])
+    if (!collision.alias()[kINT7]) {
       return;
-    if (!collision.sel7())
+    }
+    if (!collision.sel7()) {
       return;
+    }
 
     Long_t lNCand = 0;
     for (auto& v0 : fullV0s) {
-      if (v0.v0radius() > v0radius && v0.v0cosPA(collision.posX(), collision.posY(), collision.posZ()) > v0cospa) {
+      if (v0.v0radius() > v0radius && v0.v0cosPA(collision.posX(), collision.posY(), collision.posZ()) > v0cospa && v0.dcapostopv() > dcapostopv && v0.dcanegtopv() > dcanegtopv && v0.dcaV0daughters() > dcav0dau) {
         hV0Radius->Fill(v0.v0radius());
         hV0CosPA->Fill(v0.v0cosPA(collision.posX(), collision.posY(), collision.posZ()));
         hDCAPosToPV->Fill(v0.dcapostopv());
         hDCANegToPV->Fill(v0.dcanegtopv());
         hDCAV0Dau->Fill(v0.dcaV0daughters());
 
-        hTest->Fill(v0.posTrack().pt());
-
         if (TMath::Abs(v0.yLambda()) < 0.5) {
           h3dMassLambda->Fill(collision.centV0M(), v0.pt(), v0.mLambda());
           h3dMassAntiLambda->Fill(collision.centV0M(), v0.pt(), v0.mAntiLambda());
         }
-        if (TMath::Abs(v0.yK0Short()) < 0.5)
+        if (TMath::Abs(v0.yK0Short()) < 0.5) {
           h3dMassK0Short->Fill(collision.centV0M(), v0.pt(), v0.mK0Short());
+        }
         lNCand++;
       }
     }
@@ -219,6 +254,7 @@ struct lambdakzeroinitializer {
 WorkflowSpec defineDataProcessing(ConfigContext const&)
 {
   return WorkflowSpec{
+    adaptAnalysisTask<lambdakzeroprefilter>("lf-lambdakzeroprefilter"),
     adaptAnalysisTask<lambdakzerofinder>("lf-lambdakzerofinder"),
     adaptAnalysisTask<lambdakzeroinitializer>("lf-lambdakzeroinitializer"),
     adaptAnalysisTask<lambdakzerofinderQA>("lf-lambdakzerofinderQA")};

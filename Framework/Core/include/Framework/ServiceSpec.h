@@ -11,6 +11,8 @@
 #define O2_FRAMEWORK_SERVICESPEC_H_
 
 #include "Framework/ServiceHandle.h"
+#include "Framework/DeviceMetricsInfo.h"
+#include "Framework/DeviceInfo.h"
 #include <functional>
 #include <string>
 #include <vector>
@@ -63,6 +65,23 @@ using ServicePostForkChild = std::function<void(ServiceRegistry&)>;
 /// but before doing exec / starting the device.
 using ServicePostForkParent = std::function<void(ServiceRegistry&)>;
 
+/// Callback executed before each redeployment of the whole configuration
+using ServicePreSchedule = std::function<void(ServiceRegistry&, boost::program_options::variables_map const&)>;
+
+/// Callback executed after each redeployment of the whole configuration
+using ServicePostSchedule = std::function<void(ServiceRegistry&, boost::program_options::variables_map const&)>;
+
+/// Callback executed in the driver in order to process a metric.
+using ServiceMetricHandling = std::function<void(ServiceRegistry&,
+                                                 std::vector<o2::framework::DeviceMetricsInfo>& metrics,
+                                                 std::vector<o2::framework::DeviceSpec>& specs,
+                                                 std::vector<o2::framework::DeviceInfo>& infos,
+                                                 DeviceMetricsInfo& driverMetrics,
+                                                 size_t timestamp)>;
+
+/// Callback executed in the child after dispatching happened.
+using ServicePostDispatching = std::function<void(ProcessingContext&, void*)>;
+
 /// A specification for a Service.
 /// A Service is a utility class which does not perform
 /// data processing itself, but it can be used by the data processor
@@ -99,6 +118,17 @@ struct ServiceSpec {
   /// but before doing exec / starting the device.
   ServicePostForkParent postForkParent = nullptr;
 
+  /// Callback executed before and after we schedule a topology
+  ServicePreSchedule preSchedule = nullptr;
+  ServicePostSchedule postSchedule = nullptr;
+
+  ///Callback executed after each metric is received by the driver.
+  ServiceMetricHandling metricHandling = nullptr;
+
+  /// Callback executed after a given input record has been successfully
+  /// dispatched.
+  ServicePostDispatching postDispatching = nullptr;
+
   /// Kind of service being specified.
   ServiceKind kind;
 };
@@ -120,6 +150,11 @@ struct ServiceDanglingHandle {
 
 struct ServiceEOSHandle {
   ServiceEOSCallback callback;
+  void* service;
+};
+
+struct ServiceDispatchingHandle {
+  ServicePostDispatching callback;
   void* service;
 };
 

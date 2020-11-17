@@ -53,6 +53,11 @@ using o2::itsmft::Hit;
 using Segmentation = o2::itsmft::SegmentationAlpide;
 using namespace o2::its4;
 
+float getDetLengthFromEta(const float eta, const float radius)
+{
+  return 2. * (10. + radius * std::cos(2 * std::atan(std::exp(-eta))));
+}
+
 Detector::Detector()
   : o2::base::DetImpl<Detector>("IT4", kTRUE),
     mTrackData(),
@@ -140,24 +145,24 @@ void Detector::configITS(Detector* its)
 
   // From Mario Sitta's hack
   std::vector<std::array<double, 2>> tdr5data;
-  tdr5data.emplace_back(std::array<double, 2>{1.8f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{2.4f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{3.0f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{4.0f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{5.0f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{6.0f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{7.0f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{8.0f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{9.0f, 27.15});
-  tdr5data.emplace_back(std::array<double, 2>{10.0f, 27.15});
+  tdr5data.emplace_back(std::array<double, 2>{1.8f, getDetLengthFromEta(1.44f, 1.8f)});
+  tdr5data.emplace_back(std::array<double, 2>{2.8f, getDetLengthFromEta(1.44f, 2.8f)});
+  tdr5data.emplace_back(std::array<double, 2>{3.8f, getDetLengthFromEta(1.44f, 3.8f)});
+  tdr5data.emplace_back(std::array<double, 2>{8.0f, getDetLengthFromEta(1.44f, 8.0f)});
+  tdr5data.emplace_back(std::array<double, 2>{20.0f, getDetLengthFromEta(1.44f, 20.0f)});
+  tdr5data.emplace_back(std::array<double, 2>{25.0f, getDetLengthFromEta(1.44f, 25.0f)});
+  tdr5data.emplace_back(std::array<double, 2>{40.0f, getDetLengthFromEta(1.44f, 40.0f)});
+  tdr5data.emplace_back(std::array<double, 2>{55.f, getDetLengthFromEta(1.44f, 55.f)});
+  tdr5data.emplace_back(std::array<double, 2>{80.0f, getDetLengthFromEta(1.44f, 80.0f)});
+  tdr5data.emplace_back(std::array<double, 2>{100.f, getDetLengthFromEta(1.44f, 100.f)});
 
-  static constexpr float SensorLayerThickness = 30.e-4;
+  std::array<float, 10> sensorThicknesses = {50.e-4, 50.e-4, 50.e-4, 50.e-3, 50.e-3, 50.e-3, 50.e-3, 50.e-3, 50.e-3, 50.e-3};
   its->setStaveModelOB(o2::its4::Detector::kOBModel2);
   // its->createOuterBarrel(false);
 
   auto idLayer{0};
   for (auto& layerData : tdr5data) {
-    its->defineInnerLayerITS4(idLayer, layerData[0], layerData[1], SensorLayerThickness, 0, 0);
+    its->defineInnerLayerITS4(idLayer, layerData[0], layerData[1], sensorThicknesses[idLayer], 0, 0);
     ++idLayer;
   }
   its->createOuterBarrel(false);
@@ -341,8 +346,9 @@ Bool_t Detector::ProcessHits(FairVolume* vol)
   while ((lay < mTotalNumberOfLayers) && (notSens = (volID != mLayerID[lay]))) {
     ++lay;
   }
-  if (notSens)
+  if (notSens) {
     return kFALSE; // RS: can this happen? This method must be called for sensors only?
+  }
 
   // Is it needed to keep a track reference when the outer ITS volume is encountered?
   auto stack = (o2::data::Stack*)fMC->GetStack();
@@ -382,10 +388,12 @@ Bool_t Detector::ProcessHits(FairVolume* vol)
   }
 
   // increment energy loss at all steps except entrance
-  if (!startHit)
+  if (!startHit) {
     mTrackData.mEnergyLoss += fMC->Edep();
-  if (!(startHit | stopHit))
+  }
+  if (!(startHit | stopHit)) {
     return kFALSE; // do noting
+  }
 
   if (startHit) {
     mTrackData.mEnergyLoss = 0.;
@@ -878,8 +886,9 @@ void Detector::constructDetectorGeometry()
       vITSV->AddNode(wrapVols[id], 1, nullptr);
     }
   }
-  if (!mCreateOuterBarrel)
+  if (!mCreateOuterBarrel) {
     mTotalNumberOfLayers = mNumberOfInnerLayers;
+  }
 
   // Now create the actual geometry
   for (Int_t j = 0; j < mTotalNumberOfLayers; j++) {
@@ -923,7 +932,7 @@ void Detector::constructDetectorGeometry()
       mGeometry[j]->setSensorThick(mDetectorThickness[j]);
     }
 
-    if (mCreateOuterBarrel && j >= mNumberOfInnerLayers)
+    if (mCreateOuterBarrel && j >= mNumberOfInnerLayers) {
       for (int iw = 0; iw < sNumberOfWrapperVolumes; iw++) {
         if (mLayerRadii[j] > mWrapperMinRadius[iw] && mLayerRadii[j] < mWrapperMaxRadius[iw]) {
           LOG(DEBUG) << "Will embed layer " << j << " in wrapper volume " << iw;
@@ -933,6 +942,7 @@ void Detector::constructDetectorGeometry()
           break;
         }
       }
+    }
     mGeometry[j]->createLayer(dest);
   }
 

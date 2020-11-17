@@ -129,14 +129,16 @@ void HwClusterer::init()
 }
 
 //______________________________________________________________________________
-void HwClusterer::process(gsl::span<o2::tpc::Digit const> const& digits, MCLabelContainer const* mcDigitTruth, bool clearContainerFirst)
+void HwClusterer::process(gsl::span<o2::tpc::Digit const> const& digits, ConstMCLabelContainerView const& mcDigitTruth, bool clearContainerFirst)
 {
   if (clearContainerFirst) {
-    if (mClusterArray)
+    if (mClusterArray) {
       mClusterArray->clear();
+    }
 
-    if (mClusterMcLabelArray)
+    if (mClusterMcLabelArray) {
       mClusterMcLabelArray->clear();
+    }
     mClusterCounter = 0;
   }
 
@@ -226,9 +228,11 @@ void HwClusterer::process(gsl::span<o2::tpc::Digit const> const& digits, MCLabel
       // we have to copy the MC truth container because we need the information
       // maybe only in the next events (we store permanently 5 timebins), where
       // the original pointer could already point to the next container.
-      if (mcDigitTruth) {
+      if (mcDigitTruth.getBuffer().size()) {
         if (mCurrentMcContainerInBuffer == 0) {
-          mMCtruth[mapTimeInRange(timeBin)] = std::make_shared<MCLabelContainer const>(*mcDigitTruth);
+          auto tmp = std::make_shared<MCLabelContainer>();
+          tmp->restore_from(mcDigitTruth.getBuffer().data(), mcDigitTruth.getBuffer().size());
+          mMCtruth[mapTimeInRange(timeBin)] = tmp;
         } else {
           mMCtruth[mapTimeInRange(timeBin)] = std::shared_ptr<MCLabelContainer const>(mMCtruth[getFirstSetBitOfField()]);
         }
@@ -272,7 +276,7 @@ void HwClusterer::process(gsl::span<o2::tpc::Digit const> const& digits, MCLabel
 }
 
 //______________________________________________________________________________
-void HwClusterer::finishProcess(gsl::span<o2::tpc::Digit const> const& digits, MCLabelContainer const* mcDigitTruth, bool clearContainerFirst)
+void HwClusterer::finishProcess(gsl::span<o2::tpc::Digit const> const& digits, ConstMCLabelContainerView const& mcDigitTruth, bool clearContainerFirst)
 {
   // Process the last digits (if there are any)
   process(digits, mcDigitTruth, clearContainerFirst);
@@ -583,10 +587,12 @@ void HwClusterer::hwClusterProcessor(const Vc::uint_m peakMask, unsigned qMaxInd
   }
 
   selectionMask = peakMask;
-  if (mRejectSinglePadClusters)
+  if (mRejectSinglePadClusters) {
     selectionMask &= !(sigmaPad2 == 0);
-  if (mRejectSingleTimeClusters)
+  }
+  if (mRejectSingleTimeClusters) {
     selectionMask &= !(sigmaTime2 == 0);
+  }
 
   ClusterHardware tmpCluster;
   for (int i = 0; i < Vc::uint_v::Size; ++i) {
@@ -718,8 +724,9 @@ void HwClusterer::writeOutputWithTimeOffset(int timeOffset)
 {
   // Check in which regions cluster were found
   for (unsigned int region = 0; region < 10; ++region) {
-    if (mTmpClusterArray[region]->size() == 0)
+    if (mTmpClusterArray[region]->size() == 0) {
       continue;
+    }
 
     if (mClusterArray) {
       // Create new container
@@ -760,8 +767,9 @@ void HwClusterer::writeOutputWithTimeOffset(int timeOffset)
 //______________________________________________________________________________
 void HwClusterer::findPeaksForTime(int timebin)
 {
-  if (timebin < 0)
+  if (timebin < 0) {
     return;
+  }
 
   const unsigned timeBinWrapped = mapTimeInRange(timebin);
   for (unsigned short row = 0; row < mNumRowSets; ++row) {
@@ -778,8 +786,9 @@ void HwClusterer::findPeaksForTime(int timebin)
 //______________________________________________________________________________
 void HwClusterer::computeClusterForTime(int timebin)
 {
-  if (timebin < 0)
+  if (timebin < 0) {
     return;
+  }
 
   const unsigned timeBinWrapped = mapTimeInRange(timebin);
   if (mRejectLaterTimebin) {
@@ -796,8 +805,9 @@ void HwClusterer::computeClusterForTime(int timebin)
         const auto peakMask = ((mDataBuffer[row][qMaxIndex] >> 27) == 0x1F) &                                              //  True if current pad is peak AND
                               (getFpOfADC(mDataBuffer[row][qMaxIndex]) > getFpOfADC(mDataBuffer[row][qMaxPreviousIndex]) | // previous has smaller charge
                                !((mDataBuffer[row][qMaxPreviousIndex] >> 27) == 0x1F));                                    //  or previous one was not a peak
-        if (peakMask.isEmpty())
+        if (peakMask.isEmpty()) {
           continue;
+        }
 
         hwClusterProcessor(peakMask, qMaxIndex, pad, timebin, row);
       }
@@ -810,8 +820,9 @@ void HwClusterer::computeClusterForTime(int timebin)
         const unsigned qMaxIndex = padOffset + pad;
 
         const auto peakMask = ((mDataBuffer[row][qMaxIndex] >> 27) == 0x1F);
-        if (peakMask.isEmpty())
+        if (peakMask.isEmpty()) {
           continue;
+        }
 
         hwClusterProcessor(peakMask, qMaxIndex, pad, timebin, row);
       }
@@ -838,8 +849,9 @@ void HwClusterer::finishFrame(bool clear)
   writeOutputWithTimeOffset(mLastHB * 447);
 
   if (clear) {
-    for (int i = 0; i < mTimebinsInBuffer; ++i)
+    for (int i = 0; i < mTimebinsInBuffer; ++i) {
       clearBuffer(i);
+    }
   }
 }
 
@@ -864,8 +876,9 @@ void HwClusterer::updateCluster(
   Vc::uint_v& qTot, Vc::int_v& pad, Vc::int_v& time, Vc::int_v& sigmaPad2, Vc::int_v& sigmaTime2,
   std::vector<std::unique_ptr<std::vector<std::pair<MCCompLabel, unsigned>>>>& mcLabels, const Vc::uint_m splitMask)
 {
-  if (selectionMask.isEmpty())
+  if (selectionMask.isEmpty()) {
     return;
+  }
 
   const int mappedTime = mapTimeInRange(centerTime + dt);
   const int index = mappedTime * mPadsPerRowSet[row] + centerPad + dp;

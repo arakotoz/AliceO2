@@ -30,6 +30,8 @@
 #include "Framework/DataSpecUtils.h"
 #include "SimulationDataFormat/MCTruthContainer.h"
 
+using namespace o2::dataformats;
+
 namespace o2
 {
 
@@ -93,8 +95,9 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
                                                    o2::framework::OutputSpec{"CPV", "DIGITSMCTR"}},
                                                  propagateMC));
 
-    if (enableDigitsPrinter)
+    if (enableDigitsPrinter) {
       specs.emplace_back(o2::cpv::reco_workflow::getPhosDigitsPrinterSpec());
+    }
 
     if (isEnabled(OutputType::Clusters)) {
       // add clusterizer
@@ -163,7 +166,6 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
 
   // if (isEnabled(OutputType::Raw)) {
   //   using RawOutputType = std::vector<o2::cpv::Raw>;
-  //   using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::MCCompLabel>;
   //   specs.push_back(makeWriterSpec("cpv-raw-writer",
   //                                  inputType == InputType::Digits ? "cpv-raw.root" : "cpvrawcells.root",
   //                                  "o2sim",
@@ -178,7 +180,6 @@ o2::framework::WorkflowSpec getWorkflow(bool propagateMC,
   if (isEnabled(OutputType::Digits)) {
     using DigitOutputType = std::vector<o2::cpv::Digit>;
     using DTROutputType = std::vector<o2::cpv::TriggerRecord>;
-    using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::MCCompLabel>;
 
     specs.emplace_back(o2::framework::MakeRootTreeWriterSpec("cpv-digits-writer", "cpvdigits.root", "o2sim",
                                                              -1,

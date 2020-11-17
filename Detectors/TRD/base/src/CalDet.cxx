@@ -20,8 +20,8 @@
 #include <TH2F.h>
 #include <TRobustEstimator.h>
 
-#include "TRDBase/TRDPadPlane.h"
-#include "TRDBase/TRDGeometry.h"
+#include "TRDBase/PadPlane.h"
+#include "TRDBase/Geometry.h"
 #include "TRDBase/CalDet.h"
 // #include "AliMathBase.h"
 
@@ -116,10 +116,12 @@ double CalDet::getRMSRobust(double robust) const
   for (int i = 0; i < MAXCHAMBER; i++) {
     bool rej = kFALSE;
     for (int k = 0; k < reject; k++) {
-      if (i == index[k])
+      if (i == index[k]) {
         rej = kTRUE;
-      if (i == index[MAXCHAMBER - (k + 1)])
+      }
+      if (i == index[MAXCHAMBER - (k + 1)]) {
         rej = kTRUE;
+      }
     }
     if (!rej) {
       ddata[nPoints] = mData[i];
@@ -142,20 +144,24 @@ double CalDet::getMeanRobust(double robust) const
 
   // reject
   double reject = (int)(MAXCHAMBER * (1 - robust) / 2.0);
-  if (reject <= 0)
+  if (reject <= 0) {
     reject = 0;
-  if (reject >= MAXCHAMBER)
+  }
+  if (reject >= MAXCHAMBER) {
     reject = 0;
+  }
 
   std::array<double, MAXCHAMBER> ddata;
   int nPoints = 0;
   for (int i = 0; i < MAXCHAMBER; i++) {
     bool rej = kFALSE;
     for (int k = 0; k < reject; k++) {
-      if (i == index[k])
+      if (i == index[k]) {
         rej = kTRUE;
-      if (i == index[MAXCHAMBER - (k + 1)])
+      }
+      if (i == index[MAXCHAMBER - (k + 1)]) {
         rej = kTRUE;
+      }
     }
     if (!rej) {
       ddata[nPoints] = mData[i];
@@ -322,7 +328,7 @@ TH2F* CalDet::makeHisto2DCh(int ch, float min, float max, int type)
     }
   }
 
-  TRDGeometry* trdGeo = TRDGeometry::instance();
+  Geometry* trdGeo = Geometry::instance();
 
   float poslocal[3] = {0, 0, 0};
   float posglobal[3] = {0, 0, 0};
@@ -338,7 +344,7 @@ TH2F* CalDet::makeHisto2DCh(int ch, float min, float max, int type)
   for (int isec = 0; isec < NSECTOR; isec++) {
     for (int ipl = 0; ipl < NLAYER; ipl++) {
       int det = offsetch + isec * 30 + ipl;
-      const TRDPadPlane* padPlane = trdGeo->getPadPlane(ipl, ch);
+      const PadPlane* padPlane = trdGeo->getPadPlane(ipl, ch);
       for (int icol = 0; icol < padPlane->getNcols(); icol++) {
         poslocal[0] = trdGeo->getTime0(ipl);
         poslocal[2] = padPlane->getRowPos(0);
@@ -395,8 +401,8 @@ TH2F* CalDet::makeHisto2DSmPl(int sm, int pl, float min, float max, int type)
     }
   }
 
-  TRDGeometry* trdGeo = TRDGeometry::instance();
-  const TRDPadPlane* padPlane0 = trdGeo->getPadPlane(pl, 0);
+  Geometry* trdGeo = Geometry::instance();
+  const PadPlane* padPlane0 = trdGeo->getPadPlane(pl, 0);
   double row0 = padPlane0->getRow0();
   double col0 = padPlane0->getCol0();
 

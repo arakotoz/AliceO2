@@ -8,47 +8,51 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// \file hfcandidatecreator2prong.cxx
+/// \file HFCandidateCreator2Prong.cxx
 /// \brief Reconstruction of heavy-flavour 2-prong decay candidates
 ///
 /// \author Gian Michele Innocenti <gian.michele.innocenti@cern.ch>, CERN
 /// \author Vít Kučera <vit.kucera@cern.ch>, CERN
 
-#include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
 #include "DetectorsVertexing/DCAFitterN.h"
-#include "Analysis/SecondaryVertexHF.h"
+#include "Analysis/HFSecondaryVertex.h"
 #include "Analysis/trackUtilities.h"
 #include "ReconstructionDataFormats/DCA.h"
-#include "Analysis/RecoDecay.h"
-#include "PID/PIDResponse.h"
-#include <cmath>
-#include <array>
-#include <cstdlib>
 
 using namespace o2;
 using namespace o2::framework;
-using std::array;
+
+void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
+{
+  ConfigParamSpec optionDoMC{"doMC", VariantType::Bool, false, {"Perform MC matching."}};
+  workflowOptions.push_back(optionDoMC);
+}
+
+#include "Framework/runDataProcessing.h"
 
 /// Reconstruction of heavy-flavour 2-prong decay candidates
 struct HFCandidateCreator2Prong {
-  Produces<aod::HfCandBase> rowCandidateBase;
-  //Produces<aod::HfCandProng2Base> rowCandidateProng2Base; // TODO split table
-  Configurable<double> magneticField{"d_bz", 5.0, "magnetic field"};
+  Produces<aod::HfCandProng2Base> rowCandidateBase;
+
+  Configurable<double> magneticField{"d_bz", 5., "magnetic field"};
   Configurable<bool> b_propdca{"b_propdca", true, "create tracks version propagated to PCA"};
   Configurable<double> d_maxr{"d_maxr", 200., "reject PCA's above this radius"};
   Configurable<double> d_maxdzini{"d_maxdzini", 4., "reject (if>0) PCA candidate if tracks DZ exceeds threshold"};
   Configurable<double> d_minparamchange{"d_minparamchange", 1.e-3, "stop iterations if largest change of any X is smaller than this"};
   Configurable<double> d_minrelchi2change{"d_minrelchi2change", 0.9, "stop iterations is chi2/chi2old > this"};
   Configurable<bool> b_dovalplots{"b_dovalplots", true, "do validation plots"};
-  OutputObj<TH1F> hmass2{TH1F("hmass2", "2-track inv mass", 500, 0., 5.0)};
+
+  OutputObj<TH1F> hmass2{TH1F("hmass2", "2-prong candidates;inv. mass (#pi K) (GeV/#it{c}^{2});entries", 500, 0., 5.)};
+  OutputObj<TH1F> hCovPVXX{TH1F("hCovPVXX", "2-prong candidates;XX element of cov. matrix of prim. vtx. position (cm^{2});entries", 100, 0., 1.e-4)};
+  OutputObj<TH1F> hCovSVXX{TH1F("hCovSVXX", "2-prong candidates;XX element of cov. matrix of sec. vtx. position (cm^{2});entries", 100, 0., 0.2)};
 
   double massPi = RecoDecay::getMassPDG(kPiPlus);
   double massK = RecoDecay::getMassPDG(kKPlus);
-  double massPiK{0};
-  double massKPi{0};
+  double massPiK{0.};
+  double massKPi{0.};
 
-  void process(aod::Collision const& collision,
+  void process(aod::Collisions const& collisions,
                aod::HfTrackIndexProng2 const& rowsTrackIndexProng2,
                aod::BigTracks const& tracks)
   {
@@ -66,13 +70,16 @@ struct HFCandidateCreator2Prong {
     for (const auto& rowTrackIndexProng2 : rowsTrackIndexProng2) {
       auto trackParVarPos1 = getTrackParCov(rowTrackIndexProng2.index0());
       auto trackParVarNeg1 = getTrackParCov(rowTrackIndexProng2.index1());
+      auto collision = rowTrackIndexProng2.index0().collision();
 
       // reconstruct the 2-prong secondary vertex
-      if (df.process(trackParVarPos1, trackParVarNeg1) == 0)
+      if (df.process(trackParVarPos1, trackParVarNeg1) == 0) {
         continue;
+      }
       const auto& secondaryVertex = df.getPCACandidate();
       auto chi2PCA = df.getChi2AtPCACandidate();
       auto covMatrixPCA = df.calcPCACovMatrix().Array();
+      hCovSVXX->Fill(covMatrixPCA[0]); // FIXME: Calculation of errorDecayLength(XY) gives wrong values without this line.
       auto trackParVar0 = df.getTrack(0);
       auto trackParVar1 = df.getTrack(1);
 
@@ -82,15 +89,11 @@ struct HFCandidateCreator2Prong {
       trackParVar0.getPxPyPzGlo(pvec0);
       trackParVar1.getPxPyPzGlo(pvec1);
 
-      // calculate invariant masses
-      auto arrayMomenta = array{pvec0, pvec1};
-      massPiK = RecoDecay::M(arrayMomenta, array{massPi, massK});
-      massKPi = RecoDecay::M(arrayMomenta, array{massK, massPi});
-
       // get track impact parameters
       // This modifies track momenta!
       auto primaryVertex = getPrimaryVertex(collision);
       auto covMatrixPV = primaryVertex.getCov();
+      hCovPVXX->Fill(covMatrixPV[0]);
       o2::dataformats::DCA impactParameter0;
       o2::dataformats::DCA impactParameter1;
       trackParVar0.propagateToDCA(primaryVertex, magneticField, &impactParameter0);
@@ -106,8 +109,7 @@ struct HFCandidateCreator2Prong {
       rowCandidateBase(collision.posX(), collision.posY(), collision.posZ(),
                        secondaryVertex[0], secondaryVertex[1], secondaryVertex[2],
                        errorDecayLength, errorDecayLengthXY,
-                       chi2PCA, //);
-                                //rowCandidateProng2Base( // TODO split table
+                       chi2PCA,
                        pvec0[0], pvec0[1], pvec0[2],
                        pvec1[0], pvec1[1], pvec1[2],
                        impactParameter0.getY(), impactParameter1.getY(),
@@ -116,6 +118,10 @@ struct HFCandidateCreator2Prong {
 
       // fill histograms
       if (b_dovalplots) {
+        // calculate invariant masses
+        auto arrayMomenta = array{pvec0, pvec1};
+        massPiK = RecoDecay::M(arrayMomenta, array{massPi, massK});
+        massKPi = RecoDecay::M(arrayMomenta, array{massK, massPi});
         hmass2->Fill(massPiK);
         hmass2->Fill(massKPi);
       }
@@ -129,9 +135,41 @@ struct HFCandidateCreator2ProngExpressions {
   void init(InitContext const&) {}
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const&)
+/// Performs MC matching.
+struct HFCandidateCreator2ProngMC {
+  Produces<aod::HfCandProng2MCRec> rowMCMatchRec;
+  Produces<aod::HfCandProng2MCGen> rowMCMatchGen;
+
+  void process(aod::HfCandProng2 const& candidates,
+               aod::BigTracksMC const& tracks,
+               aod::McParticles const& particlesMC)
+  {
+    // Match reconstructed candidates.
+    for (auto& candidate : candidates) {
+      // D0(bar) → π± K∓
+      auto isMatchedRecD0 = RecoDecay::isMCMatchedDecayRec(
+        particlesMC, array{candidate.index0_as<aod::BigTracksMC>(), candidate.index1_as<aod::BigTracksMC>()},
+        421, array{+kPiPlus, -kKPlus}, true);
+      rowMCMatchRec(uint8_t(isMatchedRecD0));
+    }
+
+    // Match generated particles.
+    for (auto& particle : particlesMC) {
+      // D0(bar) → π± K∓
+      auto isMatchedGenD0 = RecoDecay::isMCMatchedDecayGen(particlesMC, particle, 421, array{+kPiPlus, -kKPlus}, true);
+      rowMCMatchGen(uint8_t(isMatchedGenD0));
+    }
+  }
+};
+
+WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
-  return WorkflowSpec{
+  WorkflowSpec workflow{
     adaptAnalysisTask<HFCandidateCreator2Prong>("hf-cand-creator-2prong"),
     adaptAnalysisTask<HFCandidateCreator2ProngExpressions>("hf-cand-creator-2prong-expressions")};
+  const bool doMC = cfgc.options().get<bool>("doMC");
+  if (doMC) {
+    workflow.push_back(adaptAnalysisTask<HFCandidateCreator2ProngMC>("hf-cand-creator-2prong-mc"));
+  }
+  return workflow;
 }

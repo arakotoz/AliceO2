@@ -25,35 +25,35 @@ DECLARE_SOA_COLUMN_FULL(Y, y, float, "y");
 
 HistogramRegistry foo()
 {
-  return {"r", true, {{"histo", "histo", {HistogramType::kTH1F, {{100, 0, 1}}}}}};
+  return {"r", {{"histo", "histo", {HistType::kTH1F, {{100, 0, 1}}}}}};
 }
 
 BOOST_AUTO_TEST_CASE(HistogramRegistryLookup)
 {
   /// Construct a registry object with direct declaration
   HistogramRegistry registry{
-    "registry", true, {
-                        {"eta", "#Eta", {HistogramType::kTH1F, {{100, -2.0, 2.0}}}},                              //
-                        {"phi", "#Phi", {HistogramType::kTH1D, {{102, 0, 2 * M_PI}}}},                            //
-                        {"pt", "p_{T}", {HistogramType::kTH1D, {{1002, -0.01, 50.1}}}},                           //
-                        {"ptToPt", "#ptToPt", {HistogramType::kTH2F, {{100, -0.01, 10.01}, {100, -0.01, 10.01}}}} //
-                      }                                                                                           //
+    "registry", {
+                  {"eta", "#Eta", {HistType::kTH1F, {{100, -2.0, 2.0}}}},                              //
+                  {"phi", "#Phi", {HistType::kTH1D, {{102, 0, 2 * M_PI}}}},                            //
+                  {"pt", "p_{T}", {HistType::kTH1D, {{1002, -0.01, 50.1}}}},                           //
+                  {"ptToPt", "#ptToPt", {HistType::kTH2F, {{100, -0.01, 10.01}, {100, -0.01, 10.01}}}} //
+                }                                                                                      //
   };
 
   /// Get histograms by name
-  BOOST_REQUIRE_EQUAL(registry.get("eta")->GetNbinsX(), 100);
-  BOOST_REQUIRE_EQUAL(registry.get("phi")->GetNbinsX(), 102);
-  BOOST_REQUIRE_EQUAL(registry.get("pt")->GetNbinsX(), 1002);
-  BOOST_REQUIRE_EQUAL(registry.get("ptToPt")->GetNbinsX(), 100);
-  BOOST_REQUIRE_EQUAL(registry.get("ptToPt")->GetNbinsY(), 100);
+  BOOST_REQUIRE_EQUAL(registry.get<TH1>("eta")->GetNbinsX(), 100);
+  BOOST_REQUIRE_EQUAL(registry.get<TH1>("phi")->GetNbinsX(), 102);
+  BOOST_REQUIRE_EQUAL(registry.get<TH1>("pt")->GetNbinsX(), 1002);
+  BOOST_REQUIRE_EQUAL(registry.get<TH2>("ptToPt")->GetNbinsX(), 100);
+  BOOST_REQUIRE_EQUAL(registry.get<TH2>("ptToPt")->GetNbinsY(), 100);
 
   /// Get a pointer to the histogram
-  auto histo = registry.get("pt").get();
+  auto histo = registry.get<TH1>("pt").get();
   BOOST_REQUIRE_EQUAL(histo->GetNbinsX(), 1002);
 
   /// Get registry object from a function
   auto r = foo();
-  auto histo2 = r.get("histo").get();
+  auto histo2 = r.get<TH1>("histo").get();
   BOOST_REQUIRE_EQUAL(histo2->GetNbinsX(), 100);
 }
 
@@ -77,17 +77,17 @@ BOOST_AUTO_TEST_CASE(HistogramRegistryExpressionFill)
 
   /// Construct a registry object with direct declaration
   HistogramRegistry registry{
-    "registry", true, {
-                        {"x", "test x", {HistogramType::kTH1F, {{100, 0.0f, 10.0f}}}},                            //
-                        {"xy", "test xy", {HistogramType::kTH2F, {{100, -10.0f, 10.01f}, {100, -10.0f, 10.01f}}}} //
-                      }                                                                                           //
+    "registry", {
+                  {"x", "test x", {HistType::kTH1F, {{100, 0.0f, 10.0f}}}},                            //
+                  {"xy", "test xy", {HistType::kTH2F, {{100, -10.0f, 10.01f}, {100, -10.0f, 10.01f}}}} //
+                }                                                                                      //
   };
 
   /// Fill histogram with expression and table
   registry.fill<test::X>("x", tests, test::x > 3.0f);
-  BOOST_CHECK_EQUAL(registry.get("x")->GetEntries(), 4);
+  BOOST_CHECK_EQUAL(registry.get<TH1>("x")->GetEntries(), 4);
 
   /// Fill histogram with expression and table
   registry.fill<test::X, test::Y>("xy", tests, test::x > 3.0f && test::y > -5.0f);
-  BOOST_CHECK_EQUAL(registry.get("xy")->GetEntries(), 2);
+  BOOST_CHECK_EQUAL(registry.get<TH2>("xy")->GetEntries(), 2);
 }

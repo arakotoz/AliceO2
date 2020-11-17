@@ -110,6 +110,7 @@ class GPUTPCGMMerger : public GPUProcessor
   GPUhdi() unsigned int* TrackOrderAttach() const { return mTrackOrderAttach; }
   GPUhdi() unsigned int* TrackOrderProcess() const { return mTrackOrderProcess; }
   GPUhdi() unsigned int* RetryRefitIds() const { return mRetryRefitIds; }
+  GPUhdi() unsigned char* ClusterStateExt() const { return mClusterStateExt; }
   GPUhdi() GPUTPCGMLoopData* LoopData() const { return mLoopData; }
   GPUhdi() memory* Memory() const { return mMemory; }
   GPUhdi() GPUAtomic(unsigned int) * TmpCounter() { return mMemory->tmpCounter; }
@@ -152,6 +153,7 @@ class GPUTPCGMMerger : public GPUProcessor
   GPUd() void ResolveFindConnectedComponentsHookLinks(int nBlocks, int nThreads, int iBlock, int iThread);
   GPUd() void ResolveFindConnectedComponentsMultiJump(int nBlocks, int nThreads, int iBlock, int iThread);
   GPUd() void ResolveMergeSlices(gputpcgmmergertypes::GPUResolveSharedMemory& smem, int nBlocks, int nThreads, int iBlock, int iThread, char useOrigTrackParam, char mergeAll);
+  GPUd() void MergeLoopers(int nBlocks, int nThreads, int iBlock, int iThread);
 
 #ifndef GPUCA_GPUCODE
   void DumpSliceTracks(std::ostream& out);
@@ -174,7 +176,10 @@ class GPUTPCGMMerger : public GPUProcessor
   void CheckMergedTracks();
 #ifndef GPUCA_GPUCODE
   void PrintMergeGraph(const GPUTPCGMSliceTrack* trk, std::ostream& out);
-  int GetTrackLabel(const GPUTPCGMBorderTrack& trk);
+  template <class T, class S>
+  long int GetTrackLabelA(const S& trk);
+  template <class S>
+  long int GetTrackLabel(const S& trk);
 #endif
 
   GPUdi() int SliceTrackInfoFirst(int iSlice)
@@ -218,6 +223,7 @@ class GPUTPCGMMerger : public GPUProcessor
   GPUAtomic(unsigned int) * mClusterAttachment;
   unsigned int* mTrackOrderAttach;
   unsigned int* mTrackOrderProcess;
+  unsigned char* mClusterStateExt;
   uint4* mTmpMem;
   GPUTPCGMBorderTrack* mBorderMemory; // memory for border tracks
   GPUTPCGMBorderTrack* mBorder[2 * NSLICES];

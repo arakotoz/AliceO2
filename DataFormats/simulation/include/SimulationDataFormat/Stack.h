@@ -177,7 +177,6 @@ class Stack : public FairGenericStack
   /// Clone for worker (used in MT mode only)
   FairGenericStack* CloneStack() const override;
 
-
   // methods concerning track references
   void addTrackReference(const o2::TrackReference& p);
 
@@ -191,8 +190,9 @@ class Stack : public FairGenericStack
     Reset();
     for (auto p : primaries) {
       Int_t doTrack = 0;
-      if (p.TestBit(ParticleStatus::kToBeDone))
+      if (p.TestBit(ParticleStatus::kToBeDone)) {
         doTrack = 1;
+      }
       PushTrack(doTrack, p);
     }
     mNumberOfPrimaryParticles = primaries.size();
@@ -232,9 +232,9 @@ class Stack : public FairGenericStack
 
   /// Array of TParticles (contains all TParticles put into or created
   /// by the transport)
-  std::vector<o2::MCTrack> mParticles; //!
-  std::vector<int> mTransportedIDs;    //! prim + sec trackIDs transported for "current" primary
-  std::vector<int> mIndexOfPrimaries;  //! index of primaries in mParticles
+  std::vector<o2::MCTrack> mParticles;       //!
+  std::vector<int> mTransportedIDs;          //! prim + sec trackIDs transported for "current" primary
+  std::vector<int> mIndexOfPrimaries;        //! index of primaries in mParticles
   std::vector<int> mTrackIDtoParticlesEntry; //! an O(1) mapping of trackID to the entry of mParticles
   // the current TParticle object
   TParticle mCurrentParticle;

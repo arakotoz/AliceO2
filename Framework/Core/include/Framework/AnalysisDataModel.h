@@ -42,6 +42,8 @@ DECLARE_SOA_COLUMN(Timestamp, timestamp, uint64_t);
 
 DECLARE_SOA_TABLE(Timestamps, "AOD", "TIMESTAMPS", timestamp::Timestamp);
 
+using BCsWithTimestamps = soa::Join<aod::BCs, aod::Timestamps>;
+
 namespace collision
 {
 DECLARE_SOA_INDEX_COLUMN(BC, bc);
@@ -84,7 +86,7 @@ DECLARE_SOA_COLUMN(Snp, snp, float);
 DECLARE_SOA_COLUMN(Tgl, tgl, float);
 DECLARE_SOA_COLUMN(Signed1Pt, signed1Pt, float);
 DECLARE_SOA_EXPRESSION_COLUMN(RawPhi, phiraw, float, nasin(aod::track::snp) + aod::track::alpha);
-// FIXME: dynamic column pending inclusion of conditional nodes
+// FIXME: make expression column when conditional nodes are supported in Gandiva
 DECLARE_SOA_DYNAMIC_COLUMN(NormalizedPhi, phi, [](float phi) -> float {
   constexpr float twopi = 2.0f * static_cast<float>(M_PI);
   if (phi < 0)
@@ -100,14 +102,14 @@ DECLARE_SOA_DYNAMIC_COLUMN(Charge, charge, [](float signed1Pt) -> short { return
 DECLARE_SOA_DYNAMIC_COLUMN(Px, px, [](float signed1Pt, float snp, float alpha) -> float {
   auto pt = 1.f / std::abs(signed1Pt);
   float cs, sn;
-  utils::sincosf(alpha, sn, cs);
+  math_utils::sincos(alpha, sn, cs);
   auto r = std::sqrt((1.f - snp) * (1.f + snp));
   return pt * (r * cs - snp * sn);
 });
 DECLARE_SOA_DYNAMIC_COLUMN(Py, py, [](float signed1Pt, float snp, float alpha) -> float {
   auto pt = 1.f / std::abs(signed1Pt);
   float cs, sn;
-  utils::sincosf(alpha, sn, cs);
+  math_utils::sincos(alpha, sn, cs);
   auto r = std::sqrt((1.f - snp) * (1.f + snp));
   return pt * (snp * cs + r * sn);
 });
@@ -153,7 +155,7 @@ DECLARE_SOA_EXPRESSION_COLUMN(C1Pt21Pt2, c1Pt21Pt2, float, aod::track::sigma1Pt*
 
 // TRACKEXTRA TABLE definition
 DECLARE_SOA_COLUMN(TPCInnerParam, tpcInnerParam, float);
-DECLARE_SOA_COLUMN(Flags, flags, uint64_t);
+DECLARE_SOA_COLUMN(Flags, flags, uint32_t);
 DECLARE_SOA_COLUMN(ITSClusterMap, itsClusterMap, uint8_t);
 DECLARE_SOA_COLUMN(TPCNClsFindable, tpcNClsFindable, uint8_t);
 DECLARE_SOA_COLUMN(TPCNClsFindableMinusFound, tpcNClsFindableMinusFound, int8_t);
@@ -176,29 +178,29 @@ DECLARE_SOA_DYNAMIC_COLUMN(TPCNClsCrossedRows, tpcNClsCrossedRows, [](uint8_t tp
 DECLARE_SOA_DYNAMIC_COLUMN(ITSNCls, itsNCls, [](uint8_t itsClusterMap) -> uint8_t {
   uint8_t itsNcls = 0;
   constexpr uint8_t bit = 1;
-  for (int layer = 0; layer < 7; layer++)
+  for (int layer = 0; layer < 7; layer++) {
     if (itsClusterMap & (bit << layer))
       itsNcls++;
+  }
   return itsNcls;
 });
 DECLARE_SOA_DYNAMIC_COLUMN(ITSNClsInnerBarrel, itsNClsInnerBarrel, [](uint8_t itsClusterMap) -> uint8_t {
   uint8_t itsNclsInnerBarrel = 0;
   constexpr uint8_t bit = 1;
-  for (int layer = 0; layer < 3; layer++)
+  for (int layer = 0; layer < 3; layer++) {
     if (itsClusterMap & (bit << layer))
       itsNclsInnerBarrel++;
+  }
   return itsNclsInnerBarrel;
 });
 
 DECLARE_SOA_DYNAMIC_COLUMN(TPCCrossedRowsOverFindableCls, tpcCrossedRowsOverFindableCls,
                            [](uint8_t tpcNClsFindable, int8_t tpcNClsFindableMinusCrossedRows) -> float {
-                             // FIXME: use int16 tpcNClsCrossedRows from dynamic column as argument
                              int16_t tpcNClsCrossedRows = (int16_t)tpcNClsFindable - tpcNClsFindableMinusCrossedRows;
                              return (float)tpcNClsCrossedRows / (float)tpcNClsFindable;
                            });
 
 DECLARE_SOA_DYNAMIC_COLUMN(TPCFractionSharedCls, tpcFractionSharedCls, [](uint8_t tpcNClsShared, uint8_t tpcNClsFindable, int8_t tpcNClsFindableMinusFound) -> float {
-  // FIXME: use tpcNClsFound from dynamic column as argument
   int16_t tpcNClsFound = (int16_t)tpcNClsFindable - tpcNClsFindableMinusFound;
   return (float)tpcNClsShared / (float)tpcNClsFound;
 });
@@ -317,8 +319,7 @@ DECLARE_SOA_COLUMN(ThetaY, thetaY, float);
 DECLARE_SOA_COLUMN(ZMu, zMu, float);
 DECLARE_SOA_COLUMN(BendingCoor, bendingCoor, float);
 DECLARE_SOA_COLUMN(NonBendingCoor, nonBendingCoor, float);
-// FIXME: need to implement array columns...
-// DECLARE_SOA_COLUMN(Covariances, covariances, float[], "fCovariances");
+DECLARE_SOA_COLUMN(Covariances, covariances, float[15]);
 DECLARE_SOA_COLUMN(Chi2, chi2, float);
 DECLARE_SOA_COLUMN(Chi2MatchTrigger, chi2MatchTrigger, float);
 DECLARE_SOA_DYNAMIC_COLUMN(Eta, eta, [](float inverseBendingMomentum, float thetaX, float thetaY) -> float {
@@ -346,6 +347,15 @@ DECLARE_SOA_DYNAMIC_COLUMN(RAtAbsorberEnd, rAtAbsorberEnd, [](float bendingCoor,
   float rAtAbsorberEnd = std::sqrt(xAbs * xAbs + yAbs * yAbs);
   return rAtAbsorberEnd;
 });
+DECLARE_SOA_DYNAMIC_COLUMN(PDca, pDca, [](float inverseBendingMomentum, float thetaX, float thetaY, float bendingCoor, float nonBendingCoor, float zMu) -> float {
+  // linear extrapolation of the coordinates of the track to the position of the end of the absorber (-505 cm)
+  float dca = std::sqrt(bendingCoor * bendingCoor + nonBendingCoor * nonBendingCoor + zMu * zMu);
+  float pz = -std::sqrt(1.0 + std::tan(thetaY) * std::tan(thetaY)) / std::abs(inverseBendingMomentum);
+  float pt = std::abs(pz) * std::sqrt(std::tan(thetaX) * std::tan(thetaX) + std::tan(thetaY) * std::tan(thetaY));
+  float pTot = std::sqrt(pt * pt + pz * pz);
+  float pDca = pTot * dca;
+  return pDca;
+});
 DECLARE_SOA_EXPRESSION_COLUMN(Pt, pt, float, nsqrt(1.0f + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) * nsqrt(ntan(aod::muon::thetaX) * ntan(aod::muon::thetaX) + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) / nabs(aod::muon::inverseBendingMomentum));
 DECLARE_SOA_EXPRESSION_COLUMN(Px, px, float, -1.0f * ntan(aod::muon::thetaX) * nsqrt(1.0f + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) / nabs(aod::muon::inverseBendingMomentum));
 DECLARE_SOA_EXPRESSION_COLUMN(Py, py, float, -1.0f * ntan(aod::muon::thetaY) * nsqrt(1.0f + ntan(aod::muon::thetaY) * ntan(aod::muon::thetaY)) / nabs(aod::muon::inverseBendingMomentum));
@@ -357,10 +367,11 @@ DECLARE_SOA_TABLE_FULL(StoredMuons, "Muons", "AOD", "MUON",
                        muon::BCId, muon::InverseBendingMomentum,
                        muon::ThetaX, muon::ThetaY, muon::ZMu,
                        muon::BendingCoor, muon::NonBendingCoor,
-                       muon::Chi2, muon::Chi2MatchTrigger,
+                       muon::Covariances, muon::Chi2, muon::Chi2MatchTrigger,
                        muon::Eta<muon::InverseBendingMomentum, muon::ThetaX, muon::ThetaY>,
                        muon::Phi<muon::ThetaX, muon::ThetaY>,
                        muon::RAtAbsorberEnd<muon::BendingCoor, muon::NonBendingCoor, muon::ThetaX, muon::ThetaY, muon::ZMu>,
+                       muon::PDca<muon::InverseBendingMomentum, muon::ThetaX, muon::ThetaY, muon::BendingCoor, muon::NonBendingCoor, muon::ZMu>,
                        muon::Charge<muon::InverseBendingMomentum>);
 
 DECLARE_SOA_EXTENDED_TABLE(Muons, StoredMuons, "MUON",
@@ -420,44 +431,56 @@ DECLARE_SOA_TABLE(Zdcs, "AOD", "ZDC", o2::soa::Index<>, zdc::BCId, zdc::EnergyZE
                   zdc::TimeZEM1, zdc::TimeZEM2, zdc::TimeZNA, zdc::TimeZNC, zdc::TimeZPA, zdc::TimeZPC);
 using Zdc = Zdcs::iterator;
 
-namespace ft0
-{
-DECLARE_SOA_INDEX_COLUMN(BC, bc);
-DECLARE_SOA_COLUMN(Amplitude, amplitude, float[208]);
-DECLARE_SOA_COLUMN(TimeA, timeA, float);
-DECLARE_SOA_COLUMN(TimeC, timeC, float);
-DECLARE_SOA_COLUMN(BCSignal, triggerSignal, uint8_t);
-} // namespace ft0
-
-DECLARE_SOA_TABLE(FT0s, "AOD", "FT0", o2::soa::Index<>, ft0::BCId,
-                  ft0::Amplitude, ft0::TimeA, ft0::TimeC,
-                  ft0::BCSignal);
-using FT0 = FT0s::iterator;
-
-namespace fv0
+namespace fv0a
 {
 DECLARE_SOA_INDEX_COLUMN(BC, bc);
 DECLARE_SOA_COLUMN(Amplitude, amplitude, float[48]);
-DECLARE_SOA_COLUMN(TimeA, timeA, float);
-DECLARE_SOA_COLUMN(BCSignal, triggerSignal, uint8_t);
-} // namespace fv0
+DECLARE_SOA_COLUMN(Time, time, float);
+DECLARE_SOA_COLUMN(TriggerMask, triggerMask, uint8_t);
+} // namespace fv0a
 
-DECLARE_SOA_TABLE(FV0s, "AOD", "FV0", o2::soa::Index<>, fv0::BCId,
-                  fv0::Amplitude, fv0::TimeA, fv0::BCSignal);
-using FV0 = FV0s::iterator;
+DECLARE_SOA_TABLE(FV0As, "AOD", "FV0A", o2::soa::Index<>, fv0a::BCId, fv0a::Amplitude, fv0a::Time, fv0a::TriggerMask);
+using FV0A = FV0As::iterator;
+
+// V0C table for Run2 only
+namespace fv0c
+{
+DECLARE_SOA_INDEX_COLUMN(BC, bc);
+DECLARE_SOA_COLUMN(Amplitude, amplitude, float[32]);
+DECLARE_SOA_COLUMN(Time, time, float);
+} // namespace fv0c
+
+DECLARE_SOA_TABLE(FV0Cs, "AOD", "FV0C", o2::soa::Index<>, fv0c::BCId, fv0c::Amplitude, fv0c::Time);
+using FV0C = FV0Cs::iterator;
+
+namespace ft0
+{
+DECLARE_SOA_INDEX_COLUMN(BC, bc);
+DECLARE_SOA_COLUMN(AmplitudeA, amplitudeA, float[96]);
+DECLARE_SOA_COLUMN(AmplitudeC, amplitudeC, float[112]);
+DECLARE_SOA_COLUMN(TimeA, timeA, float);
+DECLARE_SOA_COLUMN(TimeC, timeC, float);
+DECLARE_SOA_COLUMN(TriggerMask, triggerMask, uint8_t);
+} // namespace ft0
+
+DECLARE_SOA_TABLE(FT0s, "AOD", "FT0", o2::soa::Index<>, ft0::BCId,
+                  ft0::AmplitudeA, ft0::AmplitudeC, ft0::TimeA, ft0::TimeC,
+                  ft0::TriggerMask);
+using FT0 = FT0s::iterator;
 
 namespace fdd
 {
 DECLARE_SOA_INDEX_COLUMN(BC, bc);
-DECLARE_SOA_COLUMN(Amplitude, amplitude, float[8]);
+DECLARE_SOA_COLUMN(AmplitudeA, amplitudeA, float[4]);
+DECLARE_SOA_COLUMN(AmplitudeC, amplitudeC, float[4]);
 DECLARE_SOA_COLUMN(TimeA, timeA, float);
 DECLARE_SOA_COLUMN(TimeC, timeC, float);
-DECLARE_SOA_COLUMN(BCSignal, triggerSignal, uint8_t);
+DECLARE_SOA_COLUMN(TriggerMask, triggerMask, uint8_t);
 } // namespace fdd
 
 DECLARE_SOA_TABLE(FDDs, "AOD", "FDD", o2::soa::Index<>, fdd::BCId,
-                  fdd::Amplitude, fdd::TimeA, fdd::TimeC,
-                  fdd::BCSignal);
+                  fdd::AmplitudeA, fdd::AmplitudeC, fdd::TimeA, fdd::TimeC,
+                  fdd::TriggerMask);
 using FDD = FDDs::iterator;
 
 namespace v0
@@ -485,29 +508,6 @@ DECLARE_SOA_TABLE(TransientCascades, "AOD", "CASCADEINDEX", cascade::CollisionId
 
 using Cascades = soa::Join<TransientCascades, StoredCascades>;
 using Cascade = Cascades::iterator;
-
-// ---- LEGACY tables ----
-
-namespace run2v0
-{
-DECLARE_SOA_INDEX_COLUMN(BC, bc);
-DECLARE_SOA_COLUMN(Adc, adc, float[64]);
-DECLARE_SOA_COLUMN(Time, time, float[64]);
-DECLARE_SOA_COLUMN(Width, width, float[64]);
-DECLARE_SOA_COLUMN(MultA, multA, float);
-DECLARE_SOA_COLUMN(MultC, multC, float);
-DECLARE_SOA_COLUMN(TimeA, timeA, float);
-DECLARE_SOA_COLUMN(TimeC, timeC, float);
-DECLARE_SOA_COLUMN(BBFlag, bbFlag, uint64_t);
-DECLARE_SOA_COLUMN(BGFlag, bgFlag, uint64_t);
-} // namespace run2v0
-
-DECLARE_SOA_TABLE(Run2V0s, "RN2", "V0", o2::soa::Index<>, run2v0::BCId,
-                  run2v0::Adc, run2v0::Time, run2v0::Width,
-                  run2v0::MultA, run2v0::MultC,
-                  run2v0::TimeA, run2v0::TimeC,
-                  run2v0::BBFlag, run2v0::BGFlag);
-using Run2V0 = Run2V0s::iterator;
 
 // ---- MC tables ----
 
@@ -549,7 +549,7 @@ DECLARE_SOA_COLUMN(Vy, vy, float);
 DECLARE_SOA_COLUMN(Vz, vz, float);
 DECLARE_SOA_COLUMN(Vt, vt, float);
 DECLARE_SOA_DYNAMIC_COLUMN(Phi, phi, [](float px, float py) -> float { return static_cast<float>(M_PI) + std::atan2(-py, -px); });
-DECLARE_SOA_DYNAMIC_COLUMN(Eta, eta, [](float px, float py, float pz) -> float { return -0.5f * std::log((std::sqrt(px * px + py * py + pz * pz) + pz) / (std::sqrt(px * px + py * py + pz * pz) - pz)); });
+DECLARE_SOA_DYNAMIC_COLUMN(Eta, eta, [](float px, float py, float pz) -> float { return 0.5f * std::log((std::sqrt(px * px + py * py + pz * pz) + pz) / (std::sqrt(px * px + py * py + pz * pz) - pz)); });
 DECLARE_SOA_DYNAMIC_COLUMN(Pt, pt, [](float px, float py) -> float { return std::sqrt(px * px + py * py); });
 DECLARE_SOA_DYNAMIC_COLUMN(ProducedByGenerator, producedByGenerator, [](uint8_t flags) -> bool { return (flags & 0x1) == 0x0; });
 } // namespace mcparticle
@@ -611,19 +611,22 @@ namespace indices
 DECLARE_SOA_INDEX_COLUMN(Collision, collision);
 DECLARE_SOA_INDEX_COLUMN(BC, bc);
 DECLARE_SOA_INDEX_COLUMN(Zdc, zdc);
+DECLARE_SOA_INDEX_COLUMN(FV0A, fv0a);
+DECLARE_SOA_INDEX_COLUMN(FV0C, fv0c);
 DECLARE_SOA_INDEX_COLUMN(FT0, ft0);
-DECLARE_SOA_INDEX_COLUMN(FV0, fv0);
 DECLARE_SOA_INDEX_COLUMN(FDD, fdd);
-DECLARE_SOA_INDEX_COLUMN(Run2V0, run2v0);
 } // namespace indices
 
-#define INDEX_LIST_RUN2 indices::CollisionId, indices::ZdcId, indices::BCId, indices::Run2V0Id
-DECLARE_SOA_INDEX_TABLE(Run2MatchedExclusive, BCs, "MATCHED", INDEX_LIST_RUN2);
-DECLARE_SOA_INDEX_TABLE(Run2MatchedSparse, BCs, "MATCHED", INDEX_LIST_RUN2);
+#define INDEX_LIST_RUN2 indices::CollisionId, indices::ZdcId, indices::BCId, indices::FT0Id, indices::FV0AId, indices::FV0CId, indices::FDDId
+DECLARE_SOA_INDEX_TABLE_EXCLUSIVE(Run2MatchedExclusive, BCs, "MA_RN2_EX", INDEX_LIST_RUN2);
+DECLARE_SOA_INDEX_TABLE(Run2MatchedSparse, BCs, "MA_RN2_SP", INDEX_LIST_RUN2);
 
-#define INDEX_LIST_RUN3 indices::CollisionId, indices::ZdcId, indices::BCId, indices::FT0Id, indices::FV0Id, indices::FDDId
-DECLARE_SOA_INDEX_TABLE(Run3MatchedExclusive, BCs, "MATCHED", INDEX_LIST_RUN3);
-DECLARE_SOA_INDEX_TABLE(Run3MatchedSparse, BCs, "MATCHED", INDEX_LIST_RUN3);
+#define INDEX_LIST_RUN3 indices::CollisionId, indices::ZdcId, indices::BCId, indices::FT0Id, indices::FV0AId, indices::FDDId
+DECLARE_SOA_INDEX_TABLE_EXCLUSIVE(Run3MatchedExclusive, BCs, "MA_RN3_EX", INDEX_LIST_RUN3);
+DECLARE_SOA_INDEX_TABLE(Run3MatchedSparse, BCs, "MA_RN3_SP", INDEX_LIST_RUN3);
+
+DECLARE_SOA_INDEX_TABLE_EXCLUSIVE(BCCollisionsExclusive, BCs, "MA_BCCOL_EX", indices::BCId, indices::CollisionId);
+DECLARE_SOA_INDEX_TABLE(BCCollisionsSparse, BCs, "MA_BCCOL_SP", indices::BCId, indices::CollisionId);
 
 } // namespace aod
 

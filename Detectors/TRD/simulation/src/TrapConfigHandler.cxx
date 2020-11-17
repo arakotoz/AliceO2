@@ -22,7 +22,7 @@
 
 #include "TRDBase/FeeParam.h"
 #include "TRDBase/Tracklet.h"
-#include "TRDBase/TRDGeometry.h"
+#include "TRDBase/Geometry.h"
 #include "TRDBase/CalOnlineGainTables.h"
 #include "TRDBase/PadResponse.h"
 #include "TRDSimulation/TrapConfigHandler.h"
@@ -54,8 +54,9 @@ void TrapConfigHandler::init()
   // I/O configuration which we don't care about
   mTrapConfig->setTrapRegAlloc(TrapConfig::kSEBDOU, TrapConfig::kAllocNone);
   // position look-up table by layer
-  for (int iBin = 0; iBin < 128; iBin++)
+  for (int iBin = 0; iBin < 128; iBin++) {
     mTrapConfig->setTrapRegAlloc((TrapConfig::TrapReg_t)(TrapConfig::kTPL00 + iBin), TrapConfig::kAllocByLayer);
+  }
   // ... individual
   mTrapConfig->setTrapRegAlloc(TrapConfig::kC14CPUA, TrapConfig::kAllocByMCM);
   mTrapConfig->setTrapRegAlloc(TrapConfig::kC15CPUA, TrapConfig::kAllocByMCM);
@@ -64,35 +65,36 @@ void TrapConfigHandler::init()
   for (int iAddr = TrapConfig::mgkDmemStartAddress;
        iAddr < (TrapConfig::mgkDmemWords + TrapConfig::mgkDmemStartAddress); iAddr++) {
 
-    if (iAddr == TrapSimulator::mgkDmemAddrDeflCorr)
+    if (iAddr == TrapSimulator::mgkDmemAddrDeflCorr) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocByMCMinSM);
 
-    else if (iAddr == TrapSimulator::mgkDmemAddrNdrift)
+    } else if (iAddr == TrapSimulator::mgkDmemAddrNdrift) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocByDetector);
 
-    else if ((iAddr >= TrapSimulator::mgkDmemAddrDeflCutStart) && (iAddr <= TrapSimulator::mgkDmemAddrDeflCutEnd))
+    } else if ((iAddr >= TrapSimulator::mgkDmemAddrDeflCutStart) && (iAddr <= TrapSimulator::mgkDmemAddrDeflCutEnd)) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocByMCMinSM);
 
-    else if ((iAddr >= TrapSimulator::mgkDmemAddrTrackletStart) && (iAddr <= TrapSimulator::mgkDmemAddrTrackletEnd))
+    } else if ((iAddr >= TrapSimulator::mgkDmemAddrTrackletStart) && (iAddr <= TrapSimulator::mgkDmemAddrTrackletEnd)) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocByMCM);
 
-    else if ((iAddr >= TrapSimulator::mgkDmemAddrLUTStart) && (iAddr <= TrapSimulator::mgkDmemAddrLUTEnd))
+    } else if ((iAddr >= TrapSimulator::mgkDmemAddrLUTStart) && (iAddr <= TrapSimulator::mgkDmemAddrLUTEnd)) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocGlobal);
 
-    else if (iAddr == TrapSimulator::mgkDmemAddrLUTcor0)
+    } else if (iAddr == TrapSimulator::mgkDmemAddrLUTcor0) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocByMCMinSM);
 
-    else if (iAddr == TrapSimulator::mgkDmemAddrLUTcor1)
+    } else if (iAddr == TrapSimulator::mgkDmemAddrLUTcor1) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocByMCMinSM);
 
-    else if (iAddr == TrapSimulator::mgkDmemAddrLUTnbins)
+    } else if (iAddr == TrapSimulator::mgkDmemAddrLUTnbins) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocGlobal);
 
-    else if (iAddr == TrapSimulator::mgkDmemAddrLUTLength)
+    } else if (iAddr == TrapSimulator::mgkDmemAddrLUTLength) {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocGlobal);
 
-    else
+    } else {
       mTrapConfig->setDmemAlloc(iAddr, TrapConfig::kAllocGlobal);
+    }
   }
   mFeeParam = FeeParam::instance();
 }
@@ -217,10 +219,11 @@ int TrapConfigHandler::loadConfig()
     }
     for (int iBin = 0; iBin < 128; iBin++) {
       int corr = (int)(gr.Eval(iBin)) - iBin;
-      if (corr < 0)
+      if (corr < 0) {
         corr = 0;
-      else if (corr > 31)
+      } else if (corr > 31) {
         corr = 31;
+      }
       for (int iStack = 0; iStack < 540 / 6; iStack++) {
         mTrapConfig->setTrapReg((TrapConfig::TrapReg_t)(TrapConfig::kTPL00 + iBin), corr, 6 * iStack + iLayer);
       }
@@ -279,7 +282,7 @@ int TrapConfigHandler::loadConfig(std::string filename)
 
       if (cmd == mgkScsnCmdWrite) {
         for (int det = 0; det < MAXCHAMBER; det++) {
-          unsigned int rocpos = (1 << (TRDGeometry::getSector(det) + 11)) | (1 << (TRDGeometry::getStack(det) + 6)) | (1 << TRDGeometry::getLayer(det));
+          unsigned int rocpos = (1 << (Geometry::getSector(det) + 11)) | (1 << (Geometry::getStack(det) + 6)) | (1 << Geometry::getLayer(det));
           LOG(debug) << "checking restriction: mask=0x" << hex << std::setw(8) << mRestrictiveMask << " rocpos=0x" << hex << std::setw(8) << rocpos;
           if ((mRestrictiveMask & rocpos) == rocpos) {
             LOG(debug) << "match:"
@@ -307,7 +310,7 @@ int TrapConfigHandler::loadConfig(std::string filename)
         int fullVersion = ((data & 0x7F00) >> 1) | (data & 0x7f);
 
         for (int iDet = 0; iDet < MAXCHAMBER; iDet++) {
-          int smls = (TRDGeometry::getSector(iDet) << 6) | (TRDGeometry::getLayer(iDet) << 3) | TRDGeometry::getStack(iDet);
+          int smls = (Geometry::getSector(iDet) << 6) | (Geometry::getLayer(iDet) << 3) | Geometry::getStack(iDet);
 
           for (int iRob = 0; iRob < 8; iRob++) {
             // HC mergers
@@ -456,7 +459,7 @@ void TrapConfigHandler::configureDyCorr(int det)
     return;
   }
 
-  int nRobs = TRDGeometry::getStack(det) == 2 ? 6 : 8;
+  int nRobs = Geometry::getStack(det) == 2 ? 6 : 8;
 
   for (int r = 0; r < nRobs; r++) {
     for (int m = 0; m < 16; m++) {
@@ -481,7 +484,7 @@ void TrapConfigHandler::configureDRange(int det)
     return;
   }
 
-  int nRobs = TRDGeometry::getStack(det) == 2 ? 6 : 8;
+  int nRobs = Geometry::getStack(det) == 2 ? 6 : 8;
 
   int dyMinInt;
   int dyMaxInt;
@@ -549,13 +552,14 @@ void TrapConfigHandler::configurePIDcorr(int det)
   unsigned int cor1;
   int readoutboard;
   int mcm;
-  // int nRobs = TRDGeometry::getStack(det) == 2 ? 6 : 8;
+  // int nRobs = Geometry::getStack(det) == 2 ? 6 : 8;
   int MaxRows;
   FeeParam* feeparam = FeeParam::instance();
-  if (TRDGeometry::getStack(det) == 2)
+  if (Geometry::getStack(det) == 2) {
     MaxRows = NROWC0;
-  else
+  } else {
     MaxRows = NROWC1;
+  }
   int MaxCols = NCOLUMN;
   for (int row = 0; row < MaxRows; row++) { //TODO put this back to rob/mcm and not row/col as done in TrapSimulator
     for (int col = 0; col < MaxCols; col++) {
@@ -563,10 +567,11 @@ void TrapConfigHandler::configurePIDcorr(int det)
       mcm = feeparam->getMCMfromPad(row, col);
       int dest = 1 << 10 | readoutboard << 7 | mcm;
       //TODO impelment a method for determining if gaintables are valid, used to be if pointer was valid.
-      if (mGtbl.getMCMGain(det, row, col) != 0.0) //TODO check this logic there might be problems here.
+      if (mGtbl.getMCMGain(det, row, col) != 0.0) { //TODO check this logic there might be problems here.
         mFeeParam->getCorrectionFactors(det, readoutboard, mcm, 9, cor0, cor1, mGtbl.getMCMGain(det, row, col));
-      else
+      } else {
         mFeeParam->getCorrectionFactors(det, readoutboard, mcm, 9, cor0, cor1);
+      }
       addValues(det, mgkScsnCmdWrite, dest, addrLUTcor0, cor0);
       addValues(det, mgkScsnCmdWrite, dest, addrLUTcor1, cor1);
     }
@@ -588,7 +593,7 @@ bool TrapConfigHandler::addValues(unsigned int det, unsigned int cmd, unsigned i
   }
 
   TrapConfig::TrapReg_t mcmReg = mTrapConfig->getRegByAddress(addr);
-  int rocType = TRDGeometry::getStack(det) == 2 ? 0 : 1;
+  int rocType = Geometry::getStack(det) == 2 ? 0 : 1;
 
   static const int mcmListSize = 40; // 40 is more or less arbitrary
   int mcmList[mcmListSize];
@@ -620,10 +625,11 @@ bool TrapConfigHandler::addValues(unsigned int det, unsigned int cmd, unsigned i
       if (FeeParam::extAliToAli(extali, linkPair, rocType, mcmList, mcmListSize) != 0) {
         int i = 0;
         while (i < mcmListSize && mcmList[i] != -1) {
-          if (mcmList[i] == 127)
+          if (mcmList[i] == 127) {
             mTrapConfig->setDmem(addr, data, det, 0, 127);
-          else
+          } else {
             mTrapConfig->setDmem(addr, data, det, mcmList[i] >> 7, mcmList[i] & 0x7f);
+          }
           i++;
         }
       }

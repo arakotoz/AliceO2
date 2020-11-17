@@ -25,5 +25,9 @@ o2_add_library(TOFWorkflowUtils
 o2_add_executable(entropy-encoder-workflow
                   SOURCES src/entropy-encoder-workflow.cxx
                   COMPONENT_NAME tof
-                  PUBLIC_LINK_LIBRARIES O2::TOFWorkflow)
+                  PUBLIC_LINK_LIBRARIES O2::TOFWorkflowUtils)
 
+o2_add_executable(digit-writer-workflow
+                  SOURCES src/digit-writer-commissioning.cxx
+                  COMPONENT_NAME tof
+                  PUBLIC_LINK_LIBRARIES O2::TOFWorkflowUtils)

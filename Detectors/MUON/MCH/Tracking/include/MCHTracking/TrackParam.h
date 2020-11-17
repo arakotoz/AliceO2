@@ -16,6 +16,7 @@
 #ifndef ALICEO2_MCH_TRACKPARAM_H_
 #define ALICEO2_MCH_TRACKPARAM_H_
 
+#include <memory> // for std::unique_ptr
 #include <TMatrixD.h>
 
 #include "MCHBase/TrackBlock.h"
@@ -32,6 +33,8 @@ class TrackParam
 {
  public:
   TrackParam() = default;
+  TrackParam(Double_t z, const Double_t param[5]);
+  TrackParam(Double_t z, const Double_t param[5], const Double_t cov[15]);
   ~TrackParam() = default;
 
   TrackParam(const TrackParam& tp);
@@ -68,14 +71,17 @@ class TrackParam
   /// set the charge (assumed forward motion)
   void setCharge(Double_t charge)
   {
-    if (charge * mParameters(4, 0) < 0.)
+    if (charge * mParameters(4, 0) < 0.) {
       mParameters(4, 0) *= -1.;
+    }
   }
 
   /// return track parameters
   const TMatrixD& getParameters() const { return mParameters; }
   /// set track parameters
   void setParameters(const TMatrixD& parameters) { mParameters = parameters; }
+  /// set track parameters from the array
+  void setParameters(const Double_t parameters[5]) { mParameters.SetMatrixArray(parameters); }
   /// add track parameters
   void addParameters(const TMatrixD& parameters) { mParameters += parameters; }
 
@@ -89,8 +95,8 @@ class TrackParam
 
   const TMatrixD& getCovariances() const;
   void setCovariances(const TMatrixD& covariances);
-  void setCovariances(const Double_t matrix[5][5]);
-  void setVariances(const Double_t matrix[5][5]);
+  void setCovariances(const Double_t covariances[15]);
+  void setVariances(const Double_t covariances[15]);
   void deleteCovariances();
 
   const TMatrixD& getPropagator() const;

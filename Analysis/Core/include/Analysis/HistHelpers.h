@@ -31,11 +31,7 @@
 
 #include "Framework/Logger.h"
 
-namespace o2
-{
-namespace experimental
-{
-namespace histhelpers
+namespace o2::experimental::histhelpers
 {
 
 template <typename T>
@@ -62,18 +58,16 @@ class HistContainer : private RootContainer
   }
   HistContainer(const HistContainer& other)
   {
-    // pseudo copy ctor to move around empty collection on construction (no real copy constructor!)
-    // this is needed to be able to put this in OutputObj
-    // Memo: default copy ctor does not work for TList based collections since
-    //       their copy constructor is implicitly deleted as opposed to TObjArrays
+    // pseudo copy ctor to move around empty collection on construction (e.g. when put in OutputObj)
+    // this is needed to make HistContainer also work with TLists since these dont have a copy constructor (as opposed to TObjArrays)
     RootContainer::SetOwner(false);
     RootContainer::SetName(other.GetName());
   }
 
   using HistType = std::variant<std::shared_ptr<THn>, std::shared_ptr<THnSparse>, std::shared_ptr<TH3>, std::shared_ptr<TH2>, std::shared_ptr<TH1>, std::shared_ptr<TProfile3D>, std::shared_ptr<TProfile2D>, std::shared_ptr<TProfile>>;
 
-  template <typename T>
-  void Add(uint8_t histID, T&& hist)
+  template <uint8_t histID, typename T>
+  void Add(T&& hist)
   {
     if (mHistos.find(histID) != mHistos.end()) {
       LOGF(WARNING, "HistContainer %s already holds a histogram at histID = %d. Overriding it now...", RootContainer::GetName(), histID);
@@ -84,11 +78,11 @@ class HistContainer : private RootContainer
     // if shared pointers or rvalue raw pointers are provided as argument, the existing object is used
     // otherwise the existing object is copied
     std::optional<HistType> histVariant{};
-    if constexpr (is_shared_ptr<T>::value)
+    if constexpr (is_shared_ptr<typename std::remove_reference<T>::type>::value) {
       histVariant = GetHistVariant(hist);
-    else if constexpr (std::is_pointer_v<T> && std::is_rvalue_reference_v<decltype(std::forward<T>(hist))>)
+    } else if constexpr (std::is_pointer_v<T> && std::is_rvalue_reference_v<decltype(std::forward<T>(hist))>) {
       histVariant = GetHistVariant(std::shared_ptr<std::remove_pointer_t<T>>(hist));
-    else {
+    } else {
       histVariant = GetHistVariant(std::make_shared<T>(hist));
     }
     if (histVariant) {
@@ -111,15 +105,15 @@ class HistContainer : private RootContainer
   }
 
   // fill histogram or profile with arguments x,y,z,... and weight if requested
-  template <bool fillWeight = false, typename... Ts>
-  void Fill(uint8_t histID, Ts&&... position)
+  template <uint8_t histID, bool fillWeight = false, typename... Ts>
+  void Fill(Ts&&... position)
   {
     std::visit([this, &position...](auto&& hist) { GenericFill<fillWeight>(hist, std::forward<Ts>(position)...); }, mHistos[histID]);
   }
-  template <typename... Ts>
-  void FillWeight(uint8_t histID, Ts&&... positionAndWeight)
+  template <uint8_t histID, typename... Ts>
+  void FillWeight(Ts&&... positionAndWeight)
   {
-    Fill<true>(histID, std::forward<Ts>(positionAndWeight)...);
+    Fill<histID, true>(std::forward<Ts>(positionAndWeight)...);
   }
 
   // make accessible only the RootContainer functions needed for writing to file
@@ -151,10 +145,11 @@ class HistContainer : private RootContainer
       // savety check for n dimensional histograms (runtime overhead)
       // if (hist->GetNdimensions() != sizeof...(position) - fillWeight) return;
       double tempArray[] = {static_cast<double>(position)...};
-      if constexpr (fillWeight)
+      if constexpr (fillWeight) {
         hist->Fill(tempArray, tempArray[sizeof...(Ts) - 1]);
-      else
+      } else {
         hist->Fill(tempArray);
+      }
     }
   }
 
@@ -176,8 +171,8 @@ class HistContainer : private RootContainer
   }
   std::optional<HistType> GetHistVariant(std::shared_ptr<TObject> obj)
   {
-    // Remember: TProfile3D is TH3, TProfile2D is TH2, TH3 is TH1, TH2 is TH1, TProfile is TH1
     if (obj) {
+      // TProfile3D is TH3, TProfile2D is TH2, TH3 is TH1, TH2 is TH1, TProfile is TH1
       return GetHistVariant<THn, THnSparse, TProfile3D, TH3, TProfile2D, TH2, TProfile, TH1>(obj);
     }
     return std::nullopt;
@@ -203,11 +198,11 @@ struct Axis {
   std::optional<int> nBins{};
 };
 
-template <typename RootHistType>
 class Hist
 {
  public:
   Hist() : mAxes{} {}
+  Hist(const std::vector<Axis>& axes) : mAxes{axes} {}
 
   void AddAxis(const Axis& axis)
   {
@@ -232,8 +227,7 @@ class Hist
   }
 
   // add axes defined in other Hist object
-  template <typename T>
-  void AddAxes(const Hist<T>& other)
+  void AddAxes(const Hist& other)
   {
     mAxes.insert(mAxes.end(), other.GetAxes().begin(), other.GetAxes().end());
   }
@@ -244,16 +238,18 @@ class Hist
   }
 
   // create histogram with the defined axes
+  template <typename RootHistType>
   std::shared_ptr<RootHistType> Create(const std::string& name, bool useWeights = false)
   {
     const std::size_t MAX_DIM{10};
     const std::size_t nAxes{mAxes.size()};
-    if (nAxes == 0 || nAxes > MAX_DIM)
+    if (nAxes == 0 || nAxes > MAX_DIM) {
       return nullptr;
+    }
 
     int nBins[MAX_DIM]{0};
-    double lowerBounds[MAX_DIM]{0.0};
-    double upperBounds[MAX_DIM]{0.0};
+    double lowerBounds[MAX_DIM]{0.};
+    double upperBounds[MAX_DIM]{0.};
 
     // first figure out number of bins and dimensions
     std::string title = "[ ";
@@ -262,14 +258,15 @@ class Hist
       lowerBounds[i] = mAxes[i].binEdges.front();
       upperBounds[i] = mAxes[i].binEdges.back();
       title += mAxes[i].name;
-      if (i < nAxes - 1)
+      if (i < nAxes - 1) {
         title += " : ";
-      else
+      } else {
         title += " ]";
+      }
     }
 
     // create histogram
-    std::shared_ptr<RootHistType> hist(HistFactory(name, title, nAxes, nBins, lowerBounds, upperBounds));
+    std::shared_ptr<RootHistType> hist(HistFactory<RootHistType>(name, title, nAxes, nBins, lowerBounds, upperBounds));
 
     if (!hist) {
       LOGF(FATAL, "The number of specified dimensions does not match the type.");
@@ -281,8 +278,9 @@ class Hist
       TAxis* axis{GetAxis(i, hist)};
       if (axis) {
         axis->SetTitle(mAxes[i].title.data());
-        if constexpr (std::is_base_of_v<THnBase, RootHistType>)
+        if constexpr (std::is_base_of_v<THnBase, RootHistType>) {
           axis->SetName((std::to_string(i) + "-" + mAxes[i].name).data());
+        }
 
         // move the bin edges in case a variable binning was requested
         if (!mAxes[i].nBins) {
@@ -294,8 +292,9 @@ class Hist
         }
       }
     }
-    if (useWeights)
+    if (useWeights) {
       hist->Sumw2();
+    }
     return hist;
   }
 
@@ -304,6 +303,7 @@ class Hist
  private:
   std::vector<Axis> mAxes;
 
+  template <typename RootHistType>
   RootHistType* HistFactory(const std::string& name, const std::string& title, const std::size_t nDim,
                             const int nBins[], const double lowerBounds[], const double upperBounds[])
   {
@@ -326,6 +326,7 @@ class Hist
     return nullptr;
   }
 
+  template <typename RootHistType>
   TAxis* GetAxis(const int i, std::shared_ptr<RootHistType> hist)
   {
     if constexpr (std::is_base_of_v<THnBase, RootHistType>) {
@@ -337,8 +338,6 @@ class Hist
   }
 };
 
-} // namespace histhelpers
-} // namespace experimental
-} // namespace o2
+} // namespace o2::experimental::histhelpers
 
 #endif

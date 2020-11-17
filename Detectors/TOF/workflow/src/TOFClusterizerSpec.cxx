@@ -8,7 +8,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#include "TOFWorkflow/TOFClusterizerSpec.h"
+#include "TOFWorkflowUtils/TOFClusterizerSpec.h"
 #include "Framework/ControlService.h"
 #include "Framework/DataProcessorSpec.h"
 #include "Framework/DataRefUtils.h"
@@ -32,6 +32,7 @@
 #include "DetectorsRaw/HBFUtils.h"
 
 using namespace o2::framework;
+using namespace o2::dataformats;
 
 namespace o2
 {
@@ -42,7 +43,6 @@ namespace tof
 // just need to implement 2 special methods init + run (there is no need to inherit from anything)
 class TOFDPLClustererTask
 {
-  using MCLabelContainer = o2::dataformats::MCTruthContainer<o2::MCCompLabel>;
   bool mUseMC = true;
   bool mUseCCDB = false;
 
@@ -121,8 +121,9 @@ class TOFDPLClustererTask
       mReader.setDigitArray(&digitsRO);
       if (mUseMC) {
         mClusterer.process(mReader, mClustersArray, &(labelvector->at(i)));
-      } else
+      } else {
         mClusterer.process(mReader, mClustersArray, nullptr);
+      }
     }
     LOG(INFO) << "TOF CLUSTERER : TRANSFORMED " << digits.size()
               << " DIGITS TO " << mClustersArray.size() << " CLUSTERS";
@@ -130,8 +131,9 @@ class TOFDPLClustererTask
     // send clusters
     pc.outputs().snapshot(Output{o2::header::gDataOriginTOF, "CLUSTERS", 0, Lifetime::Timeframe}, mClustersArray);
     // send labels
-    if (mUseMC)
+    if (mUseMC) {
       pc.outputs().snapshot(Output{o2::header::gDataOriginTOF, "CLUSTERSMCTR", 0, Lifetime::Timeframe}, mClsLabels);
+    }
 
     mTimer.Stop();
   }

@@ -20,8 +20,8 @@
 #include <iostream>
 #include <tuple>
 #include <vector>
-#include <string>
 #include "qconfig.h"
+#include "qconfig_helpers.h"
 
 // Create config instances
 #define QCONFIG_INSTANCE
@@ -499,9 +499,9 @@ static inline int qConfigParse(int argc, const char** argv, const char* /*filena
 // Main parse function called from outside
 int qConfigParse(int argc, const char** argv, const char* filename) { return (qConfig::qConfigParse(argc, argv, filename)); }
 
-// Print current config settings
 void qConfigPrint()
 {
+  std::string blockName;
 #define QCONFIG_PRINT
 #include "qconfig.h"
 #undef QCONFIG_PRINT

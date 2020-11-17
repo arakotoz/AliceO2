@@ -17,16 +17,18 @@
 using namespace GPUCA_NAMESPACE::gpu;
 using namespace GPUCA_NAMESPACE::gpu::tpccf;
 
-GPUd() void ClusterAccumulator::toNative(const ChargePos& pos, Charge q, tpc::ClusterNative& cn) const
+GPUd() void ClusterAccumulator::toNative(const ChargePos& pos, Charge q, int minSplitNum, tpc::ClusterNative& cn) const
 {
   bool isEdgeCluster = CfUtils::isAtEdge(pos);
-  bool wasSplitInTime = mSplitInTime >= MIN_SPLIT_NUM;
-  bool wasSplitInPad = mSplitInPad >= MIN_SPLIT_NUM;
+  bool wasSplitInTime = mSplitInTime >= minSplitNum;
+  bool wasSplitInPad = mSplitInPad >= minSplitNum;
+  bool isSingleCluster = (mPadSigma == 0) || (mTimeSigma == 0);
 
   uchar flags = 0;
   flags |= (isEdgeCluster) ? tpc::ClusterNative::flagEdge : 0;
   flags |= (wasSplitInTime) ? tpc::ClusterNative::flagSplitTime : 0;
   flags |= (wasSplitInPad) ? tpc::ClusterNative::flagSplitPad : 0;
+  flags |= (isSingleCluster) ? tpc::ClusterNative::flagSingle : 0;
 
   cn.qMax = q;
   cn.qTot = mQtot;

@@ -24,8 +24,22 @@ namespace tof
 
 class WindowFiller
 {
-
  public:
+  struct PatternData {
+    uint32_t pattern;
+    int icrate;
+
+    unsigned long row;
+
+    PatternData(uint32_t patt = 0, int icr = 0, unsigned long rw = 0) : pattern(patt), icrate(icr), row(rw) {}
+  };
+
+  struct CrateHeaderData {
+    int32_t bc[Geo::kNCrate] = {-1};
+    uint32_t eventCounter[Geo::kNCrate] = {0};
+    CrateHeaderData() { memset(bc, -1, Geo::kNCrate * 4); }
+  };
+
   WindowFiller() { initObj(); };
   ~WindowFiller() = default;
 
@@ -33,8 +47,8 @@ class WindowFiller
 
   void reset();
 
-  Int_t getCurrentReadoutWindow() const { return mReadoutWindowCurrent; }
-  void setCurrentReadoutWindow(Double_t value) { mReadoutWindowCurrent = value; }
+  uint64_t getCurrentReadoutWindow() const { return mReadoutWindowCurrent; }
+  void setCurrentReadoutWindow(uint64_t value) { mReadoutWindowCurrent = value; }
   void setEventTime(InteractionTimeRecord value)
   {
     mEventTime = value;
@@ -42,6 +56,8 @@ class WindowFiller
 
   std::vector<Digit>* getDigitPerTimeFrame() { return &mDigitsPerTimeFrame; }
   std::vector<ReadoutWindowData>* getReadoutWindowData() { return &mReadoutWindowData; }
+  std::vector<ReadoutWindowData>* getReadoutWindowDataFiltered() { return &mReadoutWindowDataFiltered; }
+  DigitHeader& getDigitHeader() { return mDigitHeader; }
 
   void fillOutputContainer(std::vector<Digit>& digits);
   void flushOutputContainer(std::vector<Digit>& digits); // flush all residual buffered data
@@ -52,14 +68,29 @@ class WindowFiller
 
   void setFirstIR(const o2::InteractionRecord& ir) { mFirstIR = ir; }
 
+  void maskNoiseRate(int val) { mMaskNoiseRate = val; }
+
+  void clearCounts()
+  {
+    memset(mChannelCounts, 0, o2::tof::Geo::NCHANNELS * sizeof(mChannelCounts[0]));
+  }
+
+  std::vector<uint32_t>& getPatterns() { return mPatterns; }
+  void addPattern(const uint32_t val, int icrate, int orbit, int bc) { mCratePatterns.emplace_back(val, icrate, orbit * 3 + (bc + 100) / Geo::BC_IN_WINDOW); }
+  void addCrateHeaderData(unsigned long orbit, int crate, int32_t bc, uint32_t eventCounter);
+
  protected:
   // info TOF timewindow
-  Int_t mReadoutWindowCurrent = 0;
+  uint64_t mReadoutWindowCurrent = 0;
   InteractionRecord mFirstIR{0, 0}; // reference IR (1st IR of the timeframe)
   InteractionTimeRecord mEventTime;
 
   bool mContinuous = true;
   bool mFutureToBeSorted = false;
+
+  // only needed from Decoder
+  int mMaskNoiseRate = -1;
+  int mChannelCounts[o2::tof::Geo::NCHANNELS]; // count of channel hits in the current TF (if MaskNoiseRate enabled)
 
   // digit info
   //std::vector<Digit>* mDigits;
@@ -68,6 +99,7 @@ class WindowFiller
 
   std::vector<Digit> mDigitsPerTimeFrame;
   std::vector<ReadoutWindowData> mReadoutWindowData;
+  std::vector<ReadoutWindowData> mReadoutWindowDataFiltered;
 
   int mIcurrentReadoutWindow = 0;
 
@@ -78,6 +110,14 @@ class WindowFiller
 
   // arrays with digit and MCLabels out of the current readout windows (stored to fill future readout window)
   std::vector<Digit> mFutureDigits;
+
+  std::vector<uint32_t> mPatterns;
+  std::vector<uint64_t> mErrors;
+
+  std::vector<PatternData> mCratePatterns;
+  std::vector<CrateHeaderData> mCrateHeaderData;
+
+  DigitHeader mDigitHeader;
 
   void fillDigitsInStrip(std::vector<Strip>* strips, int channel, int tdc, int tot, uint64_t nbc, UInt_t istrip, uint32_t triggerorbit = 0, uint16_t triggerbunch = 0);
   //  void fillDigitsInStrip(std::vector<Strip>* strips, o2::dataformats::MCTruthContainer<o2::tof::MCLabel>* mcTruthContainer, int channel, int tdc, int tot, int nbc, UInt_t istrip, Int_t trackID, Int_t eventID, Int_t sourceID);
@@ -108,7 +148,7 @@ class WindowFiller
     return true;
   }
 
-  ClassDefNV(WindowFiller, 1);
+  ClassDefNV(WindowFiller, 2);
 };
 } // namespace tof
 } // namespace o2

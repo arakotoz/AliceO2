@@ -10,7 +10,7 @@
 
 /// @brief  Processor spec for a ROOT file writer for TOF digits
 
-#include "TOFWorkflow/TOFDigitWriterSpec.h"
+#include "TOFWorkflowUtils/TOFDigitWriterSpec.h"
 #include "DPLUtils/MakeRootTreeWriterSpec.h"
 #include "SimulationDataFormat/MCCompLabel.h"
 #include "SimulationDataFormat/MCTruthContainer.h"
@@ -27,10 +27,12 @@ using BranchDefinition = MakeRootTreeWriterSpec::BranchDefinition<T>;
 using OutputType = std::vector<o2::tof::Digit>;
 using ReadoutWinType = std::vector<o2::tof::ReadoutWindowData>;
 using PatternType = std::vector<uint32_t>;
+using ErrorType = std::vector<uint64_t>;
 using LabelsType = std::vector<o2::dataformats::MCTruthContainer<o2::MCCompLabel>>;
+using HeaderType = o2::tof::DigitHeader;
 using namespace o2::header;
 
-DataProcessorSpec getTOFDigitWriterSpec(bool useMC)
+DataProcessorSpec getTOFDigitWriterSpec(bool useMC, bool writeErr)
 {
   auto nCalls = std::make_shared<int>();
   *nCalls = 0;
@@ -46,15 +48,19 @@ DataProcessorSpec getTOFDigitWriterSpec(bool useMC)
   auto preprocessor = [nCalls](ProcessingContext&) {
     (*nCalls)++;
   };
+  auto loggerH = [nCalls](HeaderType const& indata) {
+  };
   auto logger = [nCalls](OutputType const& indata) {
-    LOG(INFO) << "Call " << *nCalls;
-    LOG(INFO) << "RECEIVED DIGITS SIZE " << indata.size();
+    //    LOG(INFO) << "RECEIVED DIGITS SIZE " << indata.size();
   };
   auto loggerROW = [nCalls](ReadoutWinType const& row) {
-    LOG(INFO) << "RECEIVED READOUT WINDOWS " << row.size();
+    //    LOG(INFO) << "RECEIVED READOUT WINDOWS " << row.size();
   };
   auto loggerPatterns = [nCalls](PatternType const& patterns) {
-    LOG(INFO) << "RECEIVED PATTERNS " << patterns.size();
+    //    LOG(INFO) << "RECEIVED PATTERNS " << patterns.size();
+  };
+  auto loggerErrors = [nCalls](ErrorType const& errors) {
+    //    LOG(INFO) << "RECEIVED PATTERNS " << patterns.size();
   };
   return MakeRootTreeWriterSpec("TOFDigitWriter",
                                 "tofdigits.root",
@@ -62,6 +68,11 @@ DataProcessorSpec getTOFDigitWriterSpec(bool useMC)
                                 // the preprocessor only increments the call count, we keep this functionality
                                 // of the original implementation
                                 MakeRootTreeWriterSpec::Preprocessor{preprocessor},
+                                BranchDefinition<HeaderType>{InputSpec{"digitheader", gDataOriginTOF, "DIGITHEADER", 0},
+                                                             "TOFHeader",
+                                                             "tofdigitheader-branch-name",
+                                                             1,
+                                                             loggerH},
                                 BranchDefinition<OutputType>{InputSpec{"digits", gDataOriginTOF, "DIGITS", 0},
                                                              "TOFDigit",
                                                              "tofdigits-branch-name",
@@ -77,6 +88,11 @@ DataProcessorSpec getTOFDigitWriterSpec(bool useMC)
                                                               "patterns-branch-name",
                                                               1,
                                                               loggerPatterns},
+                                BranchDefinition<ErrorType>{InputSpec{"errors", gDataOriginTOF, "ERRORS", 0},
+                                                            "TOFErrors",
+                                                            "errors-branch-name",
+                                                            (writeErr ? 1 : 0), // one branch if mc labels enabled
+                                                            loggerErrors},
                                 BranchDefinition<LabelsType>{InputSpec{"labels", gDataOriginTOF, "DIGITSMCTR", 0},
                                                              "TOFDigitMCTruth",
                                                              (useMC ? 1 : 0), // one branch if mc labels enabled

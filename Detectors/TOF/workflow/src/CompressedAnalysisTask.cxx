@@ -13,7 +13,7 @@
 /// @since  2020-09-04
 /// @brief  TOF compressed data analysis task
 
-#include "TOFWorkflow/CompressedAnalysisTask.h"
+#include "TOFWorkflowUtils/CompressedAnalysisTask.h"
 #include "Framework/Task.h"
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/ControlService.h"
@@ -49,7 +49,7 @@ void CompressedAnalysisTask::init(InitContext& ic)
     return;
   }
 
-  mAnalysis = GetFromMacro<CompressedAnalysis*>(filename, function, "CompressedAnalysis*", "compressed_analysis");
+  mAnalysis = GetFromMacro<CompressedAnalysis*>(filename, function, "o2::tof::CompressedAnalysis*", "compressed_analysis");
   if (!mAnalysis) {
     LOG(ERROR) << "Could not retrieve analysis from file: " << filename;
     mStatus = true;
@@ -77,8 +77,9 @@ void CompressedAnalysisTask::run(ProcessingContext& pc)
 
   /** loop over inputs routes **/
   for (auto iit = pc.inputs().begin(), iend = pc.inputs().end(); iit != iend; ++iit) {
-    if (!iit.isValid())
+    if (!iit.isValid()) {
       continue;
+    }
 
     /** loop over input parts **/
     for (auto const& ref : iit) {

@@ -10,9 +10,6 @@
 
 o2_add_library(AnalysisDataModel
                SOURCES src/ParamBase.cxx
-                       src/DetectorResponse.cxx
-                       src/PIDTOF.cxx
-                       src/PIDTPC.cxx
                PRIVATE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_LIST_DIR}/src
                PUBLIC_LINK_LIBRARIES O2::Framework O2::ReconstructionDataFormats O2::TPCSimulation
               )
@@ -46,7 +43,7 @@ install(FILES
 
 o2_add_executable(aod-data-model-graph
                   SOURCES src/aodDataModelGraph.cxx
-                  PUBLIC_LINK_LIBRARIES O2::Framework O2::AnalysisDataModel
+                  PUBLIC_LINK_LIBRARIES O2::Framework O2::AnalysisDataModel O2::AnalysisCore
                  )
 
 o2_add_executable(pidparam-tpc-bethe-bloch

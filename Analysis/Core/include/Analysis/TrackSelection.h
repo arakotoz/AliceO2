@@ -26,6 +26,27 @@ class TrackSelection
  public:
   TrackSelection() = default;
 
+  enum class TrackCuts : int {
+    kTrackType = 0,
+    kPtRange,
+    kEtaRange,
+    kTPCNCls,
+    kTPCCrossedRows,
+    kTPCCrossedRowsOverNCls,
+    kTPCChi2NDF,
+    kTPCRefit,
+    kITSNCls,
+    kITSChi2NDF,
+    kITSRefit,
+    kITSHits,
+    kGoldenChi2,
+    kDCAxy,
+    kDCAz,
+    kNCuts
+  };
+
+  static const std::string mCutNames[static_cast<int>(TrackCuts::kNCuts)];
+
   // Temporary function to check if track passes selection criteria. To be replaced by framework filters.
   template <typename T>
   bool IsSelected(T const& track)
@@ -39,15 +60,55 @@ class TrackSelection
         (track.itsNCls() >= mMinNClustersITS) &&
         (track.itsChi2NCl() <= mMaxChi2PerClusterITS) &&
         (track.tpcChi2NCl() <= mMaxChi2PerClusterTPC) &&
-        ((mRequireITSRefit) ? (track.flags() & 0x4) : true) &&
-        ((mRequireTPCRefit) ? (track.flags() & 0x40) : true) &&
-        ((mRequireTOF) ? ((track.flags() & 0x2000) && (track.flags() & 0x80000000)) : true) &&
+        ((mRequireITSRefit) ? (track.flags() & o2::aod::track::ITSrefit) : true) &&
+        ((mRequireTPCRefit) ? (track.flags() & o2::aod::track::TPCrefit) : true) &&
+        ((mRequireGoldenChi2) ? (track.flags() & o2::aod::track::GoldenChi2) : true) &&
         FulfillsITSHitRequirements(track.itsClusterMap()) &&
         abs(track.dcaXY()) <= ((mMaxDcaXYPtDep) ? mMaxDcaXYPtDep(track.pt()) : mMaxDcaXY) &&
         abs(track.dcaZ()) <= mMaxDcaZ) {
       return true;
     } else {
       return false;
+    }
+  }
+
+  // Temporary function to check if track passes a given selection criteria. To be replaced by framework filters.
+  template <typename T>
+  bool IsSelected(T const& track, const TrackCuts& cut)
+  {
+    switch (cut) {
+      case TrackCuts::kTrackType:
+        return track.trackType() == mTrackType;
+      case TrackCuts::kPtRange:
+        return track.pt() >= mMinPt && track.pt() <= mMaxPt;
+      case TrackCuts::kEtaRange:
+        return track.eta() >= mMinEta && track.eta() <= mMaxEta;
+      case TrackCuts::kTPCNCls:
+        return track.tpcNClsFound() >= mMinNClustersTPC;
+      case TrackCuts::kTPCCrossedRows:
+        return track.tpcNClsCrossedRows() >= mMinNCrossedRowsTPC;
+      case TrackCuts::kTPCCrossedRowsOverNCls:
+        return track.tpcCrossedRowsOverFindableCls() >= mMinNCrossedRowsOverFindableClustersTPC;
+      case TrackCuts::kTPCChi2NDF:
+        return track.itsNCls() >= mMinNClustersITS;
+      case TrackCuts::kTPCRefit:
+        return track.itsChi2NCl() <= mMaxChi2PerClusterITS;
+      case TrackCuts::kITSNCls:
+        return track.tpcChi2NCl() <= mMaxChi2PerClusterTPC;
+      case TrackCuts::kITSChi2NDF:
+        return (mRequireITSRefit) ? (track.flags() & o2::aod::track::ITSrefit) : true;
+      case TrackCuts::kITSRefit:
+        return (mRequireTPCRefit) ? (track.flags() & o2::aod::track::TPCrefit) : true;
+      case TrackCuts::kITSHits:
+        return (mRequireGoldenChi2) ? (track.flags() & o2::aod::track::GoldenChi2) : true;
+      case TrackCuts::kGoldenChi2:
+        return FulfillsITSHitRequirements(track.itsClusterMap());
+      case TrackCuts::kDCAxy:
+        return abs(track.dcaXY()) <= ((mMaxDcaXYPtDep) ? mMaxDcaXYPtDep(track.pt()) : mMaxDcaXY);
+      case TrackCuts::kDCAz:
+        return abs(track.dcaZ()) <= mMaxDcaZ;
+      default:
+        return false;
     }
   }
 
@@ -70,7 +131,10 @@ class TrackSelection
   {
     mRequireTPCRefit = requireTPCRefit;
   }
-  void SetRequireTOF(bool requireTOF = true) { mRequireTOF = requireTOF; }
+  void SetRequireGoldenChi2(bool requireGoldenChi2 = true)
+  {
+    mRequireGoldenChi2 = requireGoldenChi2;
+  }
   void SetMinNClustersTPC(int minNClustersTPC)
   {
     mMinNClustersTPC = minNClustersTPC;
@@ -138,9 +202,9 @@ class TrackSelection
   float mMaxDcaZ{1e10f};                        // max dca in z direction
   std::function<float(float)> mMaxDcaXYPtDep{}; // max dca in xy plane as function of pT
 
-  bool mRequireITSRefit{false}; // require refit in ITS
-  bool mRequireTPCRefit{false}; // require refit in TPC
-  bool mRequireTOF{false};      // require that track exits the TOF and that it has an associated time measurement (kTIME and kTOFOUT)
+  bool mRequireITSRefit{false};   // require refit in ITS
+  bool mRequireTPCRefit{false};   // require refit in TPC
+  bool mRequireGoldenChi2{false}; // require golden chi2 cut (Run 2 only)
 
   // vector of ITS requirements (minNRequiredHits in specific requiredLayers)
   std::vector<std::pair<int8_t, std::set<uint8_t>>> mRequiredITSHits{};

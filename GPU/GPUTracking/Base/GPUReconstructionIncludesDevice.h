@@ -28,7 +28,6 @@ using namespace GPUCA_NAMESPACE::gpu;
 #include "GPUTPCTrack.cxx"
 #include "GPUTPCGrid.cxx"
 #include "GPUTPCRow.cxx"
-#include "GPUParam.cxx"
 #include "GPUTPCTracker.cxx"
 
 #include "GPUGeneralKernels.cxx"
@@ -86,7 +85,7 @@ using namespace GPUCA_NAMESPACE::gpu;
 #include "GPUTRDTrack.cxx"
 #include "GPUTRDTracker.cxx"
 #include "GPUTRDTrackletWord.cxx"
-#include "TRDGeometryBase.cxx"
+#include "GeometryBase.cxx"
 
 // Files for ITS Track Fit
 #include "GPUITSFitterKernels.cxx"

@@ -24,8 +24,10 @@
 #include "TPCWorkflow/EntropyDecoderSpec.h"
 #include "FT0Workflow/EntropyDecoderSpec.h"
 #include "FV0Workflow/EntropyDecoderSpec.h"
-#include "TOFWorkflow/EntropyDecoderSpec.h"
+#include "FDDWorkflow/EntropyDecoderSpec.h"
+#include "TOFWorkflowUtils/EntropyDecoderSpec.h"
 #include "MIDWorkflow/EntropyDecoderSpec.h"
+#include "EMCALWorkflow/EntropyDecoderSpec.h"
 
 using namespace o2::framework;
 using DetID = o2::detectors::DetID;
@@ -85,8 +87,14 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   if (dets[DetID::FV0]) {
     specs.push_back(o2::fv0::getEntropyDecoderSpec());
   }
+  if (dets[DetID::FDD]) {
+    specs.push_back(o2::fdd::getEntropyDecoderSpec());
+  }
   if (dets[DetID::MID]) {
     specs.push_back(o2::mid::getEntropyDecoderSpec());
+  }
+  if (dets[DetID::EMC]) {
+    specs.push_back(o2::emcal::getEntropyDecoderSpec());
   }
 
   return std::move(specs);

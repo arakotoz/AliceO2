@@ -11,7 +11,25 @@
 /// \file qconfig.h
 /// \author David Rohr
 
-#ifndef QCONFIG_HEADER_GUARD_NO_INCLUDE
+#ifndef QCONFIG_H_GENERAL
+#define QCONFIG_H_GENERAL
+extern int qConfigParse(int argc, const char** argv, const char* filename = nullptr);
+extern void qConfigPrint();
+namespace qConfig
+{
+enum qConfigRetVal { qcrOK = 0,
+                     qcrError = 1,
+                     qcrMinFailure = 2,
+                     qcrMaxFailure = 3,
+                     qcrHelp = 4,
+                     qcrCmd = 5,
+                     qcrArgMissing = 6,
+                     qcrArgIncomplete = 7,
+                     qcrArrayOverflow = 8 };
+}
+#endif
+
+#if !defined(QCONFIG_HEADER_GUARD_NO_INCLUDE) || defined(QCONFIG_GENRTC)
 
 #define AddArrayDefaults(...) \
   {                           \
@@ -70,17 +88,24 @@
     name& tmp = instance;                 \
     bool tmpfound = true;                 \
     if (found) {                          \
-      ;                                   \
     }
 
 #define BeginSubConfig(name, instance, parent, preoptname, preoptnameshort, descr) \
   {                                                                                \
     constexpr const char* preopt = preoptname;                                     \
+    (void)preopt;                                                                  \
     constexpr const char preoptshort = preoptnameshort;                            \
+    (void)preoptshort;                                                             \
     name& tmp = parent.instance;                                                   \
+    (void)tmp;                                                                     \
     bool tmpfound = true;                                                          \
     if (found) {                                                                   \
-      ;                                                                            \
+    }
+
+#define BeginHiddenConfig(name, instance) \
+  {                                       \
+    bool tmpfound;                        \
+    if (0) {                              \
     }
 
 #define EndConfig()          \
@@ -142,11 +167,15 @@
     printf("\n");
 #define BeginSubConfig(name, instance, parent, preoptname, preoptnameshort, descr)                                                                                                                        \
   const char* qon_mxcat(qConfig_subconfig_, name) = preoptnameshort == 0 ? (qon_mxstr(name) ": --" preoptname "\n\t\t" descr) : (qon_mxstr(name) ": -" qon_mxstr('a') " (--" preoptname ")\n\t\t" descr); \
+  (void)qon_mxcat(qConfig_subconfig_, name);                                                                                                                                                              \
   if (subConfig == nullptr || strcmp(subConfig, followSub == 2 ? qon_mxstr(name) : preoptname) == 0) {                                                                                                    \
     constexpr const char* preopt = preoptname;                                                                                                                                                            \
+    (void)preopt;                                                                                                                                                                                         \
     constexpr const char preoptshort = preoptnameshort;                                                                                                                                                   \
+    (void)preoptshort;                                                                                                                                                                                    \
     char argBuffer[2] = {preoptnameshort, 0};                                                                                                                                                             \
     printf("\n  %s: (--%s%s%s)\n", descr, preoptname, preoptnameshort == 0 ? "" : " or -", argBuffer);
+#define BeginHiddenConfig(name, instance) {
 #define EndConfig() }
 #define AddHelp(cmd, cmdshort) qConfigType<void*>::qConfigHelpOption("help", "help", nullptr, cmd, cmdshort, preopt, preoptshort, 3, "Show usage information");
 #define AddHelpAll(cmd, cmdshort) qConfigType<void*>::qConfigHelpOption("help all", "help all", nullptr, cmd, cmdshort, preopt, preoptshort, 3, "Show usage info including all subparameters");
@@ -156,35 +185,42 @@
 
 // End QCONFIG_HELP
 #elif defined(QCONFIG_PRINT)
-#define AddOption(name, type, default, optname, optnameshort, ...) std::cout << "\t" << qon_mxstr(name) << ": " << tmp.name << "\n";
-#define AddVariable(name, type, default) std::cout << "\t" << qon_mxstr(name) << ": " << tmp.name << "\n";
+#define AddOption(name, type, default, optname, optnameshort, ...) std::cout << "\t" << blockName << qon_mxstr(name) << ": " << qConfig::print_type(tmp.name) << "\n";
+#define AddVariable(name, type, default) std::cout << "\t" << blockName << qon_mxstr(name) << ": " << qConfig::print_type(tmp.name) << "\n";
 #define AddOptionSet(name, type, value, optname, optnameshort, ...)
-#define AddOptionVec(name, type, optname, optnameshort, ...) \
-  {                                                          \
-    std::cout << "\t" << qon_mxstr(name) << "[]: ";          \
-    for (unsigned int i = 0; i < tmp.name.size(); i++) {     \
-      if (i) {                                               \
-        std::cout << ", ";                                   \
-      } /*std::cout << tmp.name[i];*/                        \
-    }                                                        \
-    std::cout << "\n";                                       \
+#define AddOptionVec(name, type, optname, optnameshort, ...)     \
+  {                                                              \
+    std::cout << "\t" << blockName << qon_mxstr(name) << "[]: "; \
+    for (unsigned int i = 0; i < tmp.name.size(); i++) {         \
+      if (i) {                                                   \
+        std::cout << ", ";                                       \
+      }                                                          \
+      std::cout << qConfig::print_type(tmp.name[i]);             \
+    }                                                            \
+    std::cout << "\n";                                           \
   }
-#define AddOptionArray(name, type, count, default, optname, optnameshort, ...)    \
-  {                                                                               \
-    std::cout << "\t" << qon_mxstr(name) << "[" << count << "]: " << tmp.name[0]; \
-    for (int i = 1; i < count; i++) {                                             \
-      std::cout << ", " << tmp.name[i];                                           \
-    }                                                                             \
-    std::cout << "\n";                                                            \
+#define AddOptionArray(name, type, count, default, optname, optnameshort, ...)                                      \
+  {                                                                                                                 \
+    std::cout << "\t" << blockName << qon_mxstr(name) << "[" << count << "]: " << qConfig::print_type(tmp.name[0]); \
+    for (int i = 1; i < count; i++) {                                                                               \
+      std::cout << ", " << qConfig::print_type(tmp.name[i]);                                                        \
+    }                                                                                                               \
+    std::cout << "\n";                                                                                              \
   }
 #define AddSubConfig(name, instance)
 #define AddHelpText(text) printf("    " text ":\n");
 #define BeginConfig(name, instance) \
   {                                 \
-    name& tmp = instance;
+    name& tmp = instance;           \
+    blockName = "";
 #define BeginSubConfig(name, instance, parent, preoptname, preoptnameshort, descr) \
   {                                                                                \
-    name& tmp = parent.instance;
+    name& tmp = parent.instance;                                                   \
+    blockName = std::string("\t") + qon_mxstr(name) + ".";                         \
+    std::cout << "\t" << qon_mxstr(name) << "\n";
+#define BeginHiddenConfig(name, instance) \
+  if (0) {                                \
+    name tmp;
 #define EndConfig() }
 
 // End QCONFIG_PRINT
@@ -204,32 +240,65 @@
 #define EndConfig()
 
 // End QCONFIG_INSTANCE
+#elif defined(QCONFIG_PRINT_RTC)
+#define AddOption(name, type, default, optname, optnameshort, help, ...) out << qon_mxstr(type) << " " << qon_mxstr(name) << ";\n";
+#define AddVariable(name, type, default) out << qon_mxstr(type) << " " << qon_mxstr(name) << ";\n";
+#define AddOptionArray(name, type, count, default, optname, optnameshort, help, ...) out << qon_mxstr(type) << " " << qon_mxstr(name) << "[" << qon_mxstr(count) << "];\n";
+#define AddOptionVec(name, type, optname, optnameshort, help, ...) out << "std::vector<" << qon_mxstr(type) << "> " << qon_mxstr(name) << ";\n";
+#define AddVariableRTC(name, type, default)                                                                                                                            \
+  if (useConstexpr) {                                                                                                                                                  \
+    out << "static constexpr " << qon_mxstr(type) << " " << qon_mxstr(name) << " = " << qConfig::print_type(std::get<const qConfigCurrentType*>(tSrc)->name) << ";\n"; \
+  } else {                                                                                                                                                             \
+    AddOption(name, type, default, optname, optnameshort, help);                                                                                                       \
+  }
+#define AddOptionRTC(name, type, default, optname, optnameshort, help, ...) AddVariableRTC(name, type, default)
+#define BeginConfig(name, instance)  \
+  {                                  \
+    using qConfigCurrentType = name; \
+    out << "struct " << qon_mxstr(name) << " {\n";
+#define BeginSubConfig(name, instance, parent, preoptname, preoptnameshort, descr) BeginConfig(name, instance)
+#define EndConfig() \
+  out << "};";      \
+  }
+#define BeginNamespace(name) out << "namespace " << qon_mxstr(name) << " {\n";
+#define EndNamespace() out << "}\n";
+#define AddSubConfig(name, instance)
+#define AddOptionSet(...)
+
+// End QCONFIG_PRINT_RTC
+#elif defined(QCONFIG_CONVERT_RTC)
+#define AddOption(name, type, default, optname, optnameshort, help, ...) out.name = in.name;
+#define AddVariable(name, type, default) out.name = in.name;
+#define AddOptionArray(name, type, count, default, optname, optnameshort, help, ...) \
+  for (unsigned int i = 0; i < count; i++)                                           \
+    out.name[i] = in.name[i];
+#define AddOptionVec(name, type, optname, optnameshort, help, ...) \
+  for (unsigned int i = 0; i < in.name.size(); i++)                \
+    out.name[i] = in.name[i];
+#define AddOptionRTC(name, type, default, optname, optnameshort, help, ...)
+#define AddVariableRTC(name, type, default)
+#define BeginConfig(name, instance)              \
+  template <class T>                             \
+  void qConfigConvertRtc(T& out, const name& in) \
+  {
+#define BeginSubConfig(name, instance, parent, preoptname, preoptnameshort, descr) BeginConfig(name, instance)
+#define EndConfig() }
+#define AddSubConfig(name, instance)
+#define AddOptionSet(...)
+
+// End QCONFIG_CONVERT_RTC
 #else // Define structures
-#ifdef QCONFIG_HEADER_GUARD
+#if defined(QCONFIG_HEADER_GUARD) && !defined(QCONFIG_GENRTC)
 #define QCONFIG_HEADER_GUARD_NO_INCLUDE
 #else
 #define QCONFIG_HEADER_GUARD
 
-extern int qConfigParse(int argc, const char** argv, const char* filename = nullptr);
-extern void qConfigPrint();
-namespace qConfig
-{
-enum qConfigRetVal { qcrOK = 0,
-                     qcrError = 1,
-                     qcrMinFailure = 2,
-                     qcrMaxFailure = 3,
-                     qcrHelp = 4,
-                     qcrCmd = 5,
-                     qcrArgMissing = 6,
-                     qcrArgIncomplete = 7,
-                     qcrArrayOverflow = 8 };
-}
-
+#ifndef BeginNamespace
 #define BeginNamespace(name) \
   namespace name             \
   {
 #define EndNamespace() }
-#define AddCustomCPP(...) __VA_ARGS__
+#endif
 #if !defined(QCONFIG_GPU)
 #define AddOption(name, type, default, optname, optnameshort, help, ...) type name = default;
 #define AddVariable(name, type, default) type name = default;
@@ -241,12 +310,16 @@ enum qConfigRetVal { qcrOK = 0,
 #define AddOptionArray(name, type, count, default, optname, optnameshort, help, ...) type name[count];
 #define AddOptionVec(name, type, optname, optnameshort, help, ...) void* name[sizeof(std::vector<type>) / sizeof(void*)];
 #endif
+#ifdef QCONFIG_GENRTC
+#define AddOptionRTC(name, type, default, optname, optnameshort, help, ...) static constexpr type name = default;
+#define AddVariableRTC(name, type, default) static constexpr type name = default;
+#else
+#define AddCustomCPP(...) __VA_ARGS__
+#endif
 #define AddOptionSet(name, type, value, optname, optnameshort, help, ...)
 #define AddSubConfig(name, instance) name instance;
-#define BeginConfig(name, instance) \
-  struct name {
-#define BeginSubConfig(name, instance, parent, preoptname, preoptnameshort, descr) \
-  struct name {
+#define BeginConfig(name, instance) struct name {
+#define BeginSubConfig(name, instance, parent, preoptname, preoptnameshort, descr) struct name {
 #define EndConfig() \
   }                 \
   ;
@@ -282,11 +355,22 @@ enum qConfigRetVal { qcrOK = 0,
 #ifndef AddCustomCPP
 #define AddCustomCPP(...)
 #endif
+#ifndef AddOptionRTC
+#define AddOptionRTC(...) AddOption(__VA_ARGS__)
+#endif
+#ifndef AddVariableRTC
+#define AddVariableRTC(...) AddVariable(__VA_ARGS__)
+#endif
+#ifndef BeginHiddenConfig
+#define BeginHiddenConfig(name, instance) BeginSubConfig(name, instance, , , , )
+#endif
 
 #include "qconfigoptions.h"
 
 #undef AddOption
+#undef AddOptionRTC
 #undef AddVariable
+#undef AddVariableRTC
 #undef AddOptionSet
 #undef AddOptionVec
 #undef AddOptionArray
@@ -294,6 +378,7 @@ enum qConfigRetVal { qcrOK = 0,
 #undef AddSubConfig
 #undef BeginConfig
 #undef BeginSubConfig
+#undef BeginHiddenConfig
 #undef EndConfig
 #undef AddHelp
 #undef AddHelpAll

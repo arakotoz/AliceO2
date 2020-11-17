@@ -34,11 +34,12 @@ using namespace o2::dataformats;
 
 int HardwareClusterDecoder::decodeClusters(std::vector<std::pair<const ClusterHardwareContainer*, std::size_t>>& inputClusters,
                                            HardwareClusterDecoder::OutputAllocator outputAllocator,
-                                           const std::vector<o2::dataformats::MCTruthContainer<o2::MCCompLabel>>* inMCLabels,
+                                           const std::vector<o2::dataformats::ConstMCTruthContainerView<o2::MCCompLabel>>* inMCLabels,
                                            o2::dataformats::MCTruthContainer<o2::MCCompLabel>* outMCLabels)
 {
-  if (mIntegrator == nullptr)
+  if (mIntegrator == nullptr) {
     mIntegrator.reset(new DigitalCurrentClusterIntegrator);
+  }
   // MCLabelContainer does only allow appending new labels, so we need to write to separate
   // containers per {sector,padrow} and merge at the end;
   std::vector<o2::dataformats::MCTruthContainer<o2::MCCompLabel>> outMCLabelContainers;
@@ -95,8 +96,9 @@ int HardwareClusterDecoder::decodeClusters(std::vector<std::pair<const ClusterHa
             }
           } else {
             //Count how many output buffers we need (and how large they are below)
-            if (nCls == 0)
+            if (nCls == 0) {
               numberOfOutputContainers++;
+            }
           }
           nCls++;
           nTotalClusters++;
@@ -176,7 +178,7 @@ void HardwareClusterDecoder::sortClustersAndMC(ClusterNative* clusters, size_t n
     return clusters[a] < clusters[b];
   });
   std::vector<ClusterNative> buffer(clusters, clusters + nClusters);
-  MCLabelContainer tmpMC = std::move(mcTruth);
+  ClusterNativeHelper::MCLabelContainer tmpMC = std::move(mcTruth);
   assert(mcTruth.getIndexedSize() == 0);
   for (int i = 0; i < nClusters; i++) {
     clusters[i] = buffer[indizes[i]];

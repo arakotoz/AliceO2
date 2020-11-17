@@ -19,61 +19,79 @@
 // Create static constexpr with default values for GPU run time compilation
 
 #include "GPUDefConstantsAndSettings.h"
-#include "GPUSettings.h"
+#ifndef GPUSETTINGS_H
+#error Please include GPUSettings.h!
+#endif
 
 // clang-format off
 
 #ifdef QCONFIG_INSTANCE
 using namespace GPUCA_NAMESPACE::gpu;
 #endif
+#ifdef BeginNamespace // File should not be included without defining the macros, but rootcling will do for dictionary generation
 BeginNamespace(GPUCA_NAMESPACE)
 BeginNamespace(gpu)
 
 // Settings concerning the reconstruction
 // There must be no bool in here, use char, as sizeof(bool) is compiler dependent and fails on GPUs!!!!!!
 BeginSubConfig(GPUSettingsRec, rec, configStandalone, "REC", 0, "Reconstruction settings")
-AddOption(tpcRejectQPt, float, 1.f / 0.05f, "", 0, "QPt threshold to reject clusters of TPC tracks (Inverse Pt!!!)")
-AddOption(HitPickUpFactor, float, 2., "", 0, "multiplier for the chi2 window for hit pick up procedure")
-AddOption(NeighboursSearchArea, float, 3., "", 0, "area in cm for the search of neighbours")
-AddOption(ClusterError2CorrectionY, float, 1., "", 0, "correction for the squared cluster error during tracking")
-AddOption(ClusterError2CorrectionZ, float, 1., "", 0, "correction for the squared cluster error during tracking")
-AddOption(MinNTrackClusters, int, -1, "", 0, "required min number of clusters on the track")
-AddOption(MaxTrackQPt, float, 1.f / GPUCA_MIN_TRACK_PT_DEFAULT, "", 0, "required max Q/Pt (==min Pt) of tracks")
-AddOption(SearchWindowDZDR, float, 2.5, "", 0, "Use DZDR window for seeding instead of vertex window")
-AddOption(TrackReferenceX, float, 1000.f, "", 0, "Transport all tracks to this X after tracking (disabled if > 500, auto = 1000)")
-AddOption(tpcZSthreshold, float, 2.0f, "", 0, "Zero-Suppression threshold")
-AddOption(NWays, char, 3, "", 0, "Do N fit passes in final fit of merger")
-AddOption(NWaysOuter, char, 0, "", 0, "Store outer param")
-AddOption(RejectMode, char, 5, "", 0, "0: no limit on rejection or missed hits, >0: break after n rejected hits, <0: reject at max -n hits")
-AddOption(NonConsecutiveIDs, char, false, "", 0, "Non-consecutive cluster IDs as in HLT, disables features that need access to slice data in TPC merger")
-AddOption(dEdxTruncLow, unsigned char, 2, "", 0, "Low truncation threshold, fraction of 128")
-AddOption(dEdxTruncHigh, unsigned char, 77, "", 0, "High truncation threshold, fraction of 128")
-AddOption(GlobalTracking, char, 1, "", 0, "Enable Global Tracking (prolong tracks to adjacent sectors to find short segments)")
-AddOption(DisableRefitAttachment, unsigned char, 0, "", 0, "Bitmask to disable certain attachment steps during refit (1: attachment, 2: propagation, 4: loop following, 8: mirroring)")
-AddOption(tpcRejectionMode, unsigned char, GPUCA_NAMESPACE::gpu::GPUSettings::RejectionStrategyA, "", 0, "Enable rejection of TPC clusters for compression (0 = no, 1 = strategy A, 2 = strategy B)")
-AddOption(tpcCompressionModes, unsigned char, GPUCA_NAMESPACE::gpu::GPUSettings::CompressionFull, "", 0, "TPC Compression mode bits (1=truncate charge/width LSB, 2=differences, 4=track-model)")
-AddOption(tpcCompressionSortOrder, unsigned char, GPUCA_NAMESPACE::gpu::GPUSettings::SortTime, "", 0, "Sort order of TPC compression (0 = time, 1 = pad, 2 = Z-time-pad, 3 = Z-pad-time, 4 = no sorting (use incoming order))")
-AddOption(tpcSigBitsCharge, unsigned char, 4, "", 0, "Number of significant bits for TPC cluster charge in compression mode 1")
-AddOption(tpcSigBitsWidth, unsigned char, 3, "", 0, "Number of significant bits for TPC cluster width in compression mode 1")
-AddOption(ForceEarlyTPCTransform, char, -1, "", 0, "Force early TPC transformation also for continuous data (-1 = auto)")
-AddOption(fwdTPCDigitsAsClusters, unsigned char, 0, "", 0, "Forward TPC digits as clusters (if they pass the ZS threshold)")
-AddOption(bz0Pt, unsigned char, 60, "", 0, "Nominal Pt to set when bz = 0 (in 10 MeV)")
-AddOption(dropLoopers, unsigned char, 0, "", 0, "Drop looping tracks starting from second loop")
-AddOption(mergerCovSource, unsigned char, 2, "", 0, "Method to obtain covariance in track merger: 0 = simple filterErrors method, 1 = use cov from track following, 2 = refit")
-AddOption(mergerInterpolateErrors, unsigned char, 1, "", 0, "Use interpolation instead of extrapolation for chi2 based cluster rejection")
-AddOption(fitInProjections, char, -1, "", 0, "Fit in projection, -1 to enable for all but passes but the first one")
-AddOption(fitPropagateBzOnly, char, -1, "", 0, "Propagate using Bz only for n passes")
-AddOption(retryRefit, char, 1, "", 0, "Retry refit when fit fails")
-AddOption(loopInterpolationInExtraPass, char, -1, "", 0, "Perform loop interpolation in an extra pass")
-AddOption(mergerReadFromTrackerDirectly, char, 1, "", 0, "Forward data directly from tracker to merger on GPU")
-AddOption(useMatLUT, char, 0, "", 0, "Use material lookup table for TPC refit")
+AddOptionRTC(tpcRejectQPt, float, 1.f / 0.05f, "", 0, "QPt threshold to reject clusters of TPC tracks (Inverse Pt!!!)")
+AddOptionRTC(HitPickUpFactor, float, 2., "", 0, "multiplier for the chi2 window for hit pick up procedure")
+AddOptionRTC(NeighboursSearchArea, float, 3., "", 0, "area in cm for the search of neighbours")
+AddOptionRTC(ClusterError2CorrectionY, float, 1., "", 0, "correction for the squared cluster error during tracking")
+AddOptionRTC(ClusterError2CorrectionZ, float, 1., "", 0, "correction for the squared cluster error during tracking")
+AddOptionRTC(MinNTrackClusters, int, -1, "", 0, "required min number of clusters on the track")
+AddOptionRTC(MaxTrackQPt, float, 1.f / GPUCA_MIN_TRACK_PT_DEFAULT, "", 0, "required max Q/Pt (==min Pt) of tracks")
+AddOptionRTC(SearchWindowDZDR, float, 2.5, "", 0, "Use DZDR window for seeding instead of vertex window")
+AddOptionRTC(TrackReferenceX, float, 1000.f, "", 0, "Transport all tracks to this X after tracking (disabled if > 500, auto = 1000)")
+AddOptionRTC(tpcZSthreshold, float, 2.0f, "", 0, "Zero-Suppression threshold")
+AddOptionRTC(tpcTubeChi2, float, 5.f * 5.f, "", 0, "Max chi2 to mark cluster adjacent to track")
+AddOptionRTC(tpcTubeMaxSize2, float, 2.5f * 2.5f, "", 0, "Square of max tube size (normally derrived from tpcTubeChi2)")
+AddOptionRTC(trdMinTrackPt, float, .5f, "", 0, "Min Pt for tracks to be propagated through the TRD")
+AddOptionRTC(trdMaxChi2, float, 15.f, "", 0, "Max chi2 for TRD tracklets to be matched to a track")
+AddOptionRTC(trdPenaltyChi2, float, 12.f, "", 0, "Chi2 penalty for no available TRD tracklet (effective chi2 cut value)")
+AddOptionRTC(tpcCFqmaxCutoff, unsigned char, 3, "", 0, "Cluster Finder rejects cluster with qmax below this threshold")
+AddOptionRTC(tpcCFqtotCutoff, unsigned char, 0, "", 0, "Cluster Finder rejects cluster with qtot below this threshold")
+AddOptionRTC(tpcCFinnerThreshold, unsigned char, 0, "", 0, "Cluster Finder extends cluster if inner charge above this threshold")
+AddOptionRTC(tpcCFminSplitNum, unsigned char, 1, "", 0, "Minimum number of split charges in a cluster for the cluster to be marked as split")
+AddOptionRTC(tpcCFnoiseSuppressionEpsilon, unsigned char, 10, "", 0, "Cluster Finder: Difference between peak and charge for the charge to count as a minima during noise suppression")
+AddOptionRTC(NWays, char, 3, "", 0, "Do N fit passes in final fit of merger")
+AddOptionRTC(NWaysOuter, char, 0, "", 0, "Store outer param")
+AddOptionRTC(RejectMode, char, 5, "", 0, "0: no limit on rejection or missed hits, >0: break after n rejected hits, <0: reject at max -n hits")
+AddOptionRTC(NonConsecutiveIDs, char, false, "", 0, "Non-consecutive cluster IDs as in HLT, disables features that need access to slice data in TPC merger")
+AddOptionRTC(dEdxTruncLow, unsigned char, 2, "", 0, "Low truncation threshold, fraction of 128")
+AddOptionRTC(dEdxTruncHigh, unsigned char, 77, "", 0, "High truncation threshold, fraction of 128")
+AddOptionRTC(GlobalTracking, char, 1, "", 0, "Enable Global Tracking (prolong tracks to adjacent sectors to find short segments)")
+AddOptionRTC(DisableRefitAttachment, unsigned char, 0, "", 0, "Bitmask to disable certain attachment steps during refit (1: attachment, 2: propagation, 4: loop following, 8: mirroring)")
+AddOptionRTC(tpcRejectionMode, unsigned char, GPUCA_NAMESPACE::gpu::GPUSettings::RejectionStrategyA, "", 0, "Enable rejection of TPC clusters for compression (0 = no, 1 = strategy A, 2 = strategy B)")
+AddOptionRTC(tpcMergeLoopersAfterburner, unsigned char, 0, "", 0, "Run afterburner for additional looper merging")
+AddOptionRTC(tpcCompressionModes, unsigned char, GPUCA_NAMESPACE::gpu::GPUSettings::CompressionFull, "", 0, "TPC Compression mode bits (1=truncate charge/width LSB, 2=differences, 4=track-model)")
+AddOptionRTC(tpcCompressionSortOrder, unsigned char, GPUCA_NAMESPACE::gpu::GPUSettings::SortTime, "", 0, "Sort order of TPC compression (0 = time, 1 = pad, 2 = Z-time-pad, 3 = Z-pad-time, 4 = no sorting (use incoming order))")
+AddOptionRTC(tpcSigBitsCharge, unsigned char, 4, "", 0, "Number of significant bits for TPC cluster charge in compression mode 1")
+AddOptionRTC(tpcSigBitsWidth, unsigned char, 3, "", 0, "Number of significant bits for TPC cluster width in compression mode 1")
+AddOptionRTC(ForceEarlyTPCTransform, char, -1, "", 0, "Force early TPC transformation also for continuous data (-1 = auto)")
+AddOptionRTC(fwdTPCDigitsAsClusters, unsigned char, 0, "", 0, "Forward TPC digits as clusters (if they pass the ZS threshold)")
+AddOptionRTC(bz0Pt, unsigned char, 60, "", 0, "Nominal Pt to set when bz = 0 (in 10 MeV)")
+AddOptionRTC(dropLoopers, unsigned char, 0, "", 0, "Drop looping tracks starting from second loop")
+AddOptionRTC(mergerCovSource, unsigned char, 2, "", 0, "Method to obtain covariance in track merger: 0 = simple filterErrors method, 1 = use cov from track following, 2 = refit")
+AddOptionRTC(mergerInterpolateErrors, unsigned char, 1, "", 0, "Use interpolation instead of extrapolation for chi2 based cluster rejection")
+AddOptionRTC(fitInProjections, char, -1, "", 0, "Fit in projection, -1 to enable for all but passes but the first one")
+AddOptionRTC(fitPropagateBzOnly, char, -1, "", 0, "Propagate using Bz only for n passes")
+AddOptionRTC(retryRefit, char, 1, "", 0, "Retry refit when fit fails")
+AddOptionRTC(loopInterpolationInExtraPass, char, -1, "", 0, "Perform loop interpolation in an extra pass")
+AddOptionRTC(mergerReadFromTrackerDirectly, char, 1, "", 0, "Forward data directly from tracker to merger on GPU")
+AddOptionRTC(useMatLUT, char, 0, "", 0, "Use material lookup table for TPC refit")
+AddOptionRTC(trdStopTrkAfterNMissLy, unsigned char, 6, "", 0, "Abandon track following after N layers without a TRD match")
 AddCustomCPP(void SetMinTrackPt(float v) { MaxTrackQPt = v > 0.001 ? (1. / v) : (1. / 0.001); })
+AddVariable(dummyRTC, float, 0.f) // Ensure non empty struct and proper alignment even if all normal members are constexpr
 AddHelp("help", 'h')
 EndConfig()
 
 // Settings steering the processing once the device was selected
 BeginSubConfig(GPUSettingsProcessing, proc, configStandalone, "PROC", 0, "Processing settings")
 AddOption(platformNum, int, -1, "", 0, "Platform to use, in case the backend provides multiple platforms (-1 = auto-select)")
+AddOption(trdNCandidates, int, 1, "", 0, "Number of branching track candidates for single input track during propagation")
+AddOption(trdNMaxCollisions, int, 1000, "", 0, "Maximum number of collisions per TF which the TRD tracker can handle")
 AddOption(gpuDeviceOnly, bool, false, "", 0, "Use only GPU as device (i.e. no CPU for OpenCL)")
 AddOption(debugMask, int, -1, "", 0, "Mask for debug output dumps to file")
 AddOption(comparableDebutOutput, bool, true, "", 0, "Make CPU and GPU debug output comparable (sort / skip concurrent parts)")
@@ -96,8 +114,8 @@ AddOption(nStreams, int, 8, "", 0, "Number of GPU streams / command queues")
 AddOption(trackletConstructorInPipeline, int, -1, "", 0, "Run tracklet constructor in the pipeline")
 AddOption(trackletSelectorInPipeline, int, -1, "", 0, "Run tracklet selector in the pipeline")
 AddOption(mergerSortTracks, int, -1, "", 0, "Sort track indizes for GPU track fit")
-AddOption(tpcCompressionGatherMode, int, -1, "", 0, "TPC Compressed Clusters Gather Mode")
-AddOption(tpcCompressionGatherModeKernel, int, -1, "", 0, "TPC Compressed Clusters Gather Mode Kernel")
+AddOption(tpcCompressionGatherMode, int, -1, "", 0, "TPC Compressed Clusters Gather Mode (0: DMA transfer gather gpu to host, 1: serial DMA to host and gather by copy on CPU, 2. gather via GPU kernal DMA access, 3. gather on GPU via kernel, dma afterwards")
+AddOption(tpcCompressionGatherModeKernel, int, -1, "", 0, "TPC Compressed Clusters Gather Mode Kernel (0: unbufferd, 1-3: buffered, 4: multi-block)")
 AddOption(runMC, bool, false, "", 0, "Process MC labels")
 AddOption(ompKernels, bool, true, "", 0, "Parallelize with OMP inside kernels instead of over slices")
 AddOption(doublePipeline, bool, false, "", 0, "Double pipeline mode")
@@ -114,6 +132,8 @@ AddOption(registerStandaloneInputMemory, bool, false, "registerInputMemory", 0, 
 AddOption(memoryScalingFactor, float, 1.f, "", 0, "Factor to apply to all memory scalers")
 AddOption(alternateBorderSort, int, -1, "", 0, "Alternative implementation for sorting of border tracks")
 AddOption(enableRTC, bool, false, "", 0, "Use RTC to optimize GPU code")
+AddOption(rtcConstexpr, bool, true, "", 0, "Replace constant variables by static constexpr expressions")
+AddOption(showOutputStat, bool, false, "", 0, "Print some track output statistics")
 AddVariable(eventDisplay, GPUCA_NAMESPACE::gpu::GPUDisplayBackend*, nullptr)
 AddHelp("help", 'h')
 EndConfig()
@@ -145,6 +165,9 @@ AddOption(writeMCLabels, bool, false, "", 0, "Store mc labels to file for later 
 AddOptionVec(matchMCLabels, const char*, "", 0, "Read labels from files and match them, only process tracks where labels differ")
 AddOption(matchDisplayMinPt, float, 0, "", 0, "Minimum Pt of a matched track to be displayed")
 AddOption(writeRootFiles, bool, false, "", 0, "Create ROOT canvas files")
+AddOption(noMC, bool, false, "", 0, "Force running QA without MC labels even if present")
+AddOption(shipToQC, bool, false, "", 0, "Do not write output files but ship histograms for QC")
+AddOption(shipToQCAsCanvas, bool, false, "", 0, "Send TCanvases with full layout to QC instead of individual histograms")
 AddShortcut("compare", 0, "--QAinput", "Compare QA histograms", "--qa", "--QAinputHistogramsOnly")
 AddHelp("help", 'h')
 EndConfig()
@@ -208,7 +231,6 @@ AddOption(runsInit, int, 1, "", 0, "Number of initial iterations excluded from a
 AddOption(EventsDir, const char*, "pp", "events", 'e', "Directory with events to process", message("Reading events from Directory events/%s"))
 AddOption(eventDisplay, int, 0, "display", 'd', "Show standalone event display", def(1)) //1: default display (Windows / X11), 2: glut, 3: glfw
 AddOption(eventGenerator, bool, false, "", 0, "Run event generator")
-AddOption(nways7, bool, false, "", 0, "Create OuterParam")
 AddOption(cont, bool, false, "", 0, "Process continuous timeframe data")
 AddOption(outputcontrolmem, unsigned long, 0, "outputMemory", 0, "Use predefined output buffer of this size", min(0ul), message("Using %lld bytes as output memory"))
 AddOption(inputcontrolmem, unsigned long, 0, "inputMemory", 0, "Use predefined input buffer of this size", min(0ul), message("Using %lld bytes as input memory"))
@@ -238,6 +260,7 @@ AddOption(runTRD, int, -1, "", 0, "Enable TRD processing")
 AddOption(rundEdx, int, -1, "", 0, "Enable dEdx processing")
 AddOption(runCompression, int, 1, "", 0, "Enable TPC Compression")
 AddOption(runTransformation, int, 1, "", 0, "Enable TPC Transformation")
+AddOption(runRefit, bool, false, "", 0, "Enable final track refit")
 AddHelp("help", 'h')
 AddHelpAll("helpall", 'H')
 AddSubConfig(GPUSettingsRec, rec)
@@ -249,7 +272,7 @@ AddSubConfig(GPUSettingsEG, EG)
 EndConfig()
 #elif defined(GPUCA_O2_LIB) || defined(GPUCA_O2_INTERFACE) // GPUCA_STANDALONE
 BeginSubConfig(GPUSettingsO2, global, configStandalone, "O2", 0, "O2 workflow settings")
-AddOption(solenoidBz, float, -1000.f, "", 0, "solenoid field strength")
+AddOption(solenoidBz, float, -1e6f, "", 0, "solenoid field strength")
 AddOption(constBz, bool, false, "", 0, "force constant Bz for tests")
 AddOption(continuousMaxTimeBin, int, 0, "", 0, "maximum time bin of continuous data, 0 for triggered events, -1 for default of 23ms")
 AddOption(deviceType, std::string, "CPU", "", 0, "Device type, CPU | CUDA | HIP | OCL1 | OCL2")
@@ -265,10 +288,29 @@ AddOption(outputBufferSize, unsigned long, 200000000ul, "", 0, "Size of the outp
 AddOption(synchronousProcessing, bool, false, "", 0, "Apply performance shortcuts for synchronous processing, disable unneeded steps")
 AddOption(mutexMemReg, bool, false, "", 0, "Global mutex to serialize GPU memory registration")
 AddOption(display, bool, false, "", 0, "Enable standalone gpu tracking visualizaion")
+AddOption(dropSecondaryLegs, bool, true, "", 0, "Do not store secondary legs of looping track in TrackTPC")
+AddOption(memoryBufferScaleFactor, float, 1.f, "", 0, "Factor to scale buffer size estimations")
 EndConfig()
 #endif // GPUCA_O2_LIB
 #endif // !GPUCA_GPUCODE_DEVICE
 
+// Derrived parameters used in GPUParam
+BeginHiddenConfig(GPUSettingsParam, param)
+AddVariableRTC(DAlpha, float, 0.f)           // angular size
+AddVariableRTC(BzkG, float, 0.f)             // constant magnetic field value in kG
+AddVariableRTC(ConstBz, float, 0.f)          // constant magnetic field value in kG*clight
+AddVariableRTC(AssumeConstantBz, char, 0)    // Assume a constant magnetic field
+AddVariableRTC(ToyMCEventsFlag, char, 0)     // events were build with home-made event generator
+AddVariableRTC(ContinuousTracking, char, 0)  // Continuous tracking, estimate bz and errors for abs(z) = 125cm during seeding
+AddVariableRTC(resetTimers, char, 0)         // Reset benchmark timers before event processing
+AddVariableRTC(dodEdx, char, 0)              // Do dEdx computation
+AddVariableRTC(earlyTpcTransform, char, 0)   // do Early TPC transformation
+AddVariableRTC(debugLevel, char, 0)          // Debug level
+AddVariableRTC(continuousMaxTimeBin, int, 0) // Max time bin for continuous tracking
+AddVariable(dummyRTC, float, 0.f)            // Ensure non empty struct and proper alignment even if all normal members are constexpr
+EndConfig()
+
 EndNamespace() // gpu
 EndNamespace() // GPUCA_NAMESPACE
+#endif // #ifdef BeginNamespace
   // clang-format on

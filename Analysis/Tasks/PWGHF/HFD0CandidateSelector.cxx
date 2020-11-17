@@ -15,22 +15,12 @@
 
 #include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
-#include "Framework/AnalysisDataModel.h"
-#include "Framework/ASoAHelpers.h"
-#include "Analysis/SecondaryVertexHF.h"
-#include "Analysis/CandidateSelectionTables.h"
-#include "Analysis/RecoDecay.h"
-#include "PID/PIDResponse.h"
-
-#include <cmath>
-#include <array>
-#include <cstdlib>
+#include "Analysis/HFSecondaryVertex.h"
+#include "Analysis/HFCandidateSelectionTables.h"
 
 using namespace o2;
 using namespace o2::framework;
-using namespace o2::framework::expressions;
 using namespace o2::aod::hf_cand_prong2;
-using std::array;
 
 static const int npTBins = 25;
 static const int nCutVars = 11;
@@ -68,19 +58,19 @@ struct HFD0CandidateSelector {
 
   Produces<aod::HFSelD0Candidate> hfSelD0Candidate;
 
-  Configurable<double> d_pTCandMin{"d_pTCandMin", 0.0, "Lower bound of candidate pT"};
-  Configurable<double> d_pTCandMax{"d_pTCandMax", 50.0, "Upper bound of candidate pT"};
+  Configurable<double> d_pTCandMin{"d_pTCandMin", 0., "Lower bound of candidate pT"};
+  Configurable<double> d_pTCandMax{"d_pTCandMax", 50., "Upper bound of candidate pT"};
 
   Configurable<double> d_pidTPCMinpT{"d_pidTPCMinpT", 0.15, "Lower bound of track pT for TPC PID"};
-  Configurable<double> d_pidTPCMaxpT{"d_pidTPCMaxpT", 5.0, "Upper bound of track pT for TPC PID"};
+  Configurable<double> d_pidTPCMaxpT{"d_pidTPCMaxpT", 5., "Upper bound of track pT for TPC PID"};
   Configurable<double> d_pidTOFMinpT{"d_pidTOFMinpT", 0.15, "Lower bound of track pT for TOF PID"};
-  Configurable<double> d_pidTOFMaxpT{"d_pidTOFMaxpT", 5.0, "Upper bound of track pT for TOF PID"};
+  Configurable<double> d_pidTOFMaxpT{"d_pidTOFMaxpT", 5., "Upper bound of track pT for TOF PID"};
 
-  Configurable<double> d_TPCNClsFindablePIDCut{"d_TPCNClsFindablePIDCut", 50.0, "Lower bound of TPC findable clusters for good PID"};
-  Configurable<double> d_nSigmaTPC{"d_nSigmaTPC", 3.0, "Nsigma cut on TPC only"};
-  Configurable<double> d_nSigmaTPCCombined{"d_nSigmaTPCCombined", 5.0, "Nsigma cut on TPC combined with TOF"};
-  Configurable<double> d_nSigmaTOF{"d_nSigmaTOF", 3.0, "Nsigma cut on TOF only"};
-  Configurable<double> d_nSigmaTOFCombined{"d_nSigmaTOFCombined", 5.0, "Nsigma cut on TOF combined with TPC"};
+  Configurable<double> d_TPCNClsFindablePIDCut{"d_TPCNClsFindablePIDCut", 50., "Lower bound of TPC findable clusters for good PID"};
+  Configurable<double> d_nSigmaTPC{"d_nSigmaTPC", 3., "Nsigma cut on TPC only"};
+  Configurable<double> d_nSigmaTPCCombined{"d_nSigmaTPCCombined", 5., "Nsigma cut on TPC combined with TOF"};
+  Configurable<double> d_nSigmaTOF{"d_nSigmaTOF", 3., "Nsigma cut on TOF only"};
+  Configurable<double> d_nSigmaTOFCombined{"d_nSigmaTOFCombined", 5., "Nsigma cut on TOF combined with TPC"};
 
   /// Gets corresponding pT bin from cut file array
   /// \param candpT is the pT of the candidate
@@ -88,9 +78,12 @@ struct HFD0CandidateSelector {
   template <typename T>
   int getpTBin(T candpT)
   {
-    double pTBins[npTBins + 1] = {0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 9.0, 10.0, 12.0, 16.0, 20.0, 24.0, 36.0, 50.0, 100.0};
+    double pTBins[npTBins + 1] = {0, 0.5, 1., 1.5, 2., 2.5, 3., 3.5, 4., 4.5, 5., 5.5, 6., 6.5, 7., 7.5, 8., 9., 10., 12., 16., 20., 24., 36., 50., 100.};
+    if (candpT < pTBins[0] || candpT >= pTBins[npTBins]) {
+      return -1;
+    }
     for (int i = 0; i < npTBins; i++) {
-      if (candpT >= pTBins[i] && candpT < pTBins[i + 1]) {
+      if (candpT < pTBins[i + 1]) {
         return i;
       }
     }
@@ -114,15 +107,16 @@ struct HFD0CandidateSelector {
   }
 
   /// Conjugate independent toplogical cuts
-  /// \param hfcandprong2 is candidate
+  /// \param hfCandProng2 is candidate
   /// \return true if candidate passes all cuts
   template <typename T>
   bool selectionTopol(const T& hfCandProng2)
   {
     auto candpT = hfCandProng2.pt();
     int pTBin = getpTBin(candpT);
-    if (pTBin == -1)
+    if (pTBin == -1) {
       return false;
+    }
 
     if (candpT < d_pTCandMin || candpT >= d_pTCandMax) {
       return false; //check that the candidate pT is within the analysis range
@@ -169,8 +163,9 @@ struct HFD0CandidateSelector {
 
     auto candpT = hfCandProng2.pt();
     int pTBin = getpTBin(candpT);
-    if (pTBin == -1)
+    if (pTBin == -1) {
       return false;
+    }
 
     if (trackPion.charge() > 0) { //invariant mass cut
       if (TMath::Abs(InvMassD0(hfCandProng2) - RecoDecay::getMassPDG(421)) > cuts[pTBin][0]) {
@@ -185,7 +180,7 @@ struct HFD0CandidateSelector {
     if (TMath::Abs(trackPion.pt()) < TMath::Abs(cuts[pTBin][4]) || TMath::Abs(trackKaon.pt()) < TMath::Abs(cuts[pTBin][3])) {
       return false; //cut on daughter pT
     }
-    if (TMath::Abs(trackPion.dcaprim0()) > cuts[pTBin][6] || TMath::Abs(trackKaon.dcaprim0()) > cuts[pTBin][5]) {
+    if (TMath::Abs(trackPion.dcaPrim0()) > cuts[pTBin][6] || TMath::Abs(trackKaon.dcaPrim0()) > cuts[pTBin][5]) {
       return false; //cut on daughter dca - need to add secondary vertex constraint here
     }
 
@@ -231,57 +226,51 @@ struct HFD0CandidateSelector {
 
   /// Check if track is compatible with given TPC Nsigma cut for a given flavour hypothesis
   /// \param track is the track
-  /// \param nPDG is the flavour hypothesis pdg number
+  /// \param nPDG is the flavour hypothesis PDG number
   /// \param nSigmaCut is the nsigma threshold to test against
   /// \note nPDG=211 pion  nPDG=321 kaon
   /// \return true if track satisfies TPC PID hypothesis for given Nsigma cut
   template <typename T>
   bool selectionPIDTPC(const T& track, int nPDG, int nSigmaCut)
   {
-    double nSigma = 0.0;
+    double nSigma = 100.0; //arbitarily large value
     nPDG = TMath::Abs(nPDG);
     if (nPDG == 111) {
       nSigma = track.tpcNSigmaPi();
     } else if (nPDG == 321) {
       nSigma = track.tpcNSigmaKa();
     } else {
-      return nSigma = 100; //arbitarily large value
-    }
-    if (nSigma < nSigmaCut) {
-      return true;
-    } else {
       return false;
     }
+    return nSigma < nSigmaCut;
   }
 
   /// Check if track is compatible with given TOF NSigma cut for a given flavour hypothesis
   /// \param track is the track
-  /// \param nPDG is the flavour hypothesis pdg number
+  /// \param nPDG is the flavour hypothesis PDG number
   /// \param nSigmaCut is the nSigma threshold to test against
   /// \note nPDG=211 pion  nPDG=321 kaon
   /// \return true if track satisfies TOF PID hypothesis for given NSigma cut
   template <typename T>
   bool selectionPIDTOF(const T& track, int nPDG, int nSigmaCut)
   {
-    double nSigma = 0.0;
+    double nSigma = 100.0; //arbitarily large value
     nPDG = TMath::Abs(nPDG);
-    if (nPDG == 111)
+    if (nPDG == 111) {
       nSigma = track.tofNSigmaPi();
-    else if (nPDG == 321)
+    } else if (nPDG == 321) {
       nSigma = track.tofNSigmaKa();
-    else
-      return nSigma = 100; //arbitarily large value
-    if (nSigma < nSigmaCut)
-      return true;
-    else
+    } else {
       return false;
+    }
+    return nSigma < nSigmaCut;
   }
 
   /// PID selection on daughter track
   /// \param track is the daughter track
-  /// \param nPDG is the pdg code of the flavour hypothesis
+  /// \param nPDG is the PDG code of the flavour hypothesis
   /// \note nPDG=211 pion  nPDG=321 kaon
-  /// \return 1 if succesful PID match, 0 if sucessful PID rejection, -1 if no PID info
+  /// \return 1 if successful PID match, 0 if successful PID rejection, -1 if no PID info
   template <typename T>
   int selectionPID(const T& track, int nPDG)
   {
@@ -327,16 +316,16 @@ struct HFD0CandidateSelector {
     }
   }
 
-  void process(aod::HfCandProng2 const& hfCandProng2s, aod::BigTracks const& tracks)
+  void process(aod::HfCandProng2 const& hfCandProng2s, aod::BigTracksPID const& tracks)
   {
     int statusD0, statusD0bar; // final selection flag : 0-rejected  1-accepted
     bool topolD0, topolD0bar;
-    int pidD0, pidD0bar, piPlus, piMinus, kPlus, kMinus;
+    int pidD0, pidD0bar, pionPlus, pionMinus, kaonPlus, kaonMinus;
 
     for (auto& hfCandProng2 : hfCandProng2s) { //looping over 2 prong candidates
 
-      auto trackPos = hfCandProng2.index0(); //positive daughter
-      auto trackNeg = hfCandProng2.index1(); //negative daughter
+      auto trackPos = hfCandProng2.index0_as<aod::BigTracksPID>(); //positive daughter
+      auto trackNeg = hfCandProng2.index1_as<aod::BigTracksPID>(); //negative daughter
 
       statusD0 = 0;
       statusD0bar = 0;
@@ -344,10 +333,10 @@ struct HFD0CandidateSelector {
       topolD0bar = true;
       pidD0 = -1;
       pidD0bar = -1;
-      piPlus = -1;
-      piMinus = -1;
-      kPlus = -1;
-      kMinus = -1;
+      pionPlus = -1;
+      pionMinus = -1;
+      kaonPlus = -1;
+      kaonMinus = -1;
 
       // daughter track validity selection
       if (!daughterSelection(trackPos) || !daughterSelection(trackNeg)) {
@@ -374,19 +363,23 @@ struct HFD0CandidateSelector {
         continue;
       }
 
-      piPlus = selectionPID(trackPos, 211);
-      kMinus = selectionPID(trackNeg, 321);
-      piMinus = selectionPID(trackNeg, 211);
-      kPlus = selectionPID(trackPos, 321);
+      pionPlus = selectionPID(trackPos, 211);
+      kaonMinus = selectionPID(trackNeg, 321);
+      pionMinus = selectionPID(trackNeg, 211);
+      kaonPlus = selectionPID(trackPos, 321);
 
-      if (piPlus == 0 || kMinus == 0 || piMinus == 1 || kPlus == 1)
+      if (pionPlus == 0 || kaonMinus == 0 || pionMinus == 1 || kaonPlus == 1) {
         pidD0 = 0; //exclude D0
-      if (piPlus == 1 || kMinus == 1 || piMinus == 0 || kPlus == 0)
+      }
+      if (pionPlus == 1 || kaonMinus == 1 || pionMinus == 0 || kaonPlus == 0) {
         pidD0bar = 0; //exclude D0bar
-      if (piPlus == 1 && kMinus == 1)
+      }
+      if (pionPlus == 1 && kaonMinus == 1) {
         pidD0 = 1; //accept D0
-      if (piMinus == 1 && kPlus == 1)
+      }
+      if (pionMinus == 1 && kaonPlus == 1) {
         pidD0bar = 1; //accept D0bar
+      }
 
       if (pidD0 == 0 && pidD0bar == 0) {
         hfSelD0Candidate(statusD0, statusD0bar);

@@ -17,7 +17,7 @@
 #include "Framework/ControlService.h"
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/Logger.h"
-#include "TOFWorkflow/DigitReaderSpec.h"
+#include "TOFWorkflowUtils/DigitReaderSpec.h"
 #include "DataFormatsParameters/GRPObject.h"
 
 using namespace o2::framework;
@@ -64,8 +64,9 @@ void DigitReader::run(ProcessingContext& pc)
     pc.outputs().snapshot(Output{o2::header::gDataOriginTOF, "DIGITS", 0, Lifetime::Timeframe}, mDigits);
     pc.outputs().snapshot(Output{o2::header::gDataOriginTOF, "READOUTWINDOW", 0, Lifetime::Timeframe}, mRow);
     pc.outputs().snapshot(Output{o2::header::gDataOriginTOF, "PATTERNS", 0, Lifetime::Timeframe}, mPatterns);
-    if (mUseMC)
+    if (mUseMC) {
       pc.outputs().snapshot(Output{o2::header::gDataOriginTOF, "DIGITSMCTR", 0, Lifetime::Timeframe}, mLabels);
+    }
 
     static o2::parameters::GRPObject::ROMode roMode = o2::parameters::GRPObject::CONTINUOUS;
 

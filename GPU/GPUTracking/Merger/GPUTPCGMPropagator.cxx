@@ -117,8 +117,8 @@ GPUd() int GPUTPCGMPropagator::RotateToAlpha(float newAlpha)
   // return value is error code (0==no error)
   //
 
-  float newCosAlpha = CAMath::Cos(newAlpha);
-  float newSinAlpha = CAMath::Sin(newAlpha);
+  float newCosAlpha, newSinAlpha;
+  CAMath::SinCos(newAlpha, newSinAlpha, newCosAlpha);
 
   float cc = newCosAlpha * mCosAlpha + newSinAlpha * mSinAlpha; // cos(newAlpha - mAlpha);
   float ss = newSinAlpha * mCosAlpha - newCosAlpha * mSinAlpha; //sin(newAlpha - mAlpha);
@@ -155,11 +155,20 @@ GPUd() int GPUTPCGMPropagator::RotateToAlpha(float newAlpha)
   float trackX = x0 * cc + ss * mT->Y();
 
   // transport t0 to trackX
-  float B[3];
-  GetBxByBz(newAlpha, t0.X(), t0.Y(), t0.Z(), B);
   float dLp = 0;
-  if (t0.PropagateToXBxByBz(trackX, B[0], B[1], B[2], dLp)) {
-    return -1;
+  float Bz;
+  if (mPropagateBzOnly) {
+    Bz = GetBzBase(newCosAlpha, newSinAlpha, t0.X(), t0.Y(), t0.Z());
+    if (t0.PropagateToXBzLight(trackX, Bz, dLp)) {
+      return -1;
+    }
+  } else {
+    float B[3];
+    GetBxByBz(newAlpha, t0.X(), t0.Y(), t0.Z(), B);
+    Bz = B[2];
+    if (t0.PropagateToXBxByBz(trackX, B[0], B[1], B[2], dLp)) {
+      return -1;
+    }
   }
 
   if (CAMath::Abs(t0.SinPhi()) >= mMaxSinPhi) {
@@ -233,7 +242,7 @@ GPUd() int GPUTPCGMPropagator::RotateToAlpha(float newAlpha)
   // only covariance changes. Use rotated and transported t0 for linearisation
   float j3 = -t0.Py() / t0.Px();
   float j4 = -t0.Pz() / t0.Px();
-  float j5 = t0.QPt() * B[2];
+  float j5 = t0.QPt() * Bz;
 
   //                    Y  Z Sin DzDs q/p  X
   // Jacobian J1 = { {  1, 0, 0,  0,  0,  j3 }, // Y
@@ -328,11 +337,13 @@ GPUd() int GPUTPCGMPropagator::PropagateToXAlphaBz(float posX, float posAlpha, b
 
   GPUTPCGMPhysicalTrackModel t0e(mT0);
   float dLp = 0;
-  if (t0e.PropagateToXBzLight(posX, Bz, dLp))
+  if (t0e.PropagateToXBzLight(posX, Bz, dLp)) {
     return 1;
+  }
 
-  if (CAMath::Abs(t0e.SinPhi()) >= mMaxSinPhi)
+  if (CAMath::Abs(t0e.SinPhi()) >= mMaxSinPhi) {
     return -3;
+  }
 
   return FollowLinearization(t0e, Bz, dLp, inFlyDirection);
 }
@@ -633,7 +644,7 @@ GPUd() int GPUTPCGMPropagator::Update(float posY, float posZ, int iRow, const GP
   GetErr2(err2Y, err2Z, param, posZ, iRow, clusterState);
 
   if (rejectChi2 >= 2) {
-    if (rejectChi2 == 3 && inter->errorY < 0) {
+    if (rejectChi2 == 3 && inter->errorY < (GPUCA_MERGER_INTERPOLATION_ERROR_TYPE)0) {
       rejectChi2 = 1;
     } else {
       int retVal = InterpolateReject(posY, posZ, clusterState, rejectChi2, inter, err2Y, err2Z);
@@ -677,8 +688,8 @@ GPUd() int GPUTPCGMPropagator::InterpolateReject(float posY, float posZ, short c
     if (mFitInProjections || mT->NDF() <= 0) {
       const float Iz0 = inter->posY - mP[0];
       const float Iz1 = inter->posZ - mP[1];
-      const float Iw0 = 1.f / (mC[0] + inter->errorY);
-      const float Iw2 = 1.f / (mC[2] + inter->errorZ);
+      const float Iw0 = 1.f / (mC[0] + (float)inter->errorY);
+      const float Iw2 = 1.f / (mC[2] + (float)inter->errorZ);
       const float Ik00 = mC[0] * Iw0;
       const float Ik11 = mC[2] * Iw2;
       const float ImP0 = mP[0] + Ik00 * Iz0;
@@ -695,8 +706,8 @@ GPUd() int GPUTPCGMPropagator::InterpolateReject(float posY, float posZ, short c
     } else {
       const float Iz0 = inter->posY - mP[0];
       const float Iz1 = inter->posZ - mP[1];
-      float Iw0 = mC[2] + inter->errorZ;
-      float Iw2 = mC[0] + inter->errorY;
+      float Iw0 = mC[2] + (float)inter->errorZ;
+      float Iw2 = mC[0] + (float)inter->errorY;
       float Idet = CAMath::Max(1e-10f, Iw0 * Iw2 - mC[1] * mC[1]);
       Idet = 1.f / Idet;
       Iw0 *= Idet;

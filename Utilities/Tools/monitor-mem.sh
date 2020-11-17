@@ -39,9 +39,13 @@ while [ 1 ] ; do
   ps -p $PID > /dev/null
   [ $? == 1 ] && echo "Job finished; Exiting " && break
 
-  sleep 0.005
+  # take a measurement at some defined rate (can be customized)
+  sleep ${JOBUTILS_MONITORMEM_SLEEP:-0.005}
 done
 
+# record return code of original command
+wait ${PID}
+RC=$?
 
 # print summary
 MAXMEM=`awk '/^[0-9]/{ for(i=1; i<=NF;i++) j+=$i; print j; j=0 }' ${memlogfile} | awk 'BEGIN {m = 0} //{if($1>m){m=$1}} END {print m}'`
@@ -49,3 +53,5 @@ AVGMEM=`awk '/^[0-9]/{ for(i=1; i<=NF;i++) j+=$i; print j; j=0 }' ${memlogfile} 
 
 echo "PROCESS MAX MEM = ${MAXMEM}"
 echo "PROCESS AVG MEM = ${AVGMEM}"
+
+exit ${RC}
