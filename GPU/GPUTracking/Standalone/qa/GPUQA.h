@@ -43,7 +43,7 @@ class GPUQA
   GPUQA(GPUChainTracking* chain) {}
   ~GPUQA() = default;
 
-  int InitQA() { return 1; }
+  int InitQA(int tasks = 0) { return 1; }
   void RunQA(bool matchOnly = false) {}
   int DrawQAHistograms() { return 1; }
   void SetMCTrackRange(int min, int max) {}
@@ -71,7 +71,12 @@ class GPUQA
 namespace o2
 {
 class MCCompLabel;
-}
+namespace tpc
+{
+class TrackTPC;
+struct ClusterNativeAccess;
+} // namespace tpc
+} // namespace o2
 
 class AliHLTTPCClusterMCLabel;
 
@@ -88,8 +93,8 @@ class GPUQA
   GPUQA(GPUChainTracking* chain, const GPUSettingsQA* config = nullptr);
   ~GPUQA();
 
-  int InitQA();
-  void RunQA(bool matchOnly = false);
+  int InitQA(int tasks = -1);
+  void RunQA(bool matchOnly = false, const std::vector<o2::tpc::TrackTPC>* tracksExternal = nullptr, const std::vector<o2::MCCompLabel>* tracksExtMC = nullptr, const o2::tpc::ClusterNativeAccess* clNative = nullptr);
   int DrawQAHistograms(TObjArray* qcout = nullptr);
   void DrawQAHistogramsCleanup(); // Needed after call to DrawQAHistograms with qcout != nullptr when GPUSettingsQA.shipToQCAsCanvas = true to clean up the Canvases etc.
   void SetMCTrackRange(int min, int max);
@@ -104,12 +109,24 @@ class GPUQA
   const std::vector<TH1F>& getHistograms1D() const { return *mHist1D; }
   const std::vector<TH2F>& getHistograms2D() const { return *mHist2D; }
   const std::vector<TH1D>& getHistograms1Dd() const { return *mHist1Dd; }
-  int loadHistograms(std::vector<TH1F>& i1, std::vector<TH2F>& i2, std::vector<TH1D>& i3);
+  void resetHists();
+  int loadHistograms(std::vector<TH1F>& i1, std::vector<TH2F>& i2, std::vector<TH1D>& i3, int tasks = -1);
 
   static constexpr int N_CLS_HIST = 8;
   static constexpr int N_CLS_TYPE = 3;
 
   static constexpr int MC_LABEL_INVALID = -1e9;
+
+  enum QA_TASKS {
+    taskTrackingEff = 1,
+    taskTrackingRes = 2,
+    taskTrackingResPull = 4,
+    taskClusterAttach = 8,
+    taskTrackStatistics = 16,
+    taskClusterCounts = 32,
+    taskDefault = 63,
+    taskDefaultPostprocess = 31
+  };
 
  private:
   struct additionalMCParameters {
@@ -189,7 +206,6 @@ class GPUQA
 
   GPUChainTracking* mTracking;
   const GPUSettingsQA& mConfig;
-  bool mRunForQC;
 
   const char* str_perf_figure_1 = "ALICE Performance 2018/03/20";
   // const char* str_perf_figure_2 = "2015, MC pp, #sqrt{s} = 5.02 TeV";
@@ -277,6 +293,7 @@ class GPUQA
 
   int mNEvents = 0;
   bool mQAInitialized = false;
+  int mQATasks = 0;
   std::vector<std::vector<int>> mcEffBuffer;
   std::vector<std::vector<int>> mcLabelBuffer;
   std::vector<std::vector<bool>> mGoodTracks;
@@ -286,6 +303,8 @@ class GPUQA
   static int initColors();
 
   int mMCTrackMin = -1, mMCTrackMax = -1;
+
+  const o2::tpc::ClusterNativeAccess* mClNative;
 };
 
 inline bool GPUQA::SuppressTrack(int iTrack) const { return (mConfig.matchMCLabels.size() && !mGoodTracks[mNEvents][iTrack]); }
