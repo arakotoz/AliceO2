@@ -209,6 +209,36 @@ struct ExpirationHandlerHelpers {
   {
     return [](DeviceState&, ConfigParamRegistry const&) { return LifetimeHelpers::fetchFromObjectRegistry(); };
   }
+
+  /// This behaves as data. I.e. we never create it unless data arrives.
+  static RouteConfigurator::CreationConfigurator createOptionalConfigurator()
+  {
+    return [](DeviceState&, ConfigParamRegistry const&) { return LifetimeHelpers::dataDrivenCreation(); };
+  }
+
+  /// This will always exipire an optional record when no data is received.
+  static RouteConfigurator::DanglingConfigurator danglingOptionalConfigurator()
+  {
+    return [](DeviceState&, ConfigParamRegistry const&) { return LifetimeHelpers::expireAlways(); };
+  }
+
+  /// When the record expires, simply create a dummy entry.
+  static RouteConfigurator::ExpirationConfigurator expiringOptionalConfigurator(InputSpec const& spec, std::string const& sourceChannel)
+  {
+    try {
+      ConcreteDataMatcher concrete = DataSpecUtils::asConcreteDataMatcher(spec);
+      return [concrete, sourceChannel](DeviceState&, ConfigParamRegistry const&) {
+        return LifetimeHelpers::dummy(concrete, sourceChannel);
+      };
+    } catch (...) {
+      ConcreteDataTypeMatcher dataType = DataSpecUtils::asConcreteDataTypeMatcher(spec);
+      ConcreteDataMatcher concrete{dataType.origin, dataType.description, 0xdeadbeef};
+      return [concrete, sourceChannel](DeviceState&, ConfigParamRegistry const&) {
+        return LifetimeHelpers::dummy(concrete, sourceChannel);
+      };
+    }
+    // We copy the matcher to avoid lifetime issues.
+  }
 };
 
 /// This creates a string to configure channels of a FairMQDevice
@@ -637,6 +667,12 @@ void DeviceSpecHelpers::processInEdgeActions(std::vector<DeviceSpec>& devices,
           ExpirationHandlerHelpers::dataDrivenConfigurator(),
           ExpirationHandlerHelpers::danglingTransientConfigurator(),
           ExpirationHandlerHelpers::expiringTransientConfigurator(inputSpec)};
+        break;
+      case Lifetime::Optional:
+        route.configurator = {
+          ExpirationHandlerHelpers::createOptionalConfigurator(),
+          ExpirationHandlerHelpers::danglingOptionalConfigurator(),
+          ExpirationHandlerHelpers::expiringOptionalConfigurator(inputSpec, sourceChannel)};
         break;
       default:
         break;
