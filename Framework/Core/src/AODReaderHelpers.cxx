@@ -33,6 +33,8 @@
 #include <ROOT/RDataFrame.hxx>
 #include <TGrid.h>
 #include <TFile.h>
+#include <TTreeCache.h>
+#include <TTreePerfStats.h>
 
 #include <arrow/ipc/reader.h>
 #include <arrow/ipc/writer.h>
@@ -283,6 +285,8 @@ AlgorithmSpec AODReaderHelpers::rootFileReaderCallback()
             throw std::runtime_error("Processing is stopped!");
           }
         }
+        TTreePerfStats ps("ioperf", tr);
+
         if (first) {
           timeFrameNumber = didir->getTimeFrameNumber(dh, fcnt, ntf);
           auto o = Output(TFNumberHeader);
@@ -313,12 +317,13 @@ AlgorithmSpec AODReaderHelpers::rootFileReaderCallback()
         if (info.file) {
           totalReadCalls += info.file->GetReadCalls() - before;
         }
+        monitoring.send(Metric{(double)ps.GetReadCalls(), "aod-tree-read-calls"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
         delete tr;
 
         first = false;
       }
-      monitoring.send(Metric{(uint64_t)totalSizeUncompressed, "aod-bytes-read-uncompressed"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
-      monitoring.send(Metric{(uint64_t)totalSizeCompressed, "aod-bytes-read-compressed"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
+      monitoring.send(Metric{(uint64_t)totalSizeUncompressed / 1000, "aod-bytes-read-uncompressed"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
+      monitoring.send(Metric{(uint64_t)totalSizeCompressed / 1000, "aod-bytes-read-compressed"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
       monitoring.send(Metric{(uint64_t)totalReadCalls, "aod-total-read-calls"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
 
       // save file number and time frame

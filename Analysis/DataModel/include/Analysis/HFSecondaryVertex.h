@@ -25,15 +25,13 @@ namespace o2::aod
 {
 namespace hf_seltrack
 {
-DECLARE_SOA_COLUMN(IsSel2Prong, isSel2Prong, int);
-DECLARE_SOA_COLUMN(IsSel3Prong, isSel3Prong, int);
+DECLARE_SOA_COLUMN(IsSelProng, isSelProng, int);
 DECLARE_SOA_COLUMN(DCAPrim0, dcaPrim0, float);
 DECLARE_SOA_COLUMN(DCAPrim1, dcaPrim1, float);
 } // namespace hf_seltrack
 
 DECLARE_SOA_TABLE(HFSelTrack, "AOD", "HFSELTRACK",
-                  hf_seltrack::IsSel2Prong,
-                  hf_seltrack::IsSel3Prong,
+                  hf_seltrack::IsSelProng,
                   hf_seltrack::DCAPrim0,
                   hf_seltrack::DCAPrim1);
 
@@ -50,6 +48,13 @@ DECLARE_SOA_INDEX_COLUMN_FULL(Index1, index1, int, BigTracks, "fIndex1");
 DECLARE_SOA_INDEX_COLUMN_FULL(Index2, index2, int, BigTracks, "fIndex2");
 DECLARE_SOA_INDEX_COLUMN_FULL(Index3, index3, int, BigTracks, "fIndex3");
 DECLARE_SOA_COLUMN(HFflag, hfflag, uint8_t);
+
+DECLARE_SOA_COLUMN(D0ToKPiFlag, d0ToKPiFlag, uint8_t);
+DECLARE_SOA_COLUMN(JpsiToEEFlag, jpsiToEEFlag, uint8_t);
+
+DECLARE_SOA_COLUMN(DPlusPiKPiFlag, dPlusPiKPiFlag, uint8_t);
+DECLARE_SOA_COLUMN(LcPKPiFlag, lcPKPiFlag, uint8_t);
+DECLARE_SOA_COLUMN(DsKKPiFlag, dsKKPiFlag, uint8_t);
 } // namespace hf_track_index
 
 DECLARE_SOA_TABLE(HfTrackIndexProng2, "AOD", "HFTRACKIDXP2",
@@ -57,11 +62,20 @@ DECLARE_SOA_TABLE(HfTrackIndexProng2, "AOD", "HFTRACKIDXP2",
                   hf_track_index::Index1Id,
                   hf_track_index::HFflag);
 
+DECLARE_SOA_TABLE(HfCutStatusProng2, "AOD", "HFCUTSTATUSP2",
+                  hf_track_index::D0ToKPiFlag,
+                  hf_track_index::JpsiToEEFlag);
+
 DECLARE_SOA_TABLE(HfTrackIndexProng3, "AOD", "HFTRACKIDXP3",
                   hf_track_index::Index0Id,
                   hf_track_index::Index1Id,
                   hf_track_index::Index2Id,
                   hf_track_index::HFflag);
+
+DECLARE_SOA_TABLE(HfCutStatusProng3, "AOD", "HFCUTSTATUSP3",
+                  hf_track_index::DPlusPiKPiFlag,
+                  hf_track_index::LcPKPiFlag,
+                  hf_track_index::DsKKPiFlag);
 
 // general decay properties
 namespace hf_cand
@@ -133,9 +147,12 @@ DECLARE_SOA_DYNAMIC_COLUMN(M, m, [](float px0, float py0, float pz0, float px1, 
 DECLARE_SOA_DYNAMIC_COLUMN(M2, m2, [](float px0, float py0, float pz0, float px1, float py1, float pz1, const array<double, 2>& m) { return RecoDecay::M2(array{array{px0, py0, pz0}, array{px1, py1, pz1}}, m); });
 DECLARE_SOA_DYNAMIC_COLUMN(CosThetaStar, cosThetaStar, [](float px0, float py0, float pz0, float px1, float py1, float pz1, const array<double, 2>& m, double mTot, int iProng) { return RecoDecay::CosThetaStar(array{array{px0, py0, pz0}, array{px1, py1, pz1}}, m, mTot, iProng); });
 // MC matching result:
-// - bit 0: D0(bar) → π± K∓
-DECLARE_SOA_COLUMN(FlagMCMatchRec, flagMCMatchRec, uint8_t); // reconstruction level
-DECLARE_SOA_COLUMN(FlagMCMatchGen, flagMCMatchGen, uint8_t); // generator level
+// - ±D0ToPiK: D0(bar) → π± K∓
+DECLARE_SOA_COLUMN(FlagMCMatchRec, flagMCMatchRec, int8_t); // reconstruction level
+DECLARE_SOA_COLUMN(FlagMCMatchGen, flagMCMatchGen, int8_t); // generator level
+
+// mapping of decay types
+enum DecayType { D0ToPiK = 1 };
 
 // functions for specific particles
 
@@ -257,10 +274,14 @@ DECLARE_SOA_EXPRESSION_COLUMN(Pz, pz, float, 1.f * aod::hf_cand::pzProng0 + 1.f 
 DECLARE_SOA_DYNAMIC_COLUMN(M, m, [](float px0, float py0, float pz0, float px1, float py1, float pz1, float px2, float py2, float pz2, const array<double, 3>& m) { return RecoDecay::M(array{array{px0, py0, pz0}, array{px1, py1, pz1}, array{px2, py2, pz2}}, m); });
 DECLARE_SOA_DYNAMIC_COLUMN(M2, m2, [](float px0, float py0, float pz0, float px1, float py1, float pz1, float px2, float py2, float pz2, const array<double, 3>& m) { return RecoDecay::M2(array{array{px0, py0, pz0}, array{px1, py1, pz1}, array{px2, py2, pz2}}, m); });
 // MC matching result:
-// - bit 0: D± → π± K∓ π±
-// - bit 1: Lc± → p± K∓ π±
-DECLARE_SOA_COLUMN(FlagMCMatchRec, flagMCMatchRec, uint8_t); // reconstruction level
-DECLARE_SOA_COLUMN(FlagMCMatchGen, flagMCMatchGen, uint8_t); // generator level
+// - ±DPlusToPiKPi: D± → π± K∓ π±
+// - ±LcToPKPi: Λc± → p± K∓ π±
+DECLARE_SOA_COLUMN(FlagMCMatchRec, flagMCMatchRec, int8_t); // reconstruction level
+DECLARE_SOA_COLUMN(FlagMCMatchGen, flagMCMatchGen, int8_t); // generator level
+
+// mapping of decay types
+enum DecayType { DPlusToPiKPi = 1,
+                 LcToPKPi };
 
 // functions for specific particles
 
@@ -290,7 +311,7 @@ auto InvMassDPlus(const T& candidate)
   return candidate.m(array{RecoDecay::getMassPDG(kPiPlus), RecoDecay::getMassPDG(kKPlus), RecoDecay::getMassPDG(kPiPlus)});
 }
 
-// Lc± → p± K∓ π±
+// Λc± → p± K∓ π±
 
 template <typename T>
 auto CtLc(const T& candidate)
