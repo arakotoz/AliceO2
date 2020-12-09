@@ -28,7 +28,6 @@ namespace mft
 //_________________________________________________________________________________________________
 Tracker::Tracker(bool useMC) : mUseMC{useMC}
 {
-
   mTrackFitter = std::make_unique<o2::mft::TrackFitter>();
 }
 
@@ -38,6 +37,34 @@ void Tracker::setBz(Float_t bz)
   /// Configure track propagation
   mBz = bz;
   mTrackFitter->setBz(bz);
+}
+
+//_________________________________________________________________________________________________
+void Tracker::initConfig(const MFTTrackingParam& trkParam)
+{
+  /// initialize from MFTTrackingParam (command line configuration parameters)
+
+  mMinTrackPointsLTF = trkParam.MinTrackPointsLTF;
+  mMinTrackPointsCA = trkParam.MinTrackPointsCA;
+  mMinTrackStationsLTF = trkParam.MinTrackStationsLTF;
+  mMinTrackStationsCA = trkParam.MinTrackStationsCA;
+  mLTFclsRCut = trkParam.LTFclsRCut;
+  mROADclsRCut = trkParam.ROADclsRCut;
+  mLTFseed2BinWin = trkParam.LTFseed2BinWin;
+  mLTFinterBinWin = trkParam.LTFinterBinWin;
+
+  mRBins = trkParam.RBins;
+  mPhiBins = trkParam.PhiBins;
+  mRPhiBins = trkParam.RBins * trkParam.PhiBins;
+  if (mRPhiBins > constants::index_table::MaxRPhiBins) {
+    LOG(WARN) << "To many RPhiBins for this configuration!";
+    mRPhiBins = constants::index_table::MaxRPhiBins;
+    mRBins = sqrt(constants::index_table::MaxRPhiBins);
+    mPhiBins = sqrt(constants::index_table::MaxRPhiBins);
+    LOG(WARN) << "Using instead RBins " << mRBins << " and PhiBins " << mPhiBins;
+  }
+  mRBinSize = (constants::index_table::RMax - constants::index_table::RMin) / mRBins;
+  mPhiBinSize = (constants::index_table::PhiMax - constants::index_table::PhiMin) / mPhiBins;
 }
 
 //_________________________________________________________________________________________________
@@ -51,15 +78,15 @@ void Tracker::initialize()
 
   for (Int_t layer1 = 0; layer1 < (constants::mft::LayersNumber - 1); ++layer1) {
 
-    for (Int_t iRBin = 0; iRBin < constants::index_table::RBins; ++iRBin) {
+    for (Int_t iRBin = 0; iRBin < mRBins; ++iRBin) {
 
-      r = (iRBin + 0.5) * constants::index_table::RBinSize + constants::index_table::RMin;
+      r = (iRBin + 0.5) * mRBinSize + constants::index_table::RMin;
 
-      for (Int_t iPhiBin = 0; iPhiBin < constants::index_table::PhiBins; ++iPhiBin) {
+      for (Int_t iPhiBin = 0; iPhiBin < mPhiBins; ++iPhiBin) {
 
-        phi = (iPhiBin + 0.5) * constants::index_table::PhiBinSize + constants::index_table::PhiMin;
+        phi = (iPhiBin + 0.5) * mPhiBinSize + constants::index_table::PhiMin;
 
-        binIndex1 = constants::index_table::getBinIndex(iRBin, iPhiBin);
+        binIndex1 = getBinIndex(iRBin, iPhiBin);
 
         x = r * TMath::Cos(phi);
         y = r * TMath::Sin(phi);
@@ -74,43 +101,55 @@ void Tracker::initialize()
           phi_proj = clsPoint2D.Phi();
           o2::math_utils::bringTo02PiGen(phi_proj);
 
-          binR_proj = constants::index_table::getRBinIndex(r_proj);
-          binPhi_proj = constants::index_table::getPhiBinIndex(phi_proj);
+          binR_proj = getRBinIndex(r_proj);
+          binPhi_proj = getPhiBinIndex(phi_proj);
 
           int binRS, binPhiS;
-          int binhwS = constants::index_table::LTFseed2BinWin / 2;
-          for (Int_t iR = 0; iR < constants::index_table::LTFseed2BinWin; ++iR) {
-            binRS = binR_proj + (iR - binhwS);
+
+          int binwRS = mLTFseed2BinWin;
+          int binhwRS = binwRS / 2;
+
+          int binwPhiS = mLTFseed2BinWin;
+          int binhwPhiS = binwPhiS / 2;
+
+          for (Int_t iR = 0; iR < binwRS; ++iR) {
+            binRS = binR_proj + (iR - binhwRS);
             if (binRS < 0) {
               continue;
             }
 
-            for (Int_t iPhi = 0; iPhi < constants::index_table::LTFseed2BinWin; ++iPhi) {
-              binPhiS = binPhi_proj + (iPhi - binhwS);
+            for (Int_t iPhi = 0; iPhi < binwPhiS; ++iPhi) {
+              binPhiS = binPhi_proj + (iPhi - binhwPhiS);
               if (binPhiS < 0) {
                 continue;
               }
 
-              binIndex2S = constants::index_table::getBinIndex(binRS, binPhiS);
+              binIndex2S = getBinIndex(binRS, binPhiS);
               mBinsS[layer1][layer2 - 1][binIndex1].emplace_back(binIndex2S);
             }
           }
 
           int binR, binPhi;
-          int binhw = constants::index_table::LTFinterBinWin / 2;
-          for (Int_t iR = 0; iR < constants::index_table::LTFinterBinWin; ++iR) {
-            binR = binR_proj + (iR - binhw);
+
+          int binwR = mLTFinterBinWin;
+          int binhwR = binwR / 2;
+
+          int binwPhi = mLTFinterBinWin;
+          int binhwPhi = binwPhi / 2;
+
+          for (Int_t iR = 0; iR < binwR; ++iR) {
+            binR = binR_proj + (iR - binhwR);
             if (binR < 0) {
               continue;
             }
 
-            for (Int_t iPhi = 0; iPhi < constants::index_table::LTFinterBinWin; ++iPhi) {
-              binPhi = binPhi_proj + (iPhi - binhw);
+            for (Int_t iPhi = 0; iPhi < binwPhi; ++iPhi) {
+              binPhi = binPhi_proj + (iPhi - binhwPhi);
               if (binPhi < 0) {
                 continue;
               }
 
-              binIndex2 = constants::index_table::getBinIndex(binR, binPhi);
+              binIndex2 = getBinIndex(binR, binPhi);
               mBins[layer1][layer2 - 1][binIndex1].emplace_back(binIndex2);
             }
           }
@@ -119,6 +158,8 @@ void Tracker::initialize()
       }   // end loop PhiBinIndex
     }     // end loop RBinIndex
   }       // end loop layer1
+
+  mRoad.initialize();
 }
 
 //_________________________________________________________________________________________________
@@ -133,7 +174,6 @@ void Tracker::clustersToTracks(ROframe& event, std::ostream& timeBenchmarkOutput
 //_________________________________________________________________________________________________
 void Tracker::findTracks(ROframe& event)
 {
-  //computeCells(event);
   findTracksLTF(event);
   findTracksCA(event);
 }
@@ -148,10 +188,10 @@ void Tracker::findTracksLTF(ROframe& event)
   Int_t binR_proj, binPhi_proj, bin;
   Int_t binIndex, clsMinIndex, clsMaxIndex, clsMinIndexS, clsMaxIndexS;
   Int_t extClsIndex;
-  Float_t dR, dRmin, dRcut = constants::mft::LTFclsRCut;
+  Float_t dR, dRmin, dRcut = mLTFclsRCut;
   Bool_t hasDisk[constants::mft::DisksNumber], newPoint, seed;
 
-  Int_t clsLayer1, clsLayer2, clsLayer;
+  Int_t clsInLayer1, clsInLayer2, clsInLayer;
 
   Int_t nPoints;
   TrackElement trackPoints[constants::mft::LayersNumber];
@@ -165,9 +205,9 @@ void Tracker::findTracksLTF(ROframe& event)
     layer2 = (step == 0) ? (constants::mft::LayersNumber - 1) : (layer2 - 1);
     step++;
 
-    if (layer2 < layer1 + (constants::mft::MinTrackPointsLTF - 1)) {
+    if (layer2 < layer1 + (mMinTrackPointsLTF - 1)) {
       ++layer1;
-      if (layer1 > (constants::mft::LayersNumber - (constants::mft::MinTrackPointsLTF - 1))) {
+      if (layer1 > (constants::mft::LayersNumber - (mMinTrackPointsLTF - 1))) {
         break;
       }
       step = 0;
@@ -179,7 +219,7 @@ void Tracker::findTracksLTF(ROframe& event)
       if (cluster1.getUsed()) {
         continue;
       }
-      clsLayer1 = it1 - event.getClustersInLayer(layer1).begin();
+      clsInLayer1 = it1 - event.getClustersInLayer(layer1).begin();
 
       // loop over the bins in the search window
       for (auto& binS : mBinsS[layer1][layer2 - 1][cluster1.indexTableBin]) {
@@ -191,14 +231,14 @@ void Tracker::findTracksLTF(ROframe& event)
           if (cluster2.getUsed()) {
             continue;
           }
-          clsLayer2 = it2 - event.getClustersInLayer(layer2).begin();
+          clsInLayer2 = it2 - event.getClustersInLayer(layer2).begin();
 
           // start a TrackLTF
           nPoints = 0;
 
           // add the first seed point
           trackPoints[nPoints].layer = layer1;
-          trackPoints[nPoints].idInLayer = clsLayer1;
+          trackPoints[nPoints].idInLayer = clsInLayer1;
           nPoints++;
 
           // intermediate layers
@@ -217,7 +257,7 @@ void Tracker::findTracksLTF(ROframe& event)
                 if (cluster.getUsed()) {
                   continue;
                 }
-                clsLayer = it - event.getClustersInLayer(layer).begin();
+                clsInLayer = it - event.getClustersInLayer(layer).begin();
 
                 dR = getDistanceToSeed(cluster1, cluster2, cluster);
                 // retain the closest point within a radius dRcut
@@ -228,7 +268,7 @@ void Tracker::findTracksLTF(ROframe& event)
 
                 if (newPoint) {
                   trackPoints[nPoints].layer = layer;
-                  trackPoints[nPoints].idInLayer = clsLayer;
+                  trackPoints[nPoints].idInLayer = clsInLayer;
                   nPoints++;
                 }
                 // retain only the closest point in DistanceToSeed
@@ -239,11 +279,11 @@ void Tracker::findTracksLTF(ROframe& event)
 
           // add the second seed point
           trackPoints[nPoints].layer = layer2;
-          trackPoints[nPoints].idInLayer = clsLayer2;
+          trackPoints[nPoints].idInLayer = clsInLayer2;
           nPoints++;
 
           // keep only tracks fulfilling the minimum length condition
-          if (nPoints < constants::mft::MinTrackPointsLTF) {
+          if (nPoints < mMinTrackPointsLTF) {
             continue;
           }
           for (Int_t i = 0; i < (constants::mft::DisksNumber); i++) {
@@ -259,7 +299,7 @@ void Tracker::findTracksLTF(ROframe& event)
               ++nPointDisks;
             }
           }
-          if (nPointDisks < constants::mft::MinTrackStationsLTF) {
+          if (nPointDisks < mMinTrackStationsLTF) {
             continue;
           }
 
@@ -267,11 +307,11 @@ void Tracker::findTracksLTF(ROframe& event)
           event.addTrackLTF();
           for (Int_t point = 0; point < nPoints; ++point) {
             auto layer = trackPoints[point].layer;
-            auto clsLayer = trackPoints[point].idInLayer;
-            Cluster& cluster = event.getClustersInLayer(layer)[clsLayer];
+            auto clsInLayer = trackPoints[point].idInLayer;
+            Cluster& cluster = event.getClustersInLayer(layer)[clsInLayer];
             mcCompLabel = mUseMC ? event.getClusterLabels(layer, cluster.clusterId) : MCCompLabel();
             extClsIndex = event.getClusterExternalIndex(layer, cluster.clusterId);
-            event.getCurrentTrackLTF().setPoint(cluster, layer, clsLayer, mcCompLabel, extClsIndex);
+            event.getCurrentTrackLTF().setPoint(cluster, layer, clsInLayer, mcCompLabel, extClsIndex);
             // mark the used clusters
             cluster.setUsed(true);
           }
@@ -299,13 +339,13 @@ void Tracker::findTracksCA(ROframe& event)
   Int_t roadId, nPointDisks;
   Int_t binR_proj, binPhi_proj, bin;
   Int_t binIndex, clsMinIndex, clsMaxIndex, clsMinIndexS, clsMaxIndexS;
-  Float_t dR, dRcut = constants::mft::ROADclsRCut;
+  Float_t dR, dRcut = mROADclsRCut;
   Bool_t hasDisk[constants::mft::DisksNumber];
 
-  Int_t clsLayer1, clsLayer2, clsLayer;
+  Int_t clsInLayer1, clsInLayer2, clsInLayer;
 
   Int_t nPoints;
-  TrackElement roadPoints[10 * constants::mft::LayersNumber];
+  std::vector<TrackElement> roadPoints;
 
   roadId = 0;
 
@@ -318,7 +358,7 @@ void Tracker::findTracksCA(ROframe& event)
         if (cluster1.getUsed()) {
           continue;
         }
-        clsLayer1 = it1 - event.getClustersInLayer(layer1).begin();
+        clsInLayer1 = it1 - event.getClustersInLayer(layer1).begin();
 
         // loop over the bins in the search window
         for (auto& binS : mBinsS[layer1][layer2 - 1][cluster1.indexTableBin]) {
@@ -330,15 +370,13 @@ void Tracker::findTracksCA(ROframe& event)
             if (cluster2.getUsed()) {
               continue;
             }
-            clsLayer2 = it2 - event.getClustersInLayer(layer2).begin();
+            clsInLayer2 = it2 - event.getClustersInLayer(layer2).begin();
 
             // start a road
-            nPoints = 0;
+            roadPoints.clear();
 
             // add the first seed point
-            roadPoints[nPoints].layer = layer1;
-            roadPoints[nPoints].idInLayer = clsLayer1;
-            nPoints++;
+            roadPoints.emplace_back(layer1, clsInLayer1);
 
             for (Int_t layer = (layer1 + 1); layer <= (layer2 - 1); ++layer) {
 
@@ -352,28 +390,26 @@ void Tracker::findTracksCA(ROframe& event)
                   if (cluster.getUsed()) {
                     continue;
                   }
-                  clsLayer = it - event.getClustersInLayer(layer).begin();
+                  clsInLayer = it - event.getClustersInLayer(layer).begin();
 
                   dR = getDistanceToSeed(cluster1, cluster2, cluster);
                   // add all points within a radius dRcut
                   if (dR >= dRcut) {
                     continue;
                   }
-                  roadPoints[nPoints].layer = layer;
-                  roadPoints[nPoints].idInLayer = clsLayer;
-                  nPoints++;
+
+                  roadPoints.emplace_back(layer, clsInLayer);
 
                 } // end clusters bin intermediate layer
               }   // end intermediate layers
             }     // end binR
 
             // add the second seed point
-            roadPoints[nPoints].layer = layer2;
-            roadPoints[nPoints].idInLayer = clsLayer2;
-            nPoints++;
+            roadPoints.emplace_back(layer2, clsInLayer2);
+            nPoints = roadPoints.size();
 
             // keep only roads fulfilling the minimum length condition
-            if (nPoints < constants::mft::MinTrackPointsCA) {
+            if (nPoints < mMinTrackPointsCA) {
               continue;
             }
             for (Int_t i = 0; i < (constants::mft::DisksNumber); i++) {
@@ -389,21 +425,21 @@ void Tracker::findTracksCA(ROframe& event)
                 ++nPointDisks;
               }
             }
-            if (nPointDisks < constants::mft::MinTrackStationsCA) {
+            if (nPointDisks < mMinTrackStationsCA) {
               continue;
             }
 
-            event.addRoad();
+            mRoad.reset();
             for (Int_t point = 0; point < nPoints; ++point) {
               auto layer = roadPoints[point].layer;
-              auto clsLayer = roadPoints[point].idInLayer;
-              event.getCurrentRoad().setPoint(layer, clsLayer);
+              auto clsInLayer = roadPoints[point].idInLayer;
+              mRoad.setPoint(layer, clsInLayer);
             }
-            event.getCurrentRoad().setRoadId(roadId);
+            mRoad.setRoadId(roadId);
             ++roadId;
 
             computeCellsInRoad(event);
-            runForwardInRoad(event);
+            runForwardInRoad();
             runBackwardInRoad(event);
 
           } // end clusters in layer2
@@ -418,13 +454,11 @@ void Tracker::computeCellsInRoad(ROframe& event)
 {
   Int_t layer1, layer1min, layer1max, layer2, layer2min, layer2max;
   Int_t nPtsInLayer1, nPtsInLayer2;
-  Int_t clsLayer1, clsLayer2;
+  Int_t clsInLayer1, clsInLayer2;
   Int_t cellId;
   Bool_t noCell;
 
-  Road& road = event.getCurrentRoad();
-
-  road.getLength(layer1min, layer1max);
+  mRoad.getLength(layer1min, layer1max);
   --layer1max;
 
   for (layer1 = layer1min; layer1 <= layer1max; ++layer1) {
@@ -434,30 +468,30 @@ void Tracker::computeCellsInRoad(ROframe& event)
     layer2min = layer1 + 1;
     layer2max = std::min(layer1 + (constants::mft::DisksNumber - isDiskFace(layer1)), constants::mft::LayersNumber - 1);
 
-    nPtsInLayer1 = road.getNPointsInLayer(layer1);
+    nPtsInLayer1 = mRoad.getNPointsInLayer(layer1);
 
     for (Int_t point1 = 0; point1 < nPtsInLayer1; ++point1) {
 
-      clsLayer1 = road.getClustersIdInLayer(layer1)[point1];
+      clsInLayer1 = mRoad.getClustersIdInLayer(layer1)[point1];
 
       layer2 = layer2min;
 
       noCell = kTRUE;
       while (noCell && (layer2 <= layer2max)) {
 
-        nPtsInLayer2 = road.getNPointsInLayer(layer2);
+        nPtsInLayer2 = mRoad.getNPointsInLayer(layer2);
         /*
         if (nPtsInLayer2 > 1) {
-          LOG(INFO) << "BV===== more than one point in road " << road.getRoadId() << " in layer " << layer2 << " : " << nPtsInLayer2 << "\n";
+          LOG(INFO) << "BV===== more than one point in road " << mRoad.getRoadId() << " in layer " << layer2 << " : " << nPtsInLayer2 << "\n";
         }
 	*/
         for (Int_t point2 = 0; point2 < nPtsInLayer2; ++point2) {
 
-          clsLayer2 = road.getClustersIdInLayer(layer2)[point2];
+          clsInLayer2 = mRoad.getClustersIdInLayer(layer2)[point2];
 
           noCell = kFALSE;
           // create a cell
-          addCellToCurrentRoad(event, layer1, layer2, clsLayer1, clsLayer2, cellId);
+          addCellToCurrentRoad(event, layer1, layer2, clsInLayer1, clsInLayer2, cellId);
         } // end points in layer2
         ++layer2;
 
@@ -467,13 +501,11 @@ void Tracker::computeCellsInRoad(ROframe& event)
 }
 
 //_________________________________________________________________________________________________
-void Tracker::runForwardInRoad(ROframe& event)
+void Tracker::runForwardInRoad()
 {
   Int_t layerR, layerL, icellR, icellL;
   Int_t iter = 0;
   Bool_t levelChange = kTRUE;
-
-  Road& road = event.getCurrentRoad();
 
   while (levelChange) {
 
@@ -483,9 +515,9 @@ void Tracker::runForwardInRoad(ROframe& event)
     // R = right, L = left
     for (layerL = 0; layerL < (constants::mft::LayersNumber - 2); ++layerL) {
 
-      for (icellL = 0; icellL < road.getCellsInLayer(layerL).size(); ++icellL) {
+      for (icellL = 0; icellL < mRoad.getCellsInLayer(layerL).size(); ++icellL) {
 
-        Cell& cellL = road.getCellsInLayer(layerL)[icellL];
+        Cell& cellL = mRoad.getCellsInLayer(layerL)[icellL];
 
         layerR = cellL.getSecondLayerId();
 
@@ -493,16 +525,16 @@ void Tracker::runForwardInRoad(ROframe& event)
           continue;
         }
 
-        for (icellR = 0; icellR < road.getCellsInLayer(layerR).size(); ++icellR) {
+        for (icellR = 0; icellR < mRoad.getCellsInLayer(layerR).size(); ++icellR) {
 
-          Cell& cellR = road.getCellsInLayer(layerR)[icellR];
+          Cell& cellR = mRoad.getCellsInLayer(layerR)[icellR];
 
           if ((cellL.getLevel() == cellR.getLevel()) && getCellsConnect(cellL, cellR)) {
             if (iter == 1) {
-              road.addRightNeighbourToCell(layerL, icellL, layerR, icellR);
-              road.addLeftNeighbourToCell(layerR, icellR, layerL, icellL);
+              mRoad.addRightNeighbourToCell(layerL, icellL, layerR, icellR);
+              mRoad.addLeftNeighbourToCell(layerR, icellR, layerL, icellL);
             }
-            road.incrementCellLevel(layerR, icellR);
+            mRoad.incrementCellLevel(layerR, icellR);
             levelChange = kTRUE;
 
           } // end matching cells
@@ -510,9 +542,9 @@ void Tracker::runForwardInRoad(ROframe& event)
       }     // end loop cellL
     }       // end loop layer
 
-    updateCellStatusInRoad(road);
+    updateCellStatusInRoad();
 
-  } // end while (step)
+  } // end while (levelChange)
 }
 
 //_________________________________________________________________________________________________
@@ -529,23 +561,17 @@ void Tracker::runBackwardInRoad(ROframe& event)
   Int_t nPointDisks;
   Float_t deviationPrev, deviation;
 
-  // start layer
   Int_t minLayer = 6;
   Int_t maxLayer = 8;
-
-  Road& road = event.getCurrentRoad();
 
   Int_t nCells;
   TrackElement trackCells[constants::mft::LayersNumber - 1];
 
   for (Int_t layer = maxLayer; layer >= minLayer; --layer) {
 
-    for (cellId = 0; cellId < road.getCellsInLayer(layer).size(); ++cellId) {
+    for (cellId = 0; cellId < mRoad.getCellsInLayer(layer).size(); ++cellId) {
 
-      if (road.isCellUsed(layer, cellId)) {
-        continue;
-      }
-      if (road.getCellLevel(layer, cellId) < (constants::mft::MinTrackPointsCA - 1)) {
+      if (mRoad.isCellUsed(layer, cellId) || (mRoad.getCellLevel(layer, cellId) < (mMinTrackPointsCA - 1))) {
         continue;
       }
 
@@ -563,7 +589,7 @@ void Tracker::runBackwardInRoad(ROframe& event)
         layerRC = trackCells[nCells - 1].layer;
         cellIdRC = trackCells[nCells - 1].idInLayer;
 
-        const Cell& cellRC = road.getCellsInLayer(layerRC)[cellIdRC];
+        const Cell& cellRC = mRoad.getCellsInLayer(layerRC)[cellIdRC];
 
         addCellToNewTrack = kFALSE;
 
@@ -576,12 +602,9 @@ void Tracker::runBackwardInRoad(ROframe& event)
           layerL = leftNeighbour.first;
           cellIdL = leftNeighbour.second;
 
-          const Cell& cellL = road.getCellsInLayer(layerL)[cellIdL];
+          const Cell& cellL = mRoad.getCellsInLayer(layerL)[cellIdL];
 
-          if (road.isCellUsed(layerL, cellIdL)) {
-            continue;
-          }
-          if (road.getCellLevel(layerL, cellIdL) != (road.getCellLevel(layerRC, cellIdRC) - 1)) {
+          if (mRoad.isCellUsed(layerL, cellIdL) || (mRoad.getCellLevel(layerL, cellIdL) != (mRoad.getCellLevel(layerRC, cellIdRC) - 1))) {
             continue;
           }
 
@@ -591,7 +614,7 @@ void Tracker::runBackwardInRoad(ROframe& event)
 
             deviationPrev = deviation;
 
-            if (leftNeighbour != cellRC.getLeftNeighbours().front()) {
+            if (iLN > 0) {
               // delete the last added cell
               nCells--;
             }
@@ -613,7 +636,7 @@ void Tracker::runBackwardInRoad(ROframe& event)
 
       layerC = trackCells[0].layer;
       cellIdC = trackCells[0].idInLayer;
-      const Cell& cellC = event.getCurrentRoad().getCellsInLayer(layerC)[cellIdC];
+      const Cell& cellC = mRoad.getCellsInLayer(layerC)[cellIdC];
       hasDisk[cellC.getSecondLayerId() / 2] = kTRUE;
       for (icell = 0; icell < nCells; ++icell) {
         layerC = trackCells[icell].layer;
@@ -628,19 +651,19 @@ void Tracker::runBackwardInRoad(ROframe& event)
         }
       }
 
-      if (nPointDisks < constants::mft::MinTrackStationsCA) {
+      if (nPointDisks < mMinTrackStationsCA) {
         continue;
       }
 
       // add a new TrackCA
-      event.addTrackCA(road.getRoadId());
+      event.addTrackCA(mRoad.getRoadId());
       for (icell = 0; icell < nCells; ++icell) {
         layerC = trackCells[icell].layer;
         cellIdC = trackCells[icell].idInLayer;
         addCellToCurrentTrackCA(layerC, cellIdC, event);
-        road.setCellUsed(layerC, cellIdC, kTRUE);
+        mRoad.setCellUsed(layerC, cellIdC, kTRUE);
         // marked the used clusters
-        const Cell& cellC = event.getCurrentRoad().getCellsInLayer(layerC)[cellIdC];
+        const Cell& cellC = mRoad.getCellsInLayer(layerC)[cellIdC];
         event.getClustersInLayer(cellC.getFirstLayerId())[cellC.getFirstClusterIndex()].setUsed(true);
         event.getClustersInLayer(cellC.getSecondLayerId())[cellC.getSecondClusterIndex()].setUsed(true);
       }
@@ -649,25 +672,25 @@ void Tracker::runBackwardInRoad(ROframe& event)
 }
 
 //_________________________________________________________________________________________________
-void Tracker::updateCellStatusInRoad(Road& road)
+void Tracker::updateCellStatusInRoad()
 {
-  for (Int_t layer = 0; layer < (constants::mft::LayersNumber - 1); ++layer) {
-    for (Int_t icell = 0; icell < road.getCellsInLayer(layer).size(); ++icell) {
-      road.updateCellLevel(layer, icell);
-      mMaxCellLevel = std::max(mMaxCellLevel, road.getCellLevel(layer, icell));
+  Int_t layerMin, layerMax;
+  mRoad.getLength(layerMin, layerMax);
+  for (Int_t layer = layerMin; layer < layerMax; ++layer) {
+    for (Int_t icell = 0; icell < mRoad.getCellsInLayer(layer).size(); ++icell) {
+      mRoad.updateCellLevel(layer, icell);
+      mMaxCellLevel = std::max(mMaxCellLevel, mRoad.getCellLevel(layer, icell));
     }
   }
 }
 
 //_________________________________________________________________________________________________
-void Tracker::addCellToCurrentRoad(ROframe& event, const Int_t layer1, const Int_t layer2, const Int_t clsLayer1, const Int_t clsLayer2, Int_t& cellId)
+void Tracker::addCellToCurrentRoad(ROframe& event, const Int_t layer1, const Int_t layer2, const Int_t clsInLayer1, const Int_t clsInLayer2, Int_t& cellId)
 {
-  Road& road = event.getCurrentRoad();
+  Cell& cell = mRoad.addCellInLayer(layer1, layer2, clsInLayer1, clsInLayer2, cellId);
 
-  Cell& cell = road.addCellInLayer(layer1, layer2, clsLayer1, clsLayer2, cellId);
-
-  Cluster& cluster1 = event.getClustersInLayer(layer1)[clsLayer1];
-  Cluster& cluster2 = event.getClustersInLayer(layer2)[clsLayer2];
+  Cluster& cluster1 = event.getClustersInLayer(layer1)[clsInLayer1];
+  Cluster& cluster2 = event.getClustersInLayer(layer2)[clsInLayer2];
 
   Float_t coord[6];
   coord[0] = cluster1.getX();
@@ -685,14 +708,13 @@ void Tracker::addCellToCurrentRoad(ROframe& event, const Int_t layer1, const Int
 void Tracker::addCellToCurrentTrackCA(const Int_t layer1, const Int_t cellId, ROframe& event)
 {
   TrackCA& trackCA = event.getCurrentTrackCA();
-  Road& road = event.getCurrentRoad();
-  const Cell& cell = road.getCellsInLayer(layer1)[cellId];
+  const Cell& cell = mRoad.getCellsInLayer(layer1)[cellId];
   const Int_t layer2 = cell.getSecondLayerId();
-  const Int_t clsLayer1 = cell.getFirstClusterIndex();
-  const Int_t clsLayer2 = cell.getSecondClusterIndex();
+  const Int_t clsInLayer1 = cell.getFirstClusterIndex();
+  const Int_t clsInLayer2 = cell.getSecondClusterIndex();
 
-  Cluster& cluster1 = event.getClustersInLayer(layer1)[clsLayer1];
-  Cluster& cluster2 = event.getClustersInLayer(layer2)[clsLayer2];
+  Cluster& cluster1 = event.getClustersInLayer(layer1)[clsInLayer1];
+  Cluster& cluster2 = event.getClustersInLayer(layer2)[clsInLayer2];
 
   MCCompLabel mcCompLabel1 = mUseMC ? event.getClusterLabels(layer1, cluster1.clusterId) : MCCompLabel();
   MCCompLabel mcCompLabel2 = mUseMC ? event.getClusterLabels(layer2, cluster2.clusterId) : MCCompLabel();
@@ -701,11 +723,11 @@ void Tracker::addCellToCurrentTrackCA(const Int_t layer1, const Int_t cellId, RO
 
   if (trackCA.getNumberOfPoints() == 0) {
     extClsIndex = event.getClusterExternalIndex(layer2, cluster2.clusterId);
-    trackCA.setPoint(cluster2, layer2, clsLayer2, mcCompLabel2, extClsIndex);
+    trackCA.setPoint(cluster2, layer2, clsInLayer2, mcCompLabel2, extClsIndex);
   }
 
   extClsIndex = event.getClusterExternalIndex(layer1, cluster1.clusterId);
-  trackCA.setPoint(cluster1, layer1, clsLayer1, mcCompLabel1, extClsIndex);
+  trackCA.setPoint(cluster1, layer1, clsInLayer1, mcCompLabel1, extClsIndex);
 }
 
 //_________________________________________________________________________________________________

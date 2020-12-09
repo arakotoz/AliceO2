@@ -23,11 +23,10 @@
 #include <arrow/array.h>
 #include <arrow/util/variant.h>
 #include <arrow/compute/kernel.h>
+#include <arrow/compute/api_aggregate.h>
 #include <gandiva/selection_vector.h>
 #include <cassert>
 #include <fmt/format.h>
-
-using o2::framework::runtime_error_f;
 
 namespace o2::soa
 {
@@ -697,6 +696,19 @@ struct RowViewCore : public IP, C... {
     return copy;
   }
 
+  RowViewCore& operator--()
+  {
+    this->moveByIndex(-1);
+    return *this;
+  }
+
+  RowViewCore operator--(int)
+  {
+    RowViewCore<IP, C...> copy = *this;
+    this->operator--();
+    return copy;
+  }
+
   /// Allow incrementing by more than one the iterator
   RowViewCore operator+(int64_t inc) const
   {
@@ -729,10 +741,38 @@ struct RowViewCore : public IP, C... {
     (CL::setCurrent(current), ...);
   }
 
+  template <typename CL>
+  auto getCurrent() const
+  {
+    return CL::getCurrentRaw();
+  }
+
+  template <typename... Cs>
+  auto getIndexBindingsImpl(framework::pack<Cs...>) const
+  {
+    return std::vector<void*>{static_cast<Cs const&>(*this).getCurrentRaw()...};
+  }
+
+  auto getIndexBindings() const
+  {
+    return getIndexBindingsImpl(external_index_columns_t{});
+  }
+
   template <typename... TA>
   void bindExternalIndices(TA*... current)
   {
     (doSetCurrentIndex(external_index_columns_t{}, current), ...);
+  }
+
+  template <typename... Cs>
+  void doSetCurrentIndexRaw(framework::pack<Cs...> p, std::vector<void*>&& ptrs)
+  {
+    (Cs::setCurrentRaw(ptrs[framework::has_type_at_v<Cs>(p)]), ...);
+  }
+
+  void bindExternalIndicesRaw(std::vector<void*>&& ptrs)
+  {
+    doSetCurrentIndexRaw(external_index_columns_t{}, std::forward<std::vector<void*>>(ptrs));
   }
 
  private:
@@ -825,6 +865,44 @@ auto select(T const& t, framework::expressions::Filter&& f)
                                            t.asArrowTable()->schema()));
 }
 
+namespace
+{
+auto getSliceFor(int value, char const* key, std::shared_ptr<arrow::Table> const& input, std::shared_ptr<arrow::Table>& output, uint64_t& offset)
+{
+  arrow::Datum value_counts;
+  auto options = arrow::compute::CountOptions::Defaults();
+  ARROW_ASSIGN_OR_RAISE(value_counts,
+                        arrow::compute::CallFunction("value_counts", {input->GetColumnByName(key)},
+                                                     &options));
+  auto pair = static_cast<arrow::StructArray>(value_counts.array());
+  auto values = static_cast<arrow::NumericArray<arrow::Int32Type>>(pair.field(0)->data());
+  auto counts = static_cast<arrow::NumericArray<arrow::Int64Type>>(pair.field(1)->data());
+
+  int slice;
+  for (slice = 0; slice < values.length(); ++slice) {
+    if (values.Value(slice) == value) {
+      offset = slice;
+      output = input->Slice(slice, counts.Value(slice));
+      return arrow::Status::OK();
+    }
+  }
+  output = input->Slice(0, 0);
+  return arrow::Status::OK();
+}
+} // namespace
+
+template <typename T>
+auto sliceBy(T const& t, framework::expressions::BindingNode const& node, int value)
+{
+  uint64_t offset = 0;
+  std::shared_ptr<arrow::Table> result = nullptr;
+  auto status = getSliceFor(value, node.name.c_str(), t.asArrowTable(), result, offset);
+  if (status.ok()) {
+    return T({result}, offset);
+  }
+  throw std::runtime_error("Failed to slice table");
+}
+
 /// A Table class which observes an arrow::Table and provides
 /// It is templated on a set of Column / DynamicColumn types.
 template <typename... C>
@@ -835,6 +913,7 @@ class Table
   using columns = framework::pack<C...>;
   using column_types = framework::pack<typename C::type...>;
   using persistent_columns_t = framework::selected_pack<is_persistent_t, C...>;
+  using external_index_columns_t = framework::selected_pack<is_external_index_t, C...>;
 
   template <typename IP, typename Parent, typename... T>
   struct RowViewBase : public RowViewCore<IP, C...> {
@@ -1017,9 +1096,35 @@ class Table
     mBegin.bindExternalIndices(current...);
   }
 
+  void bindExternalIndicesRaw(std::vector<void*>&& ptrs)
+  {
+    mBegin.bindExternalIndicesRaw(std::forward<std::vector<void*>>(ptrs));
+  }
+
+  template <typename T, typename... Cs>
+  void doCopyIndexBindings(framework::pack<Cs...>, T& dest) const
+  {
+    dest.bindExternalIndicesRaw(mBegin.getIndexBindings());
+  }
+
+  template <typename T>
+  void copyIndexBindings(T& dest) const
+  {
+    doCopyIndexBindings(external_index_columns_t{}, dest);
+  }
+
   auto select(framework::expressions::Filter&& f) const
   {
-    return o2::soa::select(*this, std::forward<framework::expressions::Filter>(f));
+    auto t = o2::soa::select(*this, std::forward<framework::expressions::Filter>(f));
+    copyIndexBindings(t);
+    return t;
+  }
+
+  auto sliceBy(framework::expressions::BindingNode const& node, int value) const
+  {
+    auto t = o2::soa::sliceBy(*this, node, value);
+    copyIndexBindings(t);
+    return t;
   }
 
  private:
@@ -1030,7 +1135,7 @@ class Table
       auto label = T::columnLabel();
       auto index = mTable->schema()->GetAllFieldIndices(label);
       if (index.empty() == true) {
-        throw runtime_error_f("Unable to find column with label %s", label);
+        throw o2::framework::runtime_error_f("Unable to find column with label %s", label);
       }
       return mTable->column(index[0]).get();
     } else {
@@ -1287,7 +1392,14 @@ constexpr auto is_binding_compatible_v()
       }                                                                            \
       return false;                                                                \
     }                                                                              \
-    binding_t* getCurrent() { return static_cast<binding_t*>(mBinding); }          \
+                                                                                   \
+    bool setCurrentRaw(void* current)                                              \
+    {                                                                              \
+      this->mBinding = current;                                                    \
+      return true;                                                                 \
+    }                                                                              \
+    binding_t* getCurrent() const { return static_cast<binding_t*>(mBinding); }    \
+    void* getCurrentRaw() const { return mBinding; }                               \
     void* mBinding = nullptr;                                                      \
   };                                                                               \
   static const o2::framework::expressions::BindingNode _Getter_##Id { _Label_,     \
@@ -1522,6 +1634,7 @@ class FilteredPolicy : public T
   using originals = originals_pack_t<T>;
   using table_t = typename T::table_t;
   using persistent_columns_t = typename T::persistent_columns_t;
+  using external_index_columns_t = typename T::external_index_columns_t;
 
   template <typename P, typename... Os>
   constexpr static auto make_it(framework::pack<Os...> const&)
@@ -1610,6 +1723,23 @@ class FilteredPolicy : public T
   {
     table_t::bindExternalIndices(current...);
     mFilteredBegin.bindExternalIndices(current...);
+  }
+
+  void bindExternalIndicesRaw(std::vector<void*>&& ptrs)
+  {
+    mFilteredBegin.bindExternalIndicesRaw(std::forward<std::vector<void*>>(ptrs));
+  }
+
+  template <typename T1, typename... Cs>
+  void doCopyIndexBindings(framework::pack<Cs...>, T1& dest) const
+  {
+    dest.bindExternalIndicesRaw(mFilteredBegin.getIndexBindings());
+  }
+
+  template <typename T1>
+  void copyIndexBindings(T1& dest) const
+  {
+    doCopyIndexBindings(external_index_columns_t{}, dest);
   }
 
  protected:

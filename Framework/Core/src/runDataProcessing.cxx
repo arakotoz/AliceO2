@@ -812,9 +812,14 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry, const o2::f
                << boost::current_exception_diagnostic_information(true);
     return 1;
   } catch (o2::framework::RuntimeErrorRef e) {
-    LOG(ERROR) << "Unhandled o2::framework::runtime_error reached the top of main, device shutting down. Details follow: \n";
     auto& err = o2::framework::error_from_ref(e);
-    backtrace_symbols_fd(err.backtrace, err.maxBacktrace, STDERR_FILENO);
+    if (err.maxBacktrace != 0) {
+      LOG(ERROR) << "Unhandled o2::framework::runtime_error reached the top of main, device shutting down. Details follow: \n";
+      backtrace_symbols_fd(err.backtrace, err.maxBacktrace, STDERR_FILENO);
+    } else {
+      LOG(ERROR) << "Unhandled o2::framework::runtime_error reached the top of main, device shutting down."
+                    " Recompile with DPL_ENABLE_BACKTRACE=1 to get more information.";
+    }
     return 1;
   } catch (std::exception& e) {
     LOG(ERROR) << "Unhandled std::exception reached the top of main: " << e.what() << ", device shutting down.";
@@ -1381,6 +1386,47 @@ bool isOutputToPipe()
   struct stat s;
   fstat(STDOUT_FILENO, &s);
   return ((s.st_mode & S_IFIFO) != 0);
+}
+
+void overrideCloning(ConfigContext& ctx, WorkflowSpec& workflow)
+{
+  struct CloningSpec {
+    std::string templateMatcher;
+    std::string cloneName;
+  };
+  auto s = ctx.options().get<std::string>("clone");
+  std::vector<CloningSpec> specs;
+  std::string delimiter = ",";
+
+  size_t pos = 0;
+  while (s.empty() == false) {
+    auto newPos = s.find(delimiter);
+    auto token = s.substr(0, newPos);
+    auto split = token.find(":");
+    if (split == std::string::npos) {
+      throw std::runtime_error("bad clone definition. Syntax <template-processor>:<clone-name>");
+    }
+    auto key = token.substr(0, split);
+    token.erase(0, split + 1);
+    auto value = token;
+    specs.push_back({key, value});
+    s.erase(0, newPos + (newPos == std::string::npos ? 0 : 1));
+  }
+  if (s.empty() == false && specs.empty() == true) {
+    throw std::runtime_error("bad pipeline definition. Syntax <processor>:<pipeline>");
+  }
+
+  std::vector<DataProcessorSpec> extraSpecs;
+  for (auto& spec : specs) {
+    for (auto& processor : workflow) {
+      if (processor.name == spec.templateMatcher) {
+        auto clone = processor;
+        clone.name = spec.cloneName;
+        extraSpecs.push_back(clone);
+      }
+    }
+  }
+  workflow.insert(workflow.end(), extraSpecs.begin(), extraSpecs.end());
 }
 
 void overridePipeline(ConfigContext& ctx, WorkflowSpec& workflow)

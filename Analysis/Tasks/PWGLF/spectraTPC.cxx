@@ -13,8 +13,8 @@
 #include "Framework/AnalysisTask.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/ASoAHelpers.h"
-#include "PID/PIDResponse.h"
-#include "Analysis/TrackSelectionTables.h"
+#include "AnalysisDataModel/PID/PIDResponse.h"
+#include "AnalysisDataModel/TrackSelectionTables.h"
 
 using namespace o2;
 using namespace o2::framework;
@@ -33,7 +33,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
   Configurable<float> cfgCutVertex{"cfgCutVertex", 10.0f, "Accepted z-vertex range"}; \
   Configurable<float> cfgCutEta{"cfgCutEta", 0.8f, "Eta range for tracks"};           \
   Filter collisionFilter = nabs(aod::collision::posZ) < cfgCutVertex;                 \
-  Filter trackFilter = (nabs(aod::track::eta) < cfgCutEta) && (aod::track::isGlobalTrack == true);
+  Filter trackFilter = (nabs(aod::track::eta) < cfgCutEta) && (aod::track::isGlobalTrack == (uint8_t) true);
 
 #define makelogaxis(h)                                            \
   {                                                               \

@@ -51,3 +51,12 @@ bool configurableCut::getOption() const
 {
   return option;
 }
+
+void configurableCut::setBins(std::vector<float> bins_)
+{
+  bins = bins_;
+};
+std::vector<float> configurableCut::getBins() const
+{
+  return bins;
+};

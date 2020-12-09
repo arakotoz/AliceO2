@@ -18,6 +18,7 @@
 #include "MFTTracking/ROframe.h"
 #include "MFTTracking/TrackFitter.h"
 #include "MFTTracking/Cluster.h"
+#include "MFTTracking/TrackerConfig.h"
 
 #include "MathUtils/Utils.h"
 #include "MathUtils/Cartesian.h"
@@ -26,9 +27,6 @@
 #include "SimulationDataFormat/MCTruthContainer.h"
 #include "DataFormatsParameters/GRPObject.h"
 
-// BV
-#include "TStopwatch.h"
-
 namespace o2
 {
 namespace mft
@@ -36,7 +34,7 @@ namespace mft
 
 class TrackLTF;
 
-class Tracker
+class Tracker : public TrackerConfig
 {
 
  public:
@@ -61,17 +59,17 @@ class Tracker
   void setROFrame(std::uint32_t f) { mROFrame = f; }
   std::uint32_t getROFrame() const { return mROFrame; }
 
-  // BV
   void initialize();
+  void initConfig(const MFTTrackingParam& trkParam);
 
  private:
   void findTracks(ROframe&);
   void findTracksLTF(ROframe&);
   void findTracksCA(ROframe&);
   void computeCellsInRoad(ROframe&);
-  void runForwardInRoad(ROframe&);
+  void runForwardInRoad();
   void runBackwardInRoad(ROframe&);
-  void updateCellStatusInRoad(Road&);
+  void updateCellStatusInRoad();
 
   bool fitTracks(ROframe&);
 
@@ -95,13 +93,23 @@ class Tracker
 
   bool mUseMC = false;
 
-  std::array<std::array<std::array<std::vector<Int_t>, constants::index_table::RPhiBins>, (constants::mft::LayersNumber - 1)>, (constants::mft::LayersNumber - 1)> mBinsS;
-  std::array<std::array<std::array<std::vector<Int_t>, constants::index_table::RPhiBins>, (constants::mft::LayersNumber - 1)>, (constants::mft::LayersNumber - 1)> mBins;
+  std::array<std::array<std::array<std::vector<Int_t>, constants::index_table::MaxRPhiBins>, (constants::mft::LayersNumber - 1)>, (constants::mft::LayersNumber - 1)> mBinsS;
+  std::array<std::array<std::array<std::vector<Int_t>, constants::index_table::MaxRPhiBins>, (constants::mft::LayersNumber - 1)>, (constants::mft::LayersNumber - 1)> mBins;
 
+  /// helper to store points of a track candidate
   struct TrackElement {
+    TrackElement() = default;
+    TrackElement(Int_t la, Int_t id)
+    {
+      layer = la;
+      idInLayer = id;
+    };
     Int_t layer;
     Int_t idInLayer;
   };
+
+  /// current road for CA algorithm
+  Road mRoad;
 };
 
 //_________________________________________________________________________________________________

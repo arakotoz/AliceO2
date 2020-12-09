@@ -224,6 +224,10 @@ void AODProducerWorkflowDPL::init(InitContext& ic)
   mFillTracksITS = ic.options().get<int>("fill-tracks-its");
   mFillTracksTPC = ic.options().get<int>("fill-tracks-tpc");
   mFillTracksITSTPC = ic.options().get<int>("fill-tracks-its-tpc");
+  mTFNumber = ic.options().get<int>("aod-timeframe-id");
+  if (mTFNumber == -1) {
+    LOG(INFO) << "TFNumber will be obtained from CCDB";
+  }
   LOG(INFO) << "track filling flags set to: "
             << "\n ITS = " << mFillTracksITS << "\n TPC = " << mFillTracksTPC << "\n ITSTPC = " << mFillTracksITSTPC;
 
@@ -468,8 +472,8 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     auto& cov = vertex.getCov();
     auto& timeStamp = vertex.getTimeStamp();
     Double_t tsTimeStamp = timeStamp.getTimeStamp() * 1E3; // mus to ns
-    // FIXME:
-    // should use IRMin and IRMax for globalBC calculation
+    // TODO:
+    // use filling scheme to calculate most prob. BC
     uint64_t globalBC = std::round(tsTimeStamp / o2::constants::lhc::LHCBunchSpacingNS);
 
     LOG(DEBUG) << globalBC << " " << tsTimeStamp;
@@ -478,6 +482,8 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
       firstVtxGlBC = globalBC;
     }
 
+    // collision timestamp in ns wrt the beginning of collision BC
+    tsTimeStamp = globalBC * o2::constants::lhc::LHCBunchSpacingNS - tsTimeStamp;
     int BCid = mGlobBC2BCID.at(globalBC);
     // TODO:
     // get real collision time mask
@@ -495,8 +501,8 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
                      cov[5],
                      vertex.getChi2(),
                      vertex.getNContributors(),
-                     timeStamp.getTimeStamp(),
-                     timeStamp.getTimeStampError(),
+                     tsTimeStamp,
+                     timeStamp.getTimeStampError() * 1E3,
                      collisionTimeMask);
 
     auto trackRef = primVer2TRefs[collisionID];
@@ -528,16 +534,21 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   //   bit 13 -- ITS and TPC labels are not equal
   //   bit 14 -- isNoise() == true
   //   bit 15 -- isFake() == true
+  // labelID = std::numeric_limits<uint32_t>::max() -- label is not set
+
+  uint32_t labelID;
+  uint32_t labelITS;
+  uint32_t labelTPC;
+  uint16_t labelMask;
 
   if (mFillTracksITS) {
     fillTracksTable(tracksITS, vCollRefsITS, tracksCursor, o2::vertexing::GIndex::Source::ITS); // fTrackType = 1
     for (auto& mcTruthITS : tracksITSMCTruth) {
-      uint32_t labelID = std::numeric_limits<uint32_t>::max();
+      labelID = std::numeric_limits<uint32_t>::max();
       // TODO:
       // fill label mask
-      uint16_t labelMask = 0;
-      int nEventsITS = mcReader.getNEvents(mcTruthITS.getSourceID());
-      if (mcTruthITS.getEventID() < mcReader.getNEvents(mcTruthITS.getSourceID())) {
+      labelMask = 0;
+      if (mcTruthITS.isValid()) {
         labelID = mIDsToIndex.at(std::make_tuple(mcTruthITS.getSourceID(), mcTruthITS.getEventID(), mcTruthITS.getTrackID()));
       }
       if (mcTruthITS.isFake()) {
@@ -555,12 +566,11 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   if (mFillTracksTPC) {
     fillTracksTable(tracksTPC, vCollRefsTPC, tracksCursor, o2::vertexing::GIndex::Source::TPC); // fTrackType = 2
     for (auto& mcTruthTPC : tracksTPCMCTruth) {
-      uint32_t labelID = std::numeric_limits<uint32_t>::max();
+      labelID = std::numeric_limits<uint32_t>::max();
       // TODO:
       // fill label mask
-      uint16_t labelMask = 0;
-      int nEventsTPC = mcReader.getNEvents(mcTruthTPC.getSourceID());
-      if (mcTruthTPC.getEventID() < nEventsTPC) {
+      labelMask = 0;
+      if (mcTruthTPC.isValid()) {
         labelID = mIDsToIndex.at(std::make_tuple(mcTruthTPC.getSourceID(), mcTruthTPC.getEventID(), mcTruthTPC.getTrackID()));
       }
       if (mcTruthTPC.isFake()) {
@@ -580,16 +590,14 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     for (int i = 0; i < tracksITSTPC.size(); i++) {
       auto& mcTruthITS = tracksITSTPC_ITSMC[i];
       auto& mcTruthTPC = tracksITSTPC_TPCMC[i];
-      uint32_t labelID = std::numeric_limits<uint32_t>::max();
-      uint32_t labelITS = std::numeric_limits<uint32_t>::max();
-      uint32_t labelTPC = std::numeric_limits<uint32_t>::max();
+      labelID = std::numeric_limits<uint32_t>::max();
+      labelITS = std::numeric_limits<uint32_t>::max();
+      labelTPC = std::numeric_limits<uint32_t>::max();
       // TODO:
       // fill label mask
       // currently using label mask to indicate labelITS != labelTPC
-      uint16_t labelMask = 0;
-      int nEventsITS = mcReader.getNEvents(mcTruthITS.getSourceID());
-      int nEventsTPC = mcReader.getNEvents(mcTruthTPC.getSourceID());
-      if (mcTruthITS.getEventID() < nEventsITS && mcTruthTPC.getEventID() < nEventsTPC) {
+      labelMask = 0;
+      if (mcTruthITS.isValid() && mcTruthTPC.isValid()) {
         labelITS = mIDsToIndex.at(std::make_tuple(mcTruthITS.getSourceID(), mcTruthITS.getEventID(), mcTruthITS.getTrackID()));
         labelTPC = mIDsToIndex.at(std::make_tuple(mcTruthTPC.getSourceID(), mcTruthTPC.getEventID(), mcTruthTPC.getTrackID()));
         labelID = labelITS;
@@ -610,7 +618,11 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     }
   }
 
-  timeFrameNumberBuilder = getTFNumber(firstVtxGlBC, runNumber);
+  if (mTFNumber == -1) {
+    timeFrameNumberBuilder = getTFNumber(firstVtxGlBC, runNumber);
+  } else {
+    timeFrameNumberBuilder = mTFNumber;
+  }
 
   mTimer.Stop();
 }
@@ -663,7 +675,8 @@ DataProcessorSpec getAODProducerWorkflowSpec()
     Options{
       ConfigParamSpec{"fill-tracks-its", VariantType::Int, 1, {"Fill ITS tracks into tracks table"}},
       ConfigParamSpec{"fill-tracks-tpc", VariantType::Int, 1, {"Fill TPC tracks into tracks table"}},
-      ConfigParamSpec{"fill-tracks-its-tpc", VariantType::Int, 1, {"Fill ITS-TPC tracks into tracks table"}}}};
+      ConfigParamSpec{"fill-tracks-its-tpc", VariantType::Int, 1, {"Fill ITS-TPC tracks into tracks table"}},
+      ConfigParamSpec{"aod-timeframe-id", VariantType::Int, -1, {"Set timeframe number"}}}};
 }
 
 } // namespace o2::aodproducer

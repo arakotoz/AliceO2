@@ -102,6 +102,9 @@ class ConfigContext;
 /// Helper used to customize a workflow pipelining options
 void overridePipeline(o2::framework::ConfigContext& ctx, std::vector<o2::framework::DataProcessorSpec>& workflow);
 
+/// Helper used to customize a workflow via a template data processor
+void overrideCloning(o2::framework::ConfigContext& ctx, std::vector<o2::framework::DataProcessorSpec>& workflow);
+
 // This comes from the framework itself. This way we avoid code duplication.
 int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& specs,
            std::vector<o2::framework::ChannelConfigurationPolicy> const& channelPolicies,
@@ -127,6 +130,7 @@ int main(int argc, char** argv)
     UserCustomizationsHelper::userDefinedCustomization(workflowOptions, 0);
     workflowOptions.push_back(ConfigParamSpec{"readers", VariantType::Int64, 1ll, {"number of parallel readers to use"}});
     workflowOptions.push_back(ConfigParamSpec{"pipeline", VariantType::String, "", {"override default pipeline size"}});
+    workflowOptions.push_back(ConfigParamSpec{"clone", VariantType::String, "", {"clone processors from a template"}});
 
     // options for AOD rate limiting
     workflowOptions.push_back(ConfigParamSpec{"aod-memory-rate-limit", VariantType::Int64, 0LL, {"Rate limit AOD processing based on memory"}});
@@ -137,6 +141,8 @@ int main(int argc, char** argv)
     workflowOptions.push_back(ConfigParamSpec{"aod-writer-resmode", VariantType::String, "RECREATE", {"Creation mode of the result files: NEW, CREATE, RECREATE, UPDATE"}});
     workflowOptions.push_back(ConfigParamSpec{"aod-writer-ntfmerge", VariantType::Int, -1, {"Number of time frames to merge into one file"}});
     workflowOptions.push_back(ConfigParamSpec{"aod-writer-keep", VariantType::String, "", {"Comma separated list of ORIGIN/DESCRIPTION/SUBSPECIFICATION:treename:col1/col2/..:filename"}});
+
+    workflowOptions.push_back(ConfigParamSpec{"fairmq-rate-logging", VariantType::Int, 60, {"Rate logging for FairMQ channels"}});
 
     workflowOptions.push_back(ConfigParamSpec{"forwarding-policy",
                                               VariantType::String,
@@ -150,10 +156,6 @@ int main(int argc, char** argv)
                                               {"Destination for forwarded messages."
                                                " file: write to file,"
                                                " fairmq: send to output proxy"}});
-    std::vector<ChannelConfigurationPolicy> channelPolicies;
-    UserCustomizationsHelper::userDefinedCustomization(channelPolicies, 0);
-    auto defaultChannelPolicies = ChannelConfigurationPolicy::createDefaultPolicies();
-    channelPolicies.insert(std::end(channelPolicies), std::begin(defaultChannelPolicies), std::end(defaultChannelPolicies));
 
     std::vector<CompletionPolicy> completionPolicies;
     UserCustomizationsHelper::userDefinedCustomization(completionPolicies, 0);
@@ -175,9 +177,14 @@ int main(int argc, char** argv)
     ConfigContext configContext(workflowOptionsRegistry, argc, argv);
     o2::framework::WorkflowSpec specs = defineDataProcessing(configContext);
     overridePipeline(configContext, specs);
+    overrideCloning(configContext, specs);
     for (auto& spec : specs) {
       UserCustomizationsHelper::userDefinedCustomization(spec.requiredServices, 0);
     }
+    std::vector<ChannelConfigurationPolicy> channelPolicies;
+    UserCustomizationsHelper::userDefinedCustomization(channelPolicies, 0);
+    auto defaultChannelPolicies = ChannelConfigurationPolicy::createDefaultPolicies(configContext);
+    channelPolicies.insert(std::end(channelPolicies), std::begin(defaultChannelPolicies), std::end(defaultChannelPolicies));
     result = doMain(argc, argv, specs, channelPolicies, completionPolicies, dispatchPolicies, workflowOptions, configContext);
   } catch (boost::exception& e) {
     doBoostException(e);

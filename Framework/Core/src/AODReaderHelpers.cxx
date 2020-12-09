@@ -119,9 +119,13 @@ AlgorithmSpec AODReaderHelpers::indexBuilderCallback(std::vector<InputSpec> requ
         } else if (description == header::DataDescription{"MA_RN3_SP"}) {
           outputs.adopt(Output{origin, description}, maker(o2::aod::Run3MatchedSparseMetadata{}));
         } else if (description == header::DataDescription{"MA_BCCOL_EX"}) {
-          outputs.adopt(Output{origin, description}, maker(o2::aod::BCCollisionsExclusiveMetadata{}));
+          outputs.adopt(Output{origin, description}, maker(o2::aod::MatchedBCCollisionsExclusiveMetadata{}));
         } else if (description == header::DataDescription{"MA_BCCOL_SP"}) {
-          outputs.adopt(Output{origin, description}, maker(o2::aod::BCCollisionsSparseMetadata{}));
+          outputs.adopt(Output{origin, description}, maker(o2::aod::MatchedBCCollisionsSparseMetadata{}));
+        } else if (description == header::DataDescription{"MA_RN3_BC_SP"}) {
+          outputs.adopt(Output{origin, description}, maker(o2::aod::Run3MatchedToBCSparseMetadata{}));
+        } else if (description == header::DataDescription{"MA_RN3_BC_EX"}) {
+          outputs.adopt(Output{origin, description}, maker(o2::aod::Run3MatchedToBCExclusiveMetadata{}));
         } else {
           throw std::runtime_error("Not an index table");
         }
@@ -241,6 +245,12 @@ AlgorithmSpec AODReaderHelpers::rootFileReaderCallback()
       int fcnt = (*fileCounter * device.maxInputTimeslices) + device.inputTimesliceId;
       int ntf = *numTF + 1;
       monitoring.send(Metric{(uint64_t)ntf, "tf-sent"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
+      static int currentFileCounter = -1;
+      static int filesProcessed = 0;
+      if (currentFileCounter != *fileCounter) {
+        currentFileCounter = *fileCounter;
+        monitoring.send(Metric{(uint64_t)++filesProcessed, "files-opened"}.addTag(Key::Subsystem, monitoring::tags::Value::DPL));
+      }
 
       // loop over requested tables
       TTree* tr = nullptr;
