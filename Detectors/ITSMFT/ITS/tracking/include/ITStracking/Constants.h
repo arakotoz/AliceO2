@@ -21,6 +21,7 @@
 #endif
 
 #include "ITStracking/Definitions.h"
+#include "CommonConstants/MathConstants.h"
 #include "GPUCommonMath.h"
 #include "GPUCommonDef.h"
 
@@ -98,8 +99,8 @@ GPUhdi() int getPhiBinIndex(const float currentPhi)
 
 GPUhdi() int getBinIndex(const int zIndex, const int phiIndex)
 {
-  return gpu::GPUCommonMath::Min(phiIndex * ZBins + zIndex,
-                                 ZBins * PhiBins - 1);
+  return o2::gpu::GPUCommonMath::Min(phiIndex * ZBins + zIndex,
+                                     ZBins * PhiBins - 1);
 }
 
 GPUhdi() constexpr int4 getEmptyBinsRect() { return int4{0, 0, 0, 0}; }

@@ -98,12 +98,14 @@ o2_add_library(Framework
                        src/Task.cxx
                        src/TextControlService.cxx
                        src/Variant.cxx
+                       src/WorkflowCustomizationHelpers.cxx
                        src/WorkflowHelpers.cxx
                        src/WorkflowSerializationHelpers.cxx
                        src/WorkflowSpec.cxx
                        src/runDataProcessing.cxx
                        src/ExternalFairMQDeviceProxy.cxx
                        src/HistogramRegistry.cxx
+                       src/StepTHn.cxx
                        test/TestClasses.cxx
                PRIVATE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_LIST_DIR}/src
                PUBLIC_LINK_LIBRARIES ${DEBUGGUI_TARGET}
@@ -132,6 +134,7 @@ o2_add_library(Framework
 
 o2_target_root_dictionary(Framework
                           HEADERS test/TestClasses.h
+                          include/Framework/StepTHn.h
                           LINKDEF test/FrameworkCoreTestLinkDef.h)
 
 foreach(t

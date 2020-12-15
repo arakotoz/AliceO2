@@ -1300,6 +1300,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
           performanceMetrics.push_back("aod-bytes-read-uncompressed");
           performanceMetrics.push_back("aod-bytes-read-compressed");
           performanceMetrics.push_back("aod-total-read-calls");
+          performanceMetrics.push_back("aod-file-read-path");
           ResourcesMonitoringHelper::dumpMetricsToJSON(metricsInfos, driverInfo.metrics, deviceSpecs, performanceMetrics);
         }
         // This is a clean exit. Before we do so, if required,
@@ -1388,6 +1389,17 @@ bool isOutputToPipe()
   return ((s.st_mode & S_IFIFO) != 0);
 }
 
+void overrideSuffix(ConfigContext& ctx, WorkflowSpec& workflow)
+{
+  auto suffix = ctx.options().get<std::string>("workflow-suffix");
+  if (suffix.empty()) {
+    return;
+  }
+  for (auto& processor : workflow) {
+    processor.name = processor.name + suffix;
+  }
+}
+
 void overrideCloning(ConfigContext& ctx, WorkflowSpec& workflow)
 {
   struct CloningSpec {
@@ -1408,7 +1420,17 @@ void overrideCloning(ConfigContext& ctx, WorkflowSpec& workflow)
     }
     auto key = token.substr(0, split);
     token.erase(0, split + 1);
-    auto value = token;
+    size_t error;
+    std::string value = "";
+    try {
+      auto numValue = std::stoll(token, &error, 10);
+      if (token[error] != '\0') {
+        throw std::runtime_error("bad name for clone:" + token);
+      }
+      value = key + "_c" + std::to_string(numValue);
+    } catch (std::invalid_argument& e) {
+      value = token;
+    }
     specs.push_back({key, value});
     s.erase(0, newPos + (newPos == std::string::npos ? 0 : 1));
   }
