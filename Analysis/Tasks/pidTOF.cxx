@@ -28,7 +28,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
 {
   std::vector<ConfigParamSpec> options{
     {"add-qa", VariantType::Int, 0, {"Produce TOF PID QA histograms"}},
-    {"add-beta", VariantType::Int, 0, {"Produce TOF Beta table"}}};
+    {"add-beta", VariantType::Int, 1, {"Produce TOF Beta table"}}};
   std::swap(workflowOptions, options);
 }
 
@@ -36,7 +36,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
 
 struct pidTOFTask {
   using Trks = soa::Join<aod::Tracks, aod::TracksExtra>;
-  using Coll = aod::Collision;
+  using Coll = aod::Collisions;
   Produces<aod::pidRespTOF> tofpid;
   DetectorResponse resp;
   Service<o2::ccdb::BasicCCDBManager> ccdb;
@@ -65,47 +65,38 @@ struct pidTOFTask {
     }
   }
 
-  void process(Coll const& collision, Trks const& tracks)
+  void process(Coll const& collisions, Trks const& tracks)
   {
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Electron> resp_Electron = tof::ExpTimes<Coll, Trks::iterator, PID::Electron>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Muon> resp_Muon = tof::ExpTimes<Coll, Trks::iterator, PID::Muon>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Pion> resp_Pion = tof::ExpTimes<Coll, Trks::iterator, PID::Pion>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Kaon> resp_Kaon = tof::ExpTimes<Coll, Trks::iterator, PID::Kaon>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Proton> resp_Proton = tof::ExpTimes<Coll, Trks::iterator, PID::Proton>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Deuteron> resp_Deuteron = tof::ExpTimes<Coll, Trks::iterator, PID::Deuteron>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Triton> resp_Triton = tof::ExpTimes<Coll, Trks::iterator, PID::Triton>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Helium3> resp_Helium3 = tof::ExpTimes<Coll, Trks::iterator, PID::Helium3>();
-    constexpr tof::ExpTimes<Coll, Trks::iterator, PID::Alpha> resp_Alpha = tof::ExpTimes<Coll, Trks::iterator, PID::Alpha>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Electron> resp_Electron = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Electron>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Muon> resp_Muon = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Muon>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Pion> resp_Pion = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Pion>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Kaon> resp_Kaon = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Kaon>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Proton> resp_Proton = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Proton>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Deuteron> resp_Deuteron = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Deuteron>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Triton> resp_Triton = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Triton>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Helium3> resp_Helium3 = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Helium3>();
+    constexpr tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Alpha> resp_Alpha = tof::ExpTimes<Coll::iterator, Trks::iterator, PID::Alpha>();
 
     tofpid.reserve(tracks.size());
     for (auto const& trk : tracks) {
-      tofpid(resp_Electron.GetExpectedSignal(collision, trk),
-             resp_Muon.GetExpectedSignal(collision, trk),
-             resp_Pion.GetExpectedSignal(collision, trk),
-             resp_Kaon.GetExpectedSignal(collision, trk),
-             resp_Proton.GetExpectedSignal(collision, trk),
-             resp_Deuteron.GetExpectedSignal(collision, trk),
-             resp_Triton.GetExpectedSignal(collision, trk),
-             resp_Helium3.GetExpectedSignal(collision, trk),
-             resp_Alpha.GetExpectedSignal(collision, trk),
-             resp_Electron.GetExpectedSigma(resp, collision, trk),
-             resp_Muon.GetExpectedSigma(resp, collision, trk),
-             resp_Pion.GetExpectedSigma(resp, collision, trk),
-             resp_Kaon.GetExpectedSigma(resp, collision, trk),
-             resp_Proton.GetExpectedSigma(resp, collision, trk),
-             resp_Deuteron.GetExpectedSigma(resp, collision, trk),
-             resp_Triton.GetExpectedSigma(resp, collision, trk),
-             resp_Helium3.GetExpectedSigma(resp, collision, trk),
-             resp_Alpha.GetExpectedSigma(resp, collision, trk),
-             resp_Electron.GetSeparation(resp, collision, trk),
-             resp_Muon.GetSeparation(resp, collision, trk),
-             resp_Pion.GetSeparation(resp, collision, trk),
-             resp_Kaon.GetSeparation(resp, collision, trk),
-             resp_Proton.GetSeparation(resp, collision, trk),
-             resp_Deuteron.GetSeparation(resp, collision, trk),
-             resp_Triton.GetSeparation(resp, collision, trk),
-             resp_Helium3.GetSeparation(resp, collision, trk),
-             resp_Alpha.GetSeparation(resp, collision, trk));
+      tofpid(resp_Electron.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Muon.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Pion.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Kaon.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Proton.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Deuteron.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Triton.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Helium3.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Alpha.GetExpectedSigma(resp, trk.collision(), trk),
+             resp_Electron.GetSeparation(resp, trk.collision(), trk),
+             resp_Muon.GetSeparation(resp, trk.collision(), trk),
+             resp_Pion.GetSeparation(resp, trk.collision(), trk),
+             resp_Kaon.GetSeparation(resp, trk.collision(), trk),
+             resp_Proton.GetSeparation(resp, trk.collision(), trk),
+             resp_Deuteron.GetSeparation(resp, trk.collision(), trk),
+             resp_Triton.GetSeparation(resp, trk.collision(), trk),
+             resp_Helium3.GetSeparation(resp, trk.collision(), trk),
+             resp_Alpha.GetSeparation(resp, trk.collision(), trk));
     }
   }
 };
@@ -211,45 +202,40 @@ struct pidTOFTaskQA {
   }
 
   template <uint8_t i, typename T>
-  void fillParticleHistos(const T& t, const float tof, const float exp[], const float nsigma[])
+  void fillParticleHistos(const T& t, const float tof, const float exp_diff, const float nsigma)
   {
-    histos.fill(HIST(hexpected[i]), t.p(), exp[i]);
-    histos.fill(HIST(hexpected_diff[i]), t.p(), tof - exp[i]);
-    histos.fill(HIST(hnsigma[i]), t.p(), nsigma[i]);
+    histos.fill(HIST(hexpected[i]), t.p(), tof - exp_diff);
+    histos.fill(HIST(hexpected_diff[i]), t.p(), exp_diff);
+    histos.fill(HIST(hnsigma[i]), t.p(), nsigma);
   }
 
   void process(aod::Collision const& collision, soa::Join<aod::Tracks, aod::TracksExtra, aod::pidRespTOF, aod::pidRespTOFbeta> const& tracks)
   {
+    const float collisionTime_ps = collision.collisionTime() * 1000.f;
     histos.fill(HIST("event/vertexz"), collision.posZ());
-    histos.fill(HIST("event/colltime"), collision.collisionTime());
+    histos.fill(HIST("event/colltime"), collisionTime_ps);
 
     for (auto t : tracks) {
       //
       if (t.tofSignal() < 0) { // Skipping tracks without TOF
         continue;
       }
-      const float tof = t.tofSignal() - collision.collisionTime();
+
+      const float tof = t.tofSignal() - collisionTime_ps;
+
       //
       histos.fill(HIST("event/tofsignal"), t.p(), t.tofSignal());
       histos.fill(HIST("event/tofbeta"), t.p(), t.beta());
       //
-      const float exp[Np] = {t.tofExpSignalEl(), t.tofExpSignalMu(), t.tofExpSignalPi(),
-                             t.tofExpSignalKa(), t.tofExpSignalPr(), t.tofExpSignalDe(),
-                             t.tofExpSignalTr(), t.tofExpSignalHe(), t.tofExpSignalAl()};
-      //
-      const float nsigma[Np] = {t.tofNSigmaEl(), t.tofNSigmaMu(), t.tofNSigmaPi(),
-                                t.tofNSigmaKa(), t.tofNSigmaPr(), t.tofNSigmaDe(),
-                                t.tofNSigmaTr(), t.tofNSigmaHe(), t.tofNSigmaAl()};
-      //
-      fillParticleHistos<0>(t, tof, exp, nsigma);
-      fillParticleHistos<1>(t, tof, exp, nsigma);
-      fillParticleHistos<2>(t, tof, exp, nsigma);
-      fillParticleHistos<3>(t, tof, exp, nsigma);
-      fillParticleHistos<4>(t, tof, exp, nsigma);
-      fillParticleHistos<5>(t, tof, exp, nsigma);
-      fillParticleHistos<6>(t, tof, exp, nsigma);
-      fillParticleHistos<7>(t, tof, exp, nsigma);
-      fillParticleHistos<8>(t, tof, exp, nsigma);
+      fillParticleHistos<0>(t, tof, t.tofExpSignalDiffEl(), t.tofNSigmaEl());
+      fillParticleHistos<1>(t, tof, t.tofExpSignalDiffMu(), t.tofNSigmaMu());
+      fillParticleHistos<2>(t, tof, t.tofExpSignalDiffPi(), t.tofNSigmaPi());
+      fillParticleHistos<3>(t, tof, t.tofExpSignalDiffKa(), t.tofNSigmaKa());
+      fillParticleHistos<4>(t, tof, t.tofExpSignalDiffPr(), t.tofNSigmaPr());
+      fillParticleHistos<5>(t, tof, t.tofExpSignalDiffDe(), t.tofNSigmaDe());
+      fillParticleHistos<6>(t, tof, t.tofExpSignalDiffTr(), t.tofNSigmaTr());
+      fillParticleHistos<7>(t, tof, t.tofExpSignalDiffHe(), t.tofNSigmaHe());
+      fillParticleHistos<8>(t, tof, t.tofExpSignalDiffAl(), t.tofNSigmaAl());
     }
   }
 };

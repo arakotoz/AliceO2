@@ -16,4 +16,11 @@ add_subdirectory(Core)
 
 add_subdirectory(Utils)
 
+add_subdirectory(AnalysisSupport) 
+
+# Build the GUI support only if we have DebugGUI
+if (TARGET AliceO2::DebugGUI)
+add_subdirectory(GUISupport) 
+endif()
+
 add_subdirectory(TestWorkflows) 

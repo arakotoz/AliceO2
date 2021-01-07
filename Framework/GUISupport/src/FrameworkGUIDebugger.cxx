@@ -7,19 +7,19 @@
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
-#include "Framework/FrameworkGUIDebugger.h"
+#include "FrameworkGUIDebugger.h"
 #include "Framework/ConfigContext.h"
 #include "Framework/ConfigParamRegistry.h"
 #include "DebugGUI/imgui.h"
 #include "DebugGUI/implot.h"
 #include "DebugGUI/imgui_extras.h"
-#include "DriverControl.cxx"
-#include "DriverInfo.cxx"
+#include "Framework/DriverControl.h"
+#include "Framework/DriverInfo.h"
 #include "FrameworkGUIDeviceInspector.h"
-#include "Framework/FrameworkGUIDevicesGraph.h"
-#include "Framework/FrameworkGUIDataRelayerUsage.h"
-#include "Framework/PaletteHelpers.h"
-#include "Framework/FrameworkGUIState.h"
+#include "FrameworkGUIDevicesGraph.h"
+#include "FrameworkGUIDataRelayerUsage.h"
+#include "PaletteHelpers.h"
+#include "FrameworkGUIState.h"
 
 #include <fmt/format.h>
 
@@ -691,25 +691,6 @@ void popWindowColorDueToStatus()
   ImGui::PopStyleVar(1);
 }
 
-struct DriverHelper {
-  static char const* stateToString(enum DriverState state)
-  {
-    static const char* names[static_cast<int>(DriverState::LAST)] = {
-      "INIT",             //
-      "SCHEDULE",         //
-      "RUNNING",          //
-      "GUI",              //
-      "REDEPLOY_GUI",     //
-      "QUIT_REQUESTED",   //
-      "HANDLE_CHILDREN",  //
-      "EXIT",             //
-      "UNKNOWN"           //
-      "PERFORM_CALLBACKS" //
-    };
-    return names[static_cast<int>(state)];
-  }
-};
-
 /// Display information window about the driver
 /// and its state.
 void displayDriverInfo(DriverInfo const& driverInfo, DriverControl& driverControl)
@@ -775,7 +756,7 @@ void displayDriverInfo(DriverInfo const& driverInfo, DriverControl& driverContro
   }
 
   for (size_t i = 0; i < driverInfo.states.size(); ++i) {
-    ImGui::Text("#%lu: %s", i, DriverHelper::stateToString(driverInfo.states[i]));
+    ImGui::Text("#%lu: %s", i, DriverInfoHelper::stateToString(driverInfo.states[i]));
   }
 
   ImGui::End();

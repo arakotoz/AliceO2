@@ -14,9 +14,9 @@
 #include "FairLogger.h"
 #include <gsl/span>
 
-// ROOT sytem
 #include "PHOSReconstruction/Bunch.h"
 #include "PHOSReconstruction/CaloRawFitter.h"
+#include "PHOSBase/PHOSSimParams.h"
 
 using namespace o2::phos;
 
@@ -84,9 +84,9 @@ CaloRawFitter::FitStatus CaloRawFitter::evalKLevel(const Bunch& b) //const ushor
     return kEmptyBunch;
   }
 
-  const short kSpikeThreshold = 100; //Single spike >100 ADC channels
-  const float kBaseLine = 1.0;       //TODO: set from config
-  const int kPreSamples = 10;        //TODO: set from config
+  const short kSpikeThreshold = o2::phos::PHOSSimParams::Instance().mSpikeThreshold;
+  const short kBaseLine = o2::phos::PHOSSimParams::Instance().mBaseLine;
+  const short kPreSamples = o2::phos::PHOSSimParams::Instance().mPreSamples;
 
   float pedMean = 0;
   float pedRMS = 0;
@@ -112,8 +112,9 @@ CaloRawFitter::FitStatus CaloRawFitter::evalKLevel(const Bunch& b) //const ushor
       mMaxSample = a;
       nMax = 0;
     }
-    if (a == mMaxSample)
+    if (a == mMaxSample) {
       nMax++;
+    }
     //check if there is a spike
     if (app >= 0 && ap >= 0) {
       spike |= (2 * ap - (a + app) > 2 * kSpikeThreshold);
@@ -130,15 +131,17 @@ CaloRawFitter::FitStatus CaloRawFitter::evalKLevel(const Bunch& b) //const ushor
     return kSpike;
   }
 
-  if (mMaxSample > 900 && nMax > 2)
+  if (mMaxSample > 900 && nMax > 2) {
     overflow = true;
+  }
 
   float pedestal = 0;
   if (mPedSubtract) {
     if (nPed > 0) {
       pedRMS = (pedRMS - pedMean * pedMean / nPed) / nPed;
-      if (pedRMS > 0.)
+      if (pedRMS > 0.) {
         pedRMS = sqrt(pedRMS);
+      }
       pedestal = pedMean / nPed;
     } else {
       mAmp.push_back(0);
@@ -149,8 +152,9 @@ CaloRawFitter::FitStatus CaloRawFitter::evalKLevel(const Bunch& b) //const ushor
   }
 
   amp -= pedestal;
-  if (amp < kBaseLine)
+  if (amp < kBaseLine) {
     amp = 0;
+  }
 
   //Evaluate time
   time = b.getStartTime() - 2;
@@ -162,7 +166,7 @@ CaloRawFitter::FitStatus CaloRawFitter::evalKLevel(const Bunch& b) //const ushor
     mAmp.push_back(amp);
     mTime.push_back(time);
     mOverflow.push_back(false);
-    return kNoTime; //use estimated time
+    return kOK; //use estimated time
   }
 
   // Find index posK (kLevel is a level of "timestamp" point Tk):

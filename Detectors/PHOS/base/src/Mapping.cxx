@@ -35,7 +35,7 @@ Mapping::ErrorStatus Mapping::hwToAbsId(short ddl, short hwAddr, short& absId, C
   if (ddl < 0 || ddl > 14) {
     return kWrongDDL;
   }
-  if (hwAddr < 0 || hwAddr >= NHWPERDDL) {
+  if (hwAddr < 0 || hwAddr >= NMaxHWAddress) {
     return kWrongHWAddress;
   }
 
@@ -90,8 +90,9 @@ Mapping::ErrorStatus Mapping::setMapping()
 
   for (short m = 0; m < 4; m++) {   //modules
     for (short i = 0; i < 4; i++) { //RCU
-      if (m == 0 && (i < 2))
+      if (m == 0 && (i < 2)) {
         continue; //half of module: only RCU 2,3
+      }
 
       short numberOfChannels = 0;
       short maxHWAddress = 0;
@@ -114,6 +115,10 @@ Mapping::ErrorStatus Mapping::setMapping()
         LOG(FATAL) << "Syntax of mapping file " << p << "/Mod" << m << "RCU" << i << ".data is wrong: no maxHWAddress";
         return kNotInitialized;
       }
+      if (maxHWAddress > NMaxHWAddress) {
+        LOG(FATAL) << "Maximal HW address in file " << maxHWAddress << "larger than array size " << NMaxHWAddress << "for /Mod" << m << "RCU" << i << ".data is wrong: no maxHWAddress";
+        return kNotInitialized;
+      }
 
       for (short ich = 0; ich < numberOfChannels; ich++) { // 1792 = 2*896 channels connected to each RCU
         int hwAddress;
@@ -134,6 +139,10 @@ Mapping::ErrorStatus Mapping::setMapping()
         if (caloFlag < 0 || caloFlag > 2) {
           LOG(FATAL) << "Wrong CaloFlag value found (" << caloFlag << "). Should be 0, 1, 2 !";
           return kNotInitialized;
+        }
+
+        if (caloFlag == 2) { //TODO!!!! TRU mapping not known yet
+          continue;
         }
 
         //convert ddl, col,raw caloFlag to AbsId

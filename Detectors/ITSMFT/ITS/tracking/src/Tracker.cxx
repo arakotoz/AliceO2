@@ -20,6 +20,7 @@
 #include "ITStracking/Tracklet.h"
 #include "ITStracking/TrackerTraits.h"
 #include "ITStracking/TrackerTraitsCPU.h"
+#include "ITStracking/TrackingConfigParam.h"
 
 #include "ReconstructionDataFormats/Track.h"
 #include <cassert>
@@ -38,12 +39,20 @@ Tracker::Tracker(o2::its::TrackerTraits* traits)
   /// Initialise standard configuration with 1 iteration
   mTrkParams.resize(1);
   mMemParams.resize(1);
-  assert(traits != nullptr);
   mTraits = traits;
   mPrimaryVertexContext = mTraits->getPrimaryVertexContext();
+#ifdef CA_DEBUG
+  mDebugger = new StandaloneDebugger("dbg_ITSTrackerCPU.root");
+#endif
 }
-
+#ifdef CA_DEBUG
+Tracker::~Tracker()
+{
+  delete mDebugger;
+}
+#else
 Tracker::~Tracker() = default;
+#endif
 
 void Tracker::clustersToTracks(const ROframe& event, std::ostream& timeBenchmarkOutputStream)
 {
@@ -292,6 +301,9 @@ void Tracker::findTracks(const ROframe& event)
     temporaryTrack.getParamOut() = temporaryTrack;
     temporaryTrack.resetCovariance();
     fitSuccess = fitTrack(event, temporaryTrack, mTrkParams[0].NLayers - 1, -1, -1, mTrkParams[0].FitIterationMaxChi2[1]);
+#ifdef CA_DEBUG
+    mDebugger->dumpTrackToBranchWithInfo("testBranch", temporaryTrack, event, mPrimaryVertexContext, true);
+#endif
     if (!fitSuccess) {
       continue;
     }
@@ -651,6 +663,15 @@ track::TrackParCov Tracker::buildTrackSeed(const Cluster& cluster1, const Cluste
                                                                               : crv / (getBz() * o2::constants::math::B2C)},
                             {s2, 0.f, s2, s2 * fy, 0.f, s2 * fy * fy, 0.f, s2 * tz, 0.f, s2 * tz * tz, s2 * cy, 0.f,
                              s2 * fy * cy, 0.f, s2 * cy * cy});
+}
+
+void Tracker::getGlobalConfiguration()
+{
+  auto& tc = o2::its::TrackerParamConfig::Instance();
+
+  if (tc.useMatBudLUT) {
+    initMatBudLUTFromFile();
+  }
 }
 
 } // namespace its
