@@ -29,6 +29,7 @@
 #include "Framework/FreePortFinder.h"
 #include <sys/types.h>
 #include "DetectorsCommonDataFormats/NameConf.h"
+#include "SimulationDataFormat/MCEventHeader.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
@@ -100,6 +101,10 @@ int checkresult()
   // easy check: see if we have number of entries in output tree == number of events asked
   std::string filename = o2::base::NameConf::getMCKinematicsFileName(conf.getOutPrefix().c_str());
   TFile f(filename.c_str(), "OPEN");
+  if (f.IsZombie()) {
+    LOG(WARN) << "Kinematics file corrupted or does not exist";
+    return 1;
+  }
   auto tr = static_cast<TTree*>(f.Get("o2sim"));
   if (!tr) {
     errors++;
@@ -114,12 +119,18 @@ int checkresult()
   return errors;
 }
 
+std::vector<int> gChildProcesses; // global vector of child pids
+
 // signal handler for graceful exit
 void sighandler(int signal)
 {
   if (signal == SIGINT || signal == SIGTERM) {
-    LOG(INFO) << "signal caught ... clean up and exit";
+    LOG(INFO) << "o2-sim driver: Signal caught ... clean up and exit";
     cleanup();
+    // forward signal to all children
+    for (auto& pid : gChildProcesses) {
+      kill(pid, signal);
+    }
     exit(0);
   }
 }
@@ -342,7 +353,7 @@ int main(int argc, char* argv[])
     }
     return r;
   } else {
-    childpids.push_back(pid);
+    gChildProcesses.push_back(pid);
     close(pipe_serverdriver_fd[1]);
     std::cout << "Spawning particle server on PID " << pid << "; Redirect output to " << getServerLogName() << "\n";
     launchThreadMonitoringEvents(pipe_serverdriver_fd[0], "DISTRIBUTING EVENT : ");
@@ -376,7 +387,7 @@ int main(int argc, char* argv[])
             "worker", "--mq-config", localconfig.c_str(), "--severity", "info", (char*)nullptr);
       return 0;
     } else {
-      childpids.push_back(pid);
+      gChildProcesses.push_back(pid);
       std::cout << "Spawning sim worker " << id << " on PID " << pid
                 << "; Redirect output to " << workerlogss.str() << "\n";
     }
@@ -405,13 +416,13 @@ int main(int argc, char* argv[])
     return 0;
   } else {
     std::cout << "Spawning hit merger on PID " << pid << "; Redirect output to " << getMergerLogName() << "\n";
-    childpids.push_back(pid);
+    gChildProcesses.push_back(pid);
     close(pipe_mergerdriver_fd[1]);
     launchThreadMonitoringEvents(pipe_mergerdriver_fd[0], "EVENT FINISHED : ");
   }
 
   // wait on merger (which when exiting completes the workflow)
-  auto mergerpid = childpids.back();
+  auto mergerpid = gChildProcesses.back();
 
   int status, cpid;
   // wait just blocks and waits until any child returns; but we make sure to wait until merger is here
@@ -422,8 +433,8 @@ int main(int argc, char* argv[])
     }
     // we bring down all processes if one of them aborts
     if (WTERMSIG(status) == SIGABRT) {
-      for (auto p : childpids) {
-        kill(p, SIGABRT);
+      for (auto p : gChildProcesses) {
+        kill(p, SIGTERM);
       }
       cleanup();
       LOG(FATAL) << "ABORTING DUE TO ABORT IN COMPONENT";
@@ -434,7 +445,7 @@ int main(int argc, char* argv[])
   LOG(INFO) << "Simulation process took " << timer.RealTime() << " s";
 
   // make sure the rest shuts down
-  for (auto p : childpids) {
+  for (auto p : gChildProcesses) {
     if (p != mergerpid) {
       LOG(DEBUG) << "SHUTTING DOWN CHILD PROCESS " << p;
       kill(p, SIGTERM);
@@ -448,6 +459,18 @@ int main(int argc, char* argv[])
   // (mainly useful for continuous integration / automated testing suite)
   auto returncode = checkresult();
   if (returncode == 0) {
+    // Extract a single file for MCEventHeaders
+    // This file will be small and can quickly unblock start of signal transport (in embedding).
+    // This is useful when we cache background events on the GRID. The headers file can be copied quickly
+    // and the rest of kinematics + Hits may follow asyncronously since they are only needed at much
+    // later stages (digitization).
+
+    auto& conf = o2::conf::SimConfig::Instance();
+    // easy check: see if we have number of entries in output tree == number of events asked
+    std::string kinefilename = o2::base::NameConf::getMCKinematicsFileName(conf.getOutPrefix().c_str());
+    std::string headerfilename = o2::base::NameConf::getMCHeadersFileName(conf.getOutPrefix().c_str());
+    o2::dataformats::MCEventHeader::extractFileFromKinematics(kinefilename, headerfilename);
+
     LOG(INFO) << "SIMULATION RETURNED SUCCESFULLY";
   }
 

@@ -31,6 +31,7 @@ using PVertex = o2::dataformats::PrimaryVertex;
 using TimeEst = o2::dataformats::TimeStampWithError<float, float>;
 using V2TRef = o2::dataformats::VtxTrackRef;
 using GIndex = o2::dataformats::VtxTrackIndex;
+using GTrackID = o2::dataformats::GlobalTrackID;
 
 ///< weights and scaling params for current vertex
 struct VertexSeed : public PVertex {
@@ -74,6 +75,12 @@ struct VertexSeed : public PVertex {
   void print() const;
 };
 
+/// generic track with timestamp
+struct TrackWithTimeStamp : o2::track::TrackParCov {
+  TimeEst timeEst{};
+  auto getTimeMUS() const { return timeEst; }
+};
+
 struct TrackVF {
   /** Straight track parameterization in the frame defined by alpha angle.
       Assumed to be defined in the proximity to vertex, so that the
@@ -96,12 +103,10 @@ struct TrackVF {
 
   TimeEst timeEst;
   float wgh = 0.; ///< track weight wrt current vertex seed
-  uint32_t entry = 0;
+  int entry;      ///< track entry in the input vector
   int16_t bin = -1; // seeds histo bin
-  uint8_t srcID = 0;
   uint8_t flags = 0;
   int vtxID = kNoVtx; ///< assigned vertex
-
   //
   bool canAssign() const { return wgh > 0. && vtxID == kNoVtx; }
   bool canUse() const { return vtxID == kNoVtx; }
@@ -119,7 +124,9 @@ struct TrackVF {
   // weighted distance^2 to other track (accounting for own errors only)
   float getDist2(const TrackVF& o) const
   {
-    auto dtnorm2 = (timeEst.getTimeStamp() - o.timeEst.getTimeStamp()) / timeEst.getTimeStampError();
+    auto dt = timeEst.getTimeStamp() - o.timeEst.getTimeStamp();
+    auto dte2 = timeEst.getTimeStampError() * timeEst.getTimeStampError() + o.timeEst.getTimeStampError() * o.timeEst.getTimeStampError();
+    auto dtnorm2 = dt * dt / dte2;
     auto dz = z - o.z;
     return dtnorm2 + dz * dz * sig2ZI;
   }
@@ -143,8 +150,8 @@ struct TrackVF {
   }
 
   TrackVF() = default;
-  TrackVF(const o2::track::TrackParCov& src, const TimeEst& t_est, uint32_t _entry, uint8_t _srcID)
-    : x(src.getX()), y(src.getY()), z(src.getZ()), tgL(src.getTgl()), tgP(src.getSnp() / std::sqrt(1. - src.getSnp()) * (1. + src.getSnp())), timeEst(t_est), entry(_entry), srcID(_srcID)
+  TrackVF(const o2::track::TrackParCov& src, const TimeEst& t_est, int _entry)
+    : x(src.getX()), y(src.getY()), z(src.getZ()), tgL(src.getTgl()), tgP(src.getSnp() / std::sqrt(1. - src.getSnp()) * (1. + src.getSnp())), timeEst(t_est), entry(_entry)
   {
     o2::math_utils::sincos(src.getAlpha(), sinAlp, cosAlp);
     auto det = src.getSigmaY2() * src.getSigmaZ2() - src.getSigmaZY() * src.getSigmaZY();

@@ -19,12 +19,12 @@
 #include "AnalysisDataModel/Centrality.h"
 #include "AnalysisCore/TriggerAliases.h"
 #include "AnalysisDataModel/ReducedInfoTables.h"
-#include "AnalysisCore/VarManager.h"
-#include "AnalysisCore/HistogramManager.h"
-#include "AnalysisCore/AnalysisCut.h"
-#include "AnalysisCore/AnalysisCompositeCut.h"
-#include "CutsLibrary.h"
-#include "HistogramsLibrary.h"
+#include "PWGDQCore/VarManager.h"
+#include "PWGDQCore/HistogramManager.h"
+#include "PWGDQCore/AnalysisCut.h"
+#include "PWGDQCore/AnalysisCompositeCut.h"
+#include "PWGDQCore/CutsLibrary.h"
+#include "PWGDQCore/HistogramsLibrary.h"
 #include "AnalysisDataModel/PID/PIDResponse.h"
 #include "AnalysisDataModel/TrackSelectionTables.h"
 #include <TH1F.h>
@@ -318,12 +318,12 @@ struct FilterPPTask {
   }
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const&)
+WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<EventSelectionTask>("dq-event-selection"),
-    adaptAnalysisTask<BarrelTrackSelectionTask>("dq-barrel-track-selection"),
-    adaptAnalysisTask<FilterPPTask>("dq-ppFilter")};
+    adaptAnalysisTask<EventSelectionTask>(cfgc, "dq-event-selection"),
+    adaptAnalysisTask<BarrelTrackSelectionTask>(cfgc, "dq-barrel-track-selection"),
+    adaptAnalysisTask<FilterPPTask>(cfgc, "dq-ppFilter")};
 }
 
 void DefineHistograms(HistogramManager* histMan, TString histClasses)

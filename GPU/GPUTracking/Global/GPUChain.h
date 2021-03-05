@@ -82,6 +82,11 @@ class GPUChain
   inline GPUSettingsProcessing& ProcessingSettings() { return mRec->mProcessingSettings; }
   inline void SynchronizeStream(int stream) { mRec->SynchronizeStream(stream); }
   inline void SynchronizeEvents(deviceEvent* evList, int nEvents = 1) { mRec->SynchronizeEvents(evList, nEvents); }
+  inline void SynchronizeEventAndRelease(deviceEvent* ev)
+  {
+    SynchronizeEvents(ev);
+    ReleaseEvent(ev);
+  }
   template <class T>
   inline void CondWaitEvent(T& cond, deviceEvent* ev)
   {
@@ -127,9 +132,9 @@ class GPUChain
     mRec->AllocateIOMemoryHelper<T>(n, ptr, u);
   }
   template <class T, class S>
-  inline void DumpData(FILE* fp, const T* const* entries, const S* num, InOutPointerType type)
+  inline unsigned int DumpData(FILE* fp, const T* const* entries, const S* num, InOutPointerType type)
   {
-    mRec->DumpData<T>(fp, entries, num, type);
+    return mRec->DumpData<T>(fp, entries, num, type);
   }
   template <class T, class S>
   inline size_t ReadData(FILE* fp, const T** entries, S* num, std::unique_ptr<T[]>* mem, InOutPointerType type, T** nonConstPtrs = nullptr)

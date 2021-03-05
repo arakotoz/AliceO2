@@ -15,7 +15,7 @@
 #include "CommonUtils/ConfigurationMacroHelper.h"
 #include "FairLogger.h"
 #include "TParticle.h"
-#include "FairMCEventHeader.h"
+#include "SimulationDataFormat/MCEventHeader.h"
 #include "Pythia8/HIUserHooks.h"
 #include "TSystem.h"
 
@@ -192,9 +192,12 @@ Bool_t
 
 /*****************************************************************/
 
-void GeneratorPythia8::updateHeader(FairMCEventHeader* eventHeader)
+void GeneratorPythia8::updateHeader(o2::dataformats::MCEventHeader* eventHeader)
 {
   /** update header **/
+
+  eventHeader->putInfo<std::string>("generator", "pythia8");
+  eventHeader->putInfo<int>("version", PYTHIA_VERSION_INTEGER);
 
 #if PYTHIA_VERSION_INTEGER < 8300
   auto hiinfo = mPythia.info.hiinfo;
@@ -202,9 +205,28 @@ void GeneratorPythia8::updateHeader(FairMCEventHeader* eventHeader)
   auto hiinfo = mPythia.info.hiInfo;
 #endif
 
-  /** set impact parameter if in heavy-ion mode **/
   if (hiinfo) {
+    /** set impact parameter **/
     eventHeader->SetB(hiinfo->b());
+    eventHeader->putInfo<double>("Bimpact", hiinfo->b());
+    /** set Ncoll, Npart and Nremn **/
+    int nColl, nPart;
+    int nPartProtonProj, nPartNeutronProj, nPartProtonTarg, nPartNeutronTarg;
+    int nRemnProtonProj, nRemnNeutronProj, nRemnProtonTarg, nRemnNeutronTarg;
+    getNcoll(nColl);
+    getNpart(nPart);
+    getNpart(nPartProtonProj, nPartNeutronProj, nPartProtonTarg, nPartNeutronTarg);
+    getNremn(nRemnProtonProj, nRemnNeutronProj, nRemnProtonTarg, nRemnNeutronTarg);
+    eventHeader->putInfo<int>("Ncoll", nColl);
+    eventHeader->putInfo<int>("Npart", nPart);
+    eventHeader->putInfo<int>("Npart_proj_p", nPartProtonProj);
+    eventHeader->putInfo<int>("Npart_proj_n", nPartNeutronProj);
+    eventHeader->putInfo<int>("Npart_targ_p", nPartProtonTarg);
+    eventHeader->putInfo<int>("Npart_targ_n", nPartNeutronTarg);
+    eventHeader->putInfo<int>("Nremn_proj_p", nRemnProtonProj);
+    eventHeader->putInfo<int>("Nremn_proj_n", nRemnNeutronProj);
+    eventHeader->putInfo<int>("Nremn_targ_p", nRemnProtonTarg);
+    eventHeader->putInfo<int>("Nremn_targ_n", nRemnNeutronTarg);
   }
 }
 
@@ -366,10 +388,12 @@ void GeneratorPythia8::getNremn(const Pythia8::Event& event, int& nProtonProj, i
     auto pdg = particle.id();
 
     // nuclear remnants have pdg code = ±10LZZZAAA9
-    if (pdg < 1000000000)
+    if (pdg < 1000000000) {
       continue; // must be nucleus
-    if (pdg % 10 != 9)
+    }
+    if (pdg % 10 != 9) {
       continue; // first digit must be 9
+    }
     nNucRem++;
 
     // extract A, Z and L from pdg code

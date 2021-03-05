@@ -100,9 +100,9 @@ struct HFD0CandidateSelector {
     if (track.charge() == 0) {
       return false;
     }
-    if (track.tpcNClsFound() == 0) {
+    /* if (track.tpcNClsFound() == 0) {
       return false; //is it clusters findable or found - need to check
-    }
+      }*/
     return true;
   }
 
@@ -231,7 +231,7 @@ struct HFD0CandidateSelector {
   /// \note nPDG=211 pion  nPDG=321 kaon
   /// \return true if track satisfies TPC PID hypothesis for given Nsigma cut
   template <typename T>
-  bool selectionPIDTPC(const T& track, int nPDG, int nSigmaCut)
+  bool selectionPIDTPC(const T& track, int nPDG, double nSigmaCut)
   {
     double nSigma = 100.0; //arbitarily large value
     nPDG = TMath::Abs(nPDG);
@@ -252,7 +252,7 @@ struct HFD0CandidateSelector {
   /// \note nPDG=211 pion  nPDG=321 kaon
   /// \return true if track satisfies TOF PID hypothesis for given NSigma cut
   template <typename T>
-  bool selectionPIDTOF(const T& track, int nPDG, int nSigmaCut)
+  bool selectionPIDTOF(const T& track, int nPDG, double nSigmaCut)
   {
     double nSigma = 100.0; //arbitarily large value
     nPDG = TMath::Abs(nPDG);
@@ -324,11 +324,17 @@ struct HFD0CandidateSelector {
 
     for (auto& hfCandProng2 : hfCandProng2s) { //looping over 2 prong candidates
 
+      statusD0 = 0;
+      statusD0bar = 0;
+
+      if (!(hfCandProng2.hfflag() & 1 << D0ToPiK)) {
+        hfSelD0Candidate(statusD0, statusD0bar);
+        continue;
+      }
+
       auto trackPos = hfCandProng2.index0_as<aod::BigTracksPID>(); //positive daughter
       auto trackNeg = hfCandProng2.index1_as<aod::BigTracksPID>(); //negative daughter
 
-      statusD0 = 0;
-      statusD0bar = 0;
       topolD0 = true;
       topolD0bar = true;
       pidD0 = -1;
@@ -398,8 +404,8 @@ struct HFD0CandidateSelector {
   }
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const&)
+WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<HFD0CandidateSelector>("hf-d0-candidate-selector")};
+    adaptAnalysisTask<HFD0CandidateSelector>(cfgc, "hf-d0-candidate-selector")};
 }

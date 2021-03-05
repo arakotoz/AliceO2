@@ -27,8 +27,12 @@ o2_add_library(TPCReconstruction
                        src/DigitalCurrentClusterIntegrator.cxx
                        src/TPCFastTransformHelperO2.cxx
                        src/CTFCoder.cxx
-               PUBLIC_LINK_LIBRARIES FairRoot::Base O2::SimulationDataFormat
-                                     O2::TPCBase O2::GPUTracking
+                       src/RawProcessingHelpers.cxx
+               PUBLIC_LINK_LIBRARIES FairRoot::Base
+                                     O2::SimulationDataFormat
+                                     O2::TPCBase
+                                     O2::GPUO2Interface
+                                     O2::GPUTracking
                                      O2::DetectorsRaw)
 
 o2_target_root_dictionary(
@@ -51,7 +55,8 @@ o2_target_root_dictionary(
           include/TPCReconstruction/HardwareClusterDecoder.h
           include/TPCReconstruction/DigitalCurrentClusterIntegrator.h
           include/TPCReconstruction/TPCFastTransformHelperO2.h
-          include/TPCReconstruction/CTFCoder.h)
+          include/TPCReconstruction/CTFCoder.h
+          include/TPCReconstruction/RawProcessingHelpers.h)
 
 o2_add_executable(read-gbtframes
                   COMPONENT_NAME tpc
@@ -102,7 +107,8 @@ o2_add_test(FastTransform
             LABELS tpc
             PUBLIC_LINK_LIBRARIES O2::TPCReconstruction
             SOURCES test/testTPCFastTransform.cxx
-            ENVIRONMENT O2_ROOT=${CMAKE_BINARY_DIR}/stage) # CONFIGURATIONS RelWithDebInfo)
+            ENVIRONMENT O2_ROOT=${CMAKE_BINARY_DIR}/stage
+            CONFIGURATIONS RelWithDebInfo Release MinRelSize)
 
 # FIXME: should be moved to TPCCalibration as it requires O2::TPCCalibration
 # which is built after TPCReconstruction

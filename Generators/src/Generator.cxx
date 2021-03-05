@@ -13,6 +13,7 @@
 #include "Generators/Generator.h"
 #include "Generators/Trigger.h"
 #include "Generators/PrimaryGenerator.h"
+#include "SimulationDataFormat/MCEventHeader.h"
 #include "FairPrimaryGenerator.h"
 #include "FairLogger.h"
 #include <cmath>
@@ -31,7 +32,6 @@ Generator::Generator() : FairGenerator("ALICEo2", "ALICEo2 Generator"),
                          mBoost(0.)
 {
   /** default constructor **/
-
 }
 
 /*****************************************************************/
@@ -40,7 +40,6 @@ Generator::Generator(const Char_t* name, const Char_t* title) : FairGenerator(na
                                                                 mBoost(0.)
 {
   /** constructor **/
-
 }
 
 /*****************************************************************/
@@ -89,7 +88,13 @@ Bool_t
   }
 
   /** update header **/
-  updateHeader(primGen->GetEvent());
+  auto header = primGen->GetEvent();
+  auto o2header = dynamic_cast<o2::dataformats::MCEventHeader*>(header);
+  if (!header) {
+    LOG(FATAL) << "MC event header is not a 'o2::dataformats::MCEventHeader' object";
+    return kFALSE;
+  }
+  updateHeader(o2header);
 
   /** success **/
   return kTRUE;
@@ -124,7 +129,8 @@ Bool_t
                         particle.GetStatusCode() == 1,
                         particle.Energy() * mEnergyUnit,
                         particle.T() * mTimeUnit,
-                        particle.GetWeight());
+                        particle.GetWeight(),
+                        (TMCProcess)particle.GetUniqueID());
   }
 
   /** success **/

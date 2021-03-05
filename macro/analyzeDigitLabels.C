@@ -4,11 +4,13 @@
 #include "TString.h"
 #include "SimulationDataFormat/MCTruthContainer.h"
 #include "SimulationDataFormat/MCCompLabel.h"
+#include "SimulationDataFormat/ConstMCTruthContainer.h"
+#include "SimulationDataFormat/IOMCTruthContainerView.h"
 #include "DataFormatsPHOS/MCLabel.h"
 #include "DataFormatsFT0/MCLabel.h"
 #include "DataFormatsFDD/MCLabel.h"
 #include "DataFormatsFV0/MCLabel.h"
-#include "ZDCSimulation/MCLabel.h"
+#include "DataFormatsZDC/MCLabel.h"
 #include "MIDSimulation/MCLabel.h"
 #include "TRDBase/MCLabel.h"
 
@@ -78,17 +80,30 @@ void analyse(TTree* tr, const char* brname, Accumulator& prop)
   if (!br) {
     return;
   }
+  auto classname = br->GetClassName();
   auto entries = br->GetEntries();
-  o2::dataformats::IOMCTruthContainerView* io2 = nullptr;
-  br->SetAddress(&io2);
+  if (strcmp("o2::dataformats::IOMCTruthContainerView", classname) == 0) {
+    o2::dataformats::IOMCTruthContainerView* io2 = nullptr;
+    br->SetAddress(&io2);
 
-  for (int i = 0; i < entries; ++i) {
-    br->GetEntry(i);
-    o2::dataformats::ConstMCTruthContainer<LabelType> labels;
-    io2->copyandflatten(labels);
+    for (int i = 0; i < entries; ++i) {
+      br->GetEntry(i);
+      o2::dataformats::ConstMCTruthContainer<LabelType> labels;
+      io2->copyandflatten(labels);
 
-    for (int i = 0; i < (int)labels.getIndexedSize(); ++i) {
-      prop.addLabels(labels.getLabels(i));
+      for (int i = 0; i < (int)labels.getIndexedSize(); ++i) {
+        prop.addLabels(labels.getLabels(i));
+      }
+    }
+  } else {
+    // standard MC truth container
+    o2::dataformats::MCTruthContainer<LabelType>* labels = nullptr;
+    br->SetAddress(&labels);
+    for (int i = 0; i < entries; ++i) {
+      br->GetEntry(i);
+      for (int i = 0; i < (int)labels->getIndexedSize(); ++i) {
+        prop.addLabels(labels->getLabels(i));
+      }
     }
   }
 };

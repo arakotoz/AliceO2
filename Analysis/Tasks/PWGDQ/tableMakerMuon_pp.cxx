@@ -19,10 +19,10 @@
 #include "AnalysisDataModel/Centrality.h"
 #include "AnalysisCore/TriggerAliases.h"
 #include "AnalysisDataModel/ReducedInfoTables.h"
-#include "AnalysisCore/VarManager.h"
-#include "AnalysisCore/HistogramManager.h"
-#include "AnalysisCore/AnalysisCut.h"
-#include "AnalysisCore/AnalysisCompositeCut.h"
+#include "PWGDQCore/VarManager.h"
+#include "PWGDQCore/HistogramManager.h"
+#include "PWGDQCore/AnalysisCut.h"
+#include "PWGDQCore/AnalysisCompositeCut.h"
 #include "AnalysisDataModel/PID/PIDResponse.h"
 #include "AnalysisDataModel/TrackSelectionTables.h"
 #include <iostream>
@@ -165,8 +165,8 @@ struct TableMakerMuon_pp {
   }
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const&)
+WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<TableMakerMuon_pp>("table-maker-muon-pp")};
+    adaptAnalysisTask<TableMakerMuon_pp>(cfgc, "table-maker-muon-pp")};
 }

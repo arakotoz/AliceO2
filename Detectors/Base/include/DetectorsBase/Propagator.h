@@ -114,9 +114,9 @@ class Propagator
   GPUd() void setBz(float bz) { mBz = bz; }
 
 #ifndef GPUCA_GPUCODE
-  static Propagator* Instance()
+  static Propagator* Instance(bool uninitialized = false)
   {
-    static Propagator instance;
+    static Propagator instance(uninitialized);
     return &instance;
   }
 
@@ -124,14 +124,15 @@ class Propagator
   static int initFieldFromGRP(const std::string grpFileName, std::string grpName = "GRP", bool verbose = false);
 #endif
 
+  GPUd() MatBudget getMatBudget(MatCorrType corrType, const o2::math_utils::Point3D<float>& p0, const o2::math_utils::Point3D<float>& p1) const;
+  GPUd() void getFieldXYZ(const math_utils::Point3D<float> xyz, float* bxyz) const;
+  GPUd() void getFieldXYZ(const math_utils::Point3D<double> xyz, double* bxyz) const;
+
  private:
 #ifndef GPUCA_GPUCODE
-  Propagator();
+  Propagator(bool uninitialized = false);
   ~Propagator() = default;
 #endif
-
-  GPUd() MatBudget getMatBudget(MatCorrType corrType, const o2::math_utils::Point3D<float>& p0, const o2::math_utils::Point3D<float>& p1) const;
-  GPUd() void getFiedXYZ(const math_utils::Point3D<float> xyz, float* bxyz) const;
 
   const o2::field::MagFieldFast* mField = nullptr; ///< External fast field (barrel only for the moment)
   float mBz = 0;                                   // nominal field

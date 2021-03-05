@@ -29,8 +29,11 @@ using namespace o2::gpu;
 #include <FairRunAna.h> // eventually will get rid of it
 #include <TGeoGlobalMagField.h>
 
-Propagator::Propagator()
+Propagator::Propagator(bool uninitialized)
 {
+  if (uninitialized) {
+    return;
+  }
   ///< construct checking if needed components were initialized
 
   // we need the geoemtry loaded
@@ -99,7 +102,7 @@ int Propagator::initFieldFromGRP(const o2::parameters::GRPObject* grp, bool verb
   return 0;
 }
 #elif !defined(GPUCA_GPUCODE)
-Propagator::Propagator()
+Propagator::Propagator(bool uninitialized)
 {
 } // empty dummy constructor for standalone benchmark
 #endif
@@ -134,7 +137,7 @@ GPUd() bool Propagator::PropagateToXBxByBz(o2::track::TrackParCov& track, float 
     }
     auto x = track.getX() + step;
     auto xyz0 = track.getXYZGlo();
-    getFiedXYZ(xyz0, &b[0]);
+    getFieldXYZ(xyz0, &b[0]);
 
     if (!track.propagateTo(x, b)) {
       return false;
@@ -145,7 +148,7 @@ GPUd() bool Propagator::PropagateToXBxByBz(o2::track::TrackParCov& track, float 
     if (matCorr != MatCorrType::USEMatCorrNONE) {
       auto xyz1 = track.getXYZGlo();
       auto mb = getMatBudget(matCorr, xyz0, xyz1);
-      if (!track.correctForMaterial(mb.meanX2X0, ((signCorr < 0) ? -mb.length : mb.length) * mb.meanRho)) {
+      if (!track.correctForMaterial(mb.meanX2X0, mb.getXRho(signCorr))) {
         return false;
       }
 
@@ -160,6 +163,7 @@ GPUd() bool Propagator::PropagateToXBxByBz(o2::track::TrackParCov& track, float 
     }
     dx = xToGo - track.getX();
   }
+  track.setX(xToGo);
   return true;
 }
 
@@ -193,7 +197,7 @@ GPUd() bool Propagator::PropagateToXBxByBz(o2::track::TrackPar& track, float xTo
     }
     auto x = track.getX() + step;
     auto xyz0 = track.getXYZGlo();
-    getFiedXYZ(xyz0, &b[0]);
+    getFieldXYZ(xyz0, &b[0]);
 
     if (!track.propagateParamTo(x, b)) {
       return false;
@@ -218,6 +222,7 @@ GPUd() bool Propagator::PropagateToXBxByBz(o2::track::TrackPar& track, float xTo
     }
     dx = xToGo - track.getX();
   }
+  track.setX(xToGo);
   return true;
 }
 
@@ -261,7 +266,7 @@ GPUd() bool Propagator::propagateToX(o2::track::TrackParCov& track, float xToGo,
       auto xyz1 = track.getXYZGlo();
       auto mb = getMatBudget(matCorr, xyz0, xyz1);
       //
-      if (!track.correctForMaterial(mb.meanX2X0, ((signCorr < 0) ? -mb.length : mb.length) * mb.meanRho)) {
+      if (!track.correctForMaterial(mb.meanX2X0, mb.getXRho(signCorr))) {
         return false;
       }
 
@@ -276,6 +281,7 @@ GPUd() bool Propagator::propagateToX(o2::track::TrackParCov& track, float xToGo,
     }
     dx = xToGo - track.getX();
   }
+  track.setX(xToGo);
   return true;
 }
 
@@ -319,7 +325,7 @@ GPUd() bool Propagator::propagateToX(o2::track::TrackPar& track, float xToGo, fl
       auto xyz1 = track.getXYZGlo();
       auto mb = getMatBudget(matCorr, xyz0, xyz1);
       //
-      if (!track.correctForELoss(((signCorr < 0) ? -mb.length : mb.length) * mb.meanRho)) {
+      if (!track.correctForELoss(mb.getXRho(signCorr))) {
         return false;
       }
 
@@ -334,6 +340,7 @@ GPUd() bool Propagator::propagateToX(o2::track::TrackPar& track, float xToGo, fl
     }
     dx = xToGo - track.getX();
   }
+  track.setX(xToGo);
   return true;
 }
 
@@ -526,7 +533,7 @@ GPUd() MatBudget Propagator::getMatBudget(Propagator::MatCorrType corrType, cons
   return mMatLUT->getMatBudget(p0.X(), p0.Y(), p0.Z(), p1.X(), p1.Y(), p1.Z());
 }
 
-GPUd() void Propagator::getFiedXYZ(const math_utils::Point3D<float> xyz, float* bxyz) const
+GPUd() void Propagator::getFieldXYZ(const math_utils::Point3D<float> xyz, float* bxyz) const
 {
   if (mGPUField) {
 #if defined(GPUCA_GPUCODE_DEVICE) && defined(GPUCA_HAS_GLOBAL_SYMBOL_CONSTANT_MEM)
@@ -535,6 +542,26 @@ GPUd() void Propagator::getFiedXYZ(const math_utils::Point3D<float> xyz, float* 
     const auto* f = mGPUField;
 #endif
     f->GetField(xyz.X(), xyz.Y(), xyz.Z(), bxyz);
+  } else {
+#ifndef GPUCA_GPUCODE
+    mField->Field(xyz, bxyz); // Must not call the host-only function in GPU compilation
+#endif
+  }
+}
+
+GPUd() void Propagator::getFieldXYZ(const math_utils::Point3D<double> xyz, double* bxyz) const
+{
+  if (mGPUField) {
+#if defined(GPUCA_GPUCODE_DEVICE) && defined(GPUCA_HAS_GLOBAL_SYMBOL_CONSTANT_MEM)
+    const auto* f = &GPUCA_CONSMEM.param.polynomialField; // Access directly from constant memory on GPU (copied here to avoid complicated header dependencies)
+#else
+    const auto* f = mGPUField;
+#endif
+    float bxyzF[3];
+    f->GetField(xyz.X(), xyz.Y(), xyz.Z(), bxyzF);
+    bxyz[0] = bxyzF[0];
+    bxyz[1] = bxyzF[1];
+    bxyz[2] = bxyzF[2];
   } else {
 #ifndef GPUCA_GPUCODE
     mField->Field(xyz, bxyz); // Must not call the host-only function in GPU compilation

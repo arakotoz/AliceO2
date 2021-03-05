@@ -16,7 +16,7 @@ namespace o2::aod
 namespace extension
 {
 DECLARE_SOA_DYNAMIC_COLUMN(P2, p2, [](float p) { return p * p; });
-} // namespace etaphi
+} // namespace extension
 } // namespace o2::aod
 
 using namespace o2;
@@ -36,9 +36,9 @@ struct ATask {
   }
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const&)
+WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   // create and use table
   return WorkflowSpec{
-    adaptAnalysisTask<ATask>("attach-showcase")};
+    adaptAnalysisTask<ATask>(cfgc, "attach-showcase")};
 }

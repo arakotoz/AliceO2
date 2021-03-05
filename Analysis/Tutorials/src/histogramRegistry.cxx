@@ -91,6 +91,10 @@ struct CTask {
 
     registry.add("1d-profile-weight", "test 1d profile weight", {HistType::kTProfile, {{2, -10.0f, 10.01f}}}, true);
     registry.add("2d-profile-weight", "test 2d profile weight", {HistType::kTProfile2D, {{2, -10.0f, 10.01f}, {2, -10.0f, 10.01f}}}, true);
+
+    registry.add("2d-step", "test 2d step", {HistType::kStepTHnD, {{2, -10.0f, 10.01f}, {2, -10.0f, 10.01f}}, 3});
+
+    registry.add("2d-step-weight", "test 2d step weight", {HistType::kStepTHnF, {{2, -10.0f, 10.01f}, {2, -10.0f, 10.01f}}, 4}, true);
   }
 
   void process(aod::Tracks const& tracks)
@@ -121,6 +125,9 @@ struct CTask {
       registry.fill(HIST("3d-weight"), track.pt(), track.eta(), track.phi(), 2.);
 
       registry.fill(HIST("2d-profile-weight"), track.pt(), track.eta(), track.phi(), 5.);
+
+      registry.fill(HIST("2d-step"), 1, track.pt(), track.eta());
+      registry.fill(HIST("2d-step-weight"), 2, track.pt(), track.eta(), track.phi());
     }
   }
 };
@@ -250,13 +257,51 @@ struct FTask {
   }
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const&)
+struct GTask {
+  HistogramRegistry histos{"Histos"};
+
+  // for testing: assume first element in vector is number of bins; if it is zero variable binning is assumed
+  // note that the size of the default vector fixes the size of the vector that can be provided via configurable
+  Configurable<std::vector<double>> ptBinning{"pt-bin-edges", {0., 0.15, 1., 5., 10., 50.}, ""}; // variable bin edges
+  Configurable<std::vector<double>> centBinning{"cent-binning", {9., 0., 90}, ""};               // fixed size bins
+
+  // best would be to make it work with the actual AxisSpec and its ctors:
+  //Configurable<AxisSpec> phiAxis{"phi-axis", {{0., 0.25, 0.5, 0.75, 1., 1.6, 2.}}, ""};
+  //Configurable<AxisSpec> etaAxis{"eta-axis", {{8, -1., 1.}}, ""};
+
+  void init(InitContext const&)
+  {
+    // first bool argument is needed here to distingish the custom ctor (from double vector where first element is nBins)
+    // form the 'ordinary' one which has bin edges as argument
+    AxisSpec ptAxis = {true, ptBinning, "#it{p}_{T} (GeV/c)"};
+    AxisSpec centAxis = {true, centBinning, "#it{p}_{T} (GeV/c)"};
+
+    // for all axes that do not actually need to be configurable, better dont use the Configurables to avoid code clutter!
+    const int nCuts = 5;
+    AxisSpec cutAxis = {nCuts, -0.5, nCuts - 0.5, "cut setting"};
+
+    histos.add("myPtHistFromConfig", "", {HistType::kTH1D, {ptAxis}});
+    histos.add("myCentHistFromConfig", "", {HistType::kTH1D, {centAxis}});
+    histos.add("myCutHistNotFromConfig", "", {HistType::kTH1D, {cutAxis}});
+
+    //histos.add("histFromConfigAxisSpec", "", {HistType::kTH2F, {phiAxis, etaAxis}});
+  }
+
+  void process(aod::Track const& track)
+  {
+    histos.fill(HIST("myCentHistFromConfig"), 1);
+    histos.fill(HIST("myPtHistFromConfig"), track.pt());
+  }
+};
+
+WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<ETask>("output-obj-test"),
-    adaptAnalysisTask<ATask>("eta-and-phi-histograms"),
-    adaptAnalysisTask<BTask>("filtered-histograms"),
-    adaptAnalysisTask<CTask>("dimension-test"),
-    adaptAnalysisTask<DTask>("realistic-example"),
-    adaptAnalysisTask<FTask>("tlist-test")};
+    adaptAnalysisTask<ETask>(cfgc, "output-obj-test"),
+    adaptAnalysisTask<ATask>(cfgc, "eta-and-phi-histograms"),
+    adaptAnalysisTask<BTask>(cfgc, "filtered-histograms"),
+    adaptAnalysisTask<CTask>(cfgc, "dimension-test"),
+    adaptAnalysisTask<DTask>(cfgc, "realistic-example"),
+    adaptAnalysisTask<FTask>(cfgc, "tlist-test"),
+    adaptAnalysisTask<GTask>(cfgc, "configurables-test")};
 }

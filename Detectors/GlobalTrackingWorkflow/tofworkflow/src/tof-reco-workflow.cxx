@@ -34,9 +34,6 @@
 #include "CommonUtils/ConfigurableParam.h"
 #include "DetectorsCommonDataFormats/NameConf.h"
 
-// GRP
-#include "DataFormatsParameters/GRPObject.h"
-
 // FIT
 #include "FT0Workflow/RecPointReaderSpec.h"
 
@@ -62,6 +59,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
   workflowOptions.push_back(ConfigParamSpec{"configKeyValues", o2::framework::VariantType::String, "", {"Semicolon separated key=value strings ..."}});
   workflowOptions.push_back(ConfigParamSpec{"disable-row-writing", o2::framework::VariantType::Bool, false, {"disable ROW in Digit writing"}});
   workflowOptions.push_back(ConfigParamSpec{"write-decoding-errors", o2::framework::VariantType::Bool, false, {"trace errors in digits output when decoding"}});
+  workflowOptions.push_back(ConfigParamSpec{"calib-cluster", VariantType::Bool, false, {"to enable calib info production from clusters"}});
 }
 
 #include "Framework/runDataProcessing.h" // the main driver
@@ -88,11 +86,8 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 
   if (!cfgc.helpOnCommandLine()) {
     o2::conf::ConfigurableParam::updateFromString(cfgc.options().get<std::string>("configKeyValues"));
-    //  o2::conf::ConfigurableParam::writeINI("o2tofrecoflow_configuration.ini");
   }
   // the lane configuration defines the subspecification ids to be distributed among the lanes.
-  // auto tofSectors = o2::RangeTokenizer::tokenize<int>(cfgc.options().get<std::string>("tof-sectors"));
-  // std::vector<int> laneConfiguration = tofSectors;
   auto nLanes = cfgc.options().get<int>("tof-lanes");
   auto inputType = cfgc.options().get<std::string>("input-type");
   auto outputType = cfgc.options().get<std::string>("output-type");
@@ -136,19 +131,6 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
     writeerr = cfgc.options().get<bool>("write-decoding-errors");
   }
 
-  if (rawinput) {
-  } else {
-    if (!cfgc.helpOnCommandLine()) {
-      std::string inputGRP = o2::base::NameConf::getGRPFileName();
-      o2::base::Propagator::initFieldFromGRP(inputGRP);
-      const auto grp = o2::parameters::GRPObject::loadFrom(inputGRP);
-      if (!grp) {
-        LOG(ERROR) << "This workflow needs a valid GRP file to start";
-        return specs;
-      }
-    }
-  }
-
   auto useMC = !cfgc.options().get<bool>("disable-mc");
   auto useCCDB = cfgc.options().get<bool>("use-ccdb");
   auto useFIT = cfgc.options().get<bool>("use-fit");
@@ -156,6 +138,7 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
   bool disableRootOutput = cfgc.options().get<bool>("disable-root-output");
   bool conetmode = cfgc.options().get<bool>("conet-mode");
   bool disableROWwriting = cfgc.options().get<bool>("disable-row-writing");
+  auto isCalibFromCluster = cfgc.options().get<bool>("calib-cluster");
 
   LOG(INFO) << "TOF RECO WORKFLOW configuration";
   LOG(INFO) << "TOF input = " << cfgc.options().get<std::string>("input-type");
@@ -199,14 +182,14 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 
   if (!clusterinput && writecluster) {
     LOG(INFO) << "Insert TOF Clusterizer";
-    specs.emplace_back(o2::tof::getTOFClusterizerSpec(useMC, useCCDB));
+    specs.emplace_back(o2::tof::getTOFClusterizerSpec(useMC, useCCDB, isCalibFromCluster));
     if (writecluster && !disableRootOutput) {
       LOG(INFO) << "Insert TOF Cluster Writer";
       specs.emplace_back(o2::tof::getTOFClusterWriterSpec(useMC));
     }
   }
 
-  if (useFIT) {
+  if (useFIT && !disableRootInput) {
     specs.emplace_back(o2::ft0::getRecPointReaderSpec(useMC));
   }
 

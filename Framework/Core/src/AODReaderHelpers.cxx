@@ -61,11 +61,20 @@ auto setEOSCallback(InitContext& ic)
                                            });
 }
 
+template <typename... Ts>
+static inline auto doExtractTypedOriginal(framework::pack<Ts...>, ProcessingContext& pc)
+{
+  if constexpr (sizeof...(Ts) == 1) {
+    return pc.inputs().get<TableConsumer>(aod::MetadataTrait<framework::pack_element_t<0, framework::pack<Ts...>>>::metadata::tableLabel())->asArrowTable();
+  } else {
+    return std::vector{pc.inputs().get<TableConsumer>(aod::MetadataTrait<Ts>::metadata::tableLabel())->asArrowTable()...};
+  }
+}
+
 template <typename O>
 static inline auto extractTypedOriginal(ProcessingContext& pc)
 {
-  ///FIXME: this should be done in invokeProcess() as some of the originals may be compound tables
-  return O{pc.inputs().get<TableConsumer>(aod::MetadataTrait<O>::metadata::tableLabel())->asArrowTable()};
+  return O{doExtractTypedOriginal(soa::make_originals_from_type<O>(), pc)};
 }
 
 template <typename... Os>
@@ -161,9 +170,9 @@ AlgorithmSpec AODReaderHelpers::aodSpawnerCallback(std::vector<InputSpec> reques
           return o2::framework::spawner(expressions{}, original_table.get());
         };
 
-        if (description == header::DataDescription{"TRACK:PAR"}) {
+        if (description == header::DataDescription{"TRACK"}) {
           outputs.adopt(Output{origin, description}, maker(o2::aod::TracksExtensionMetadata{}));
-        } else if (description == header::DataDescription{"TRACK:PARCOV"}) {
+        } else if (description == header::DataDescription{"TRACKCOV"}) {
           outputs.adopt(Output{origin, description}, maker(o2::aod::TracksCovExtensionMetadata{}));
         } else if (description == header::DataDescription{"MUON"}) {
           outputs.adopt(Output{origin, description}, maker(o2::aod::MuonsExtensionMetadata{}));

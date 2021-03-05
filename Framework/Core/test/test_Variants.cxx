@@ -13,6 +13,9 @@
 
 #include <boost/test/unit_test.hpp>
 #include "Framework/Variant.h"
+#include "Framework/VariantStringHelpers.h"
+#include "Framework/VariantPropertyTreeHelpers.h"
+#include "Framework/VariantJSONHelpers.h"
 #include <sstream>
 #include <cstring>
 
@@ -20,7 +23,7 @@ using namespace o2::framework;
 
 bool unknown_type(RuntimeErrorRef const& ref)
 {
-  auto& err = error_from_ref(ref);
+  auto const& err = error_from_ref(ref);
   return strcmp(err.what, "Mismatch between types") == 0;
 }
 
@@ -128,5 +131,150 @@ BOOST_AUTO_TEST_CASE(VariantTest)
   }
   for (auto i = 0u; i < vscc.size(); ++i) {
     BOOST_CHECK(strings[i] == (vscc.get<std::string*>())[i]);
+  }
+
+  float m[3][4] = {{0.1, 0.2, 0.3, 0.4}, {0.5, 0.6, 0.7, 0.8}, {0.9, 1.0, 1.1, 1.2}};
+  Array2D mm(&m[0][0], 3, 4);
+  Variant vmm(mm);
+  auto const& mmc = vmm.get<Array2D<float>>();
+  for (auto i = 0u; i < 3; ++i) {
+    for (auto j = 0u; j < 4; ++j) {
+      BOOST_CHECK(mmc(i, j) == mm(i, j));
+    }
+  }
+
+  Variant vmmc(vmm);            // Copy constructor
+  Variant vmmm(std::move(vmm)); // Move constructor
+  Variant vmma = vmmm;          // Copy assignment
+  auto const& mmc2 = vmmc.get<Array2D<float>>();
+  for (auto i = 0u; i < 3; ++i) {
+    for (auto j = 0u; j < 4; ++j) {
+      BOOST_CHECK(mmc2(i, j) == mm(i, j));
+    }
+  }
+  auto const& mmc3 = vmma.get<Array2D<float>>();
+  for (auto i = 0u; i < 3; ++i) {
+    for (auto j = 0u; j < 4; ++j) {
+      BOOST_CHECK(mmc3(i, j) == mm(i, j));
+    }
+  }
+  std::stringstream ssm;
+  ssm << vmma;
+  BOOST_CHECK(ssm.str() == "f[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8], [0.9, 1, 1.1, 1.2]]");
+
+  LabeledArray<float> laf{&m[0][0], 3, 4, {"r1", "r2", "r3"}, {"c1", "c2", "c3", "c4"}};
+  Variant vlaf(laf);
+  auto const& lafc = vlaf.get<LabeledArray<float>>();
+  for (auto i = 0u; i < 3; ++i) {
+    for (auto j = 0u; j < 4; ++j) {
+      BOOST_CHECK(laf.get(i, j) == lafc.get(i, j));
+    }
+  }
+
+  Variant vlafc(vlaf);            // Copy constructor
+  Variant vlafm(std::move(vlaf)); // Move constructor
+  Variant vlafa = vlafm;          // Copy assignment
+  auto const& lafc2 = vlafc.get<LabeledArray<float>>();
+  for (auto i = 0U; i < 3; ++i) {
+    for (auto j = 0U; j < 4; ++j) {
+      BOOST_CHECK(lafc2.get(i, j) == mm(i, j));
+    }
+  }
+  auto const& lafc3 = vlafa.get<LabeledArray<float>>();
+  for (auto i = 0U; i < 3; ++i) {
+    for (auto j = 0U; j < 4; ++j) {
+      BOOST_CHECK(lafc3.get(i, j) == mm(i, j));
+    }
+  }
+
+  std::vector<Variant> collection;
+  collection.push_back(vlafc);
+  collection.push_back(vlafm);
+  collection.push_back(vlafa);
+}
+
+BOOST_AUTO_TEST_CASE(Array2DTest)
+{
+  float m[3][4] = {{0.1, 0.2, 0.3, 0.4}, {0.5, 0.6, 0.7, 0.8}, {0.9, 1.0, 1.1, 1.2}};
+  Array2D mm(&m[0][0], 3, 4);
+  for (auto i = 0U; i < 3; ++i) {
+    for (auto j = 0U; j < 4; ++j) {
+      BOOST_CHECK(mm(i, j) == m[i][j]);
+    }
+  }
+  std::vector<float> v = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2};
+  Array2D mv(v, 3, 4);
+  for (auto i = 0U; i < 3; ++i) {
+    for (auto j = 0U; j < 4; ++j) {
+      BOOST_CHECK(mm(i, j) == v[i * 4 + j]);
+    }
+  }
+  for (auto i = 0U; i < 3; ++i) {
+    auto const& vv = mm[i];
+    for (auto j = 0u; j < 4; ++j) {
+      BOOST_CHECK(vv[j] == mm(i, j));
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(LabeledArrayTest)
+{
+  float m[3][4] = {{0.1, 0.2, 0.3, 0.4}, {0.5, 0.6, 0.7, 0.8}, {0.9, 1.0, 1.1, 1.2}};
+  std::string xl[] = {"c1", "c2", "c3", "c4"};
+  std::string yl[] = {"r1", "r2", "r3"};
+  LabeledArray<float> laf{&m[0][0], 3, 4, {"r1", "r2", "r3"}, {"c1", "c2", "c3", "c4"}};
+  for (auto i = 0u; i < 3; ++i) {
+    for (auto j = 0u; j < 4; ++j) {
+      BOOST_CHECK(laf.get(yl[i].c_str(), xl[j].c_str()) == laf.get(i, j));
+      BOOST_CHECK(laf.get(i, xl[j].c_str()) == laf.get(i, j));
+      BOOST_CHECK(laf.get(yl[i].c_str(), j) == laf.get(i, j));
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(VariantConversionsTest)
+{
+  int iarr[] = {1, 2, 3, 4, 5};
+  Variant viarr(iarr, 5);
+  std::stringstream os;
+  VariantJSONHelpers::write(os, viarr);
+
+  std::stringstream is;
+  is.str(os.str());
+  auto v = VariantJSONHelpers::read<VariantType::ArrayInt>(is);
+  for (auto i = 0u; i < viarr.size(); ++i) {
+    BOOST_CHECK_EQUAL(v.get<int*>()[i], viarr.get<int*>()[i]);
+  }
+  os.str("");
+
+  float m[3][4] = {{0.1, 0.2, 0.3, 0.4}, {0.5, 0.6, 0.7, 0.8}, {0.9, 1.0, 1.1, 1.2}};
+  Array2D mm(&m[0][0], 3, 4);
+  Variant vmm(mm);
+  std::stringstream osm;
+  VariantJSONHelpers::write(osm, vmm);
+
+  std::stringstream ism;
+  ism.str(osm.str());
+  auto vm = VariantJSONHelpers::read<VariantType::Array2DFloat>(ism);
+
+  for (auto i = 0u; i < mm.rows; ++i) {
+    for (auto j = 0u; j < mm.cols; ++j) {
+      BOOST_CHECK_EQUAL(vmm.get<Array2D<float>>()(i, j), vm.get<Array2D<float>>()(i, j));
+    }
+  }
+
+  LabeledArray<float> laf{&m[0][0], 3, 4, {"r1", "r2", "r3"}, {"c1", "c2", "c3", "c4"}};
+  Variant vlaf(laf);
+  std::stringstream osl;
+  VariantJSONHelpers::write(osl, vlaf);
+
+  std::stringstream isl;
+  isl.str(osl.str());
+  auto vlafc = VariantJSONHelpers::read<VariantType::LabeledArrayFloat>(isl);
+
+  for (auto i = 0u; i < vlafc.get<LabeledArray<float>>().rows(); ++i) {
+    for (auto j = 0u; j < vlafc.get<LabeledArray<float>>().cols(); ++j) {
+      BOOST_CHECK_EQUAL(vlaf.get<LabeledArray<float>>().get(i, j), vlafc.get<LabeledArray<float>>().get(i, j));
+    }
   }
 }

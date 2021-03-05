@@ -55,8 +55,8 @@ void Clusterer::process(gsl::span<const Digit> digits, gsl::span<const TriggerRe
 
     if (!mBadMap) {
       if (o2::phos::PHOSSimParams::Instance().mCCDBPath.compare("localtest") == 0) {
-        mBadMap = new BadChannelMap(1);    // test default map
-        mCalibParams = new CalibParams(1); //test calibration map
+        mBadMap.reset(new BadChannelMap(1));    // test default map
+        mCalibParams.reset(new CalibParams(1)); //test calibration map
         LOG(INFO) << "No reading BadMap/Calibration from ccdb requested, set default";
       } else {
         LOG(INFO) << "Getting BadMap object from ccdb";
@@ -64,14 +64,14 @@ void Clusterer::process(gsl::span<const Digit> digits, gsl::span<const TriggerRe
         std::map<std::string, std::string> metadata; // do we want to store any meta data?
         ccdb.init("http://ccdb-test.cern.ch:8080");  // or http://localhost:8080 for a local installation
         long bcTime = 1;                             //TODO!!! Convert BC time to time o2::InteractionRecord bcTime = digitsTR.front().getBCData() ;
-        mBadMap = ccdb.retrieveFromTFileAny<o2::phos::BadChannelMap>("PHOS/BadMap", metadata, bcTime);
-        mCalibParams = ccdb.retrieveFromTFileAny<o2::phos::CalibParams>("PHOS/Calib", metadata, bcTime);
-        if (!mBadMap) {
-          LOG(FATAL) << "[PHOSCellConverter - run] can not get Bad Map";
-        }
-        if (!mCalibParams) {
-          LOG(FATAL) << "[PHOSCellConverter - run] can not get CalibParams";
-        }
+        // mBadMap = ccdb.retrieveFromTFileAny<o2::phos::BadChannelMap>("PHOS/BadMap", metadata, bcTime);
+        // mCalibParams = ccdb.retrieveFromTFileAny<o2::phos::CalibParams>("PHOS/Calib", metadata, bcTime);
+        // if (!mBadMap) {
+        //   LOG(FATAL) << "[PHOSCellConverter - run] can not get Bad Map";
+        // }
+        // if (!mCalibParams) {
+        //   LOG(FATAL) << "[PHOSCellConverter - run] can not get CalibParams";
+        // }
       }
     }
 
@@ -89,12 +89,12 @@ void Clusterer::process(gsl::span<const Digit> digits, gsl::span<const TriggerRe
 
     LOG(DEBUG) << "Found clusters from " << indexStart << " to " << clusters->size();
 
-    trigRec->emplace_back(tr.getBCData(), indexStart, clusters->size());
+    trigRec->emplace_back(tr.getBCData(), indexStart, clusters->size() - indexStart);
   }
 }
 //____________________________________________________________________________
 void Clusterer::processCells(gsl::span<const Cell> cells, gsl::span<const TriggerRecord> ctr,
-                             const o2::dataformats::MCTruthContainer<MCLabel>* dmc, gsl::span<const unsigned int> mcmap,
+                             const o2::dataformats::MCTruthContainer<MCLabel>* dmc,
                              std::vector<Cluster>* clusters, std::vector<TriggerRecord>* trigRec,
                              o2::dataformats::MCTruthContainer<MCLabel>* cluMC)
 {
@@ -102,8 +102,11 @@ void Clusterer::processCells(gsl::span<const Cell> cells, gsl::span<const Trigge
   clusters->clear(); //final out list of clusters
   trigRec->clear();
   cluMC->clear();
-
+  mProcessMC = (dmc != nullptr);
+  miCellLabel = 0;
+  printf("start clustering \n");
   for (const auto& tr : ctr) {
+    printf(" tf=%d, %d \n", tr.getFirstEntry(), tr.getNumberOfObjects());
     int firstCellInEvent = tr.getFirstEntry();
     int lastCellInEvent = firstCellInEvent + tr.getNumberOfObjects();
     int indexStart = clusters->size();
@@ -111,75 +114,63 @@ void Clusterer::processCells(gsl::span<const Cell> cells, gsl::span<const Trigge
 
     LOG(DEBUG) << "Starting clusteriztion cells from " << mFirstDigitInEvent << " to " << mLastDigitInEvent;
 
-    if (!mBadMap) {
+    if (mBadMap.get() == nullptr) {
       if (o2::phos::PHOSSimParams::Instance().mCCDBPath.compare("localtest") == 0) {
-        mBadMap = new BadChannelMap(1);    // test default map
-        mCalibParams = new CalibParams(1); //test calibration map
+        mBadMap.reset(new BadChannelMap(1)); // test default map
+        printf("SetBadMap \n");
+        mCalibParams.reset(new CalibParams(1)); //test calibration map
+        printf("SetCalib \n");
         LOG(INFO) << "No reading BadMap/Calibration from ccdb requested, set default";
       } else {
-        LOG(INFO) << "Getting BadMap object from ccdb";
-        o2::ccdb::CcdbApi ccdb;
-        std::map<std::string, std::string> metadata; // do we want to store any meta data?
-        ccdb.init("http://ccdb-test.cern.ch:8080");  // or http://localhost:8080 for a local installation
-        long bcTime = 1;                             //TODO!!! Convert BC time to time o2::InteractionRecord bcTime = digitsTR.front().getBCData() ;
-        mBadMap = ccdb.retrieveFromTFileAny<o2::phos::BadChannelMap>("PHOS/BadMap", metadata, bcTime);
-        mCalibParams = ccdb.retrieveFromTFileAny<o2::phos::CalibParams>("PHOS/Calib", metadata, bcTime);
-        if (!mBadMap) {
-          LOG(FATAL) << "[PHOSCellConverter - run] can not get Bad Map";
-        }
-        if (!mCalibParams) {
-          LOG(FATAL) << "[PHOSCellConverter - run] can not get CalibParams";
-        }
+        //   LOG(INFO) << "Getting BadMap object from ccdb";
+        //   o2::ccdb::CcdbApi ccdb;
+        //   std::map<std::string, std::string> metadata; // do we want to store any meta data?
+        //   ccdb.init("http://ccdb-test.cern.ch:8080");  // or http://localhost:8080 for a local installation
+        //   // long bcTime = 1;                             //TODO!!! Convert BC time to time o2::InteractionRecord bcTime = digitsTR.front().getBCData() ;
+        //   // mBadMap = ccdb.retrieveFromTFileAny<o2::phos::BadChannelMap>("PHOS/BadMap", metadata, bcTime);
+        //   // mCalibParams = ccdb.retrieveFromTFileAny<o2::phos::CalibParams>("PHOS/Calib", metadata, bcTime);
+        //   // if (!mBadMap) {
+        //   //   LOG(FATAL) << "[PHOSCellConverter - run] can not get Bad Map";
+        //   // }
+        //   // if (!mCalibParams) {
+        //   //   LOG(FATAL) << "[PHOSCellConverter - run] can not get CalibParams";
+        //   // }
       }
     }
-
-    convertCellsToDigits(cells, firstCellInEvent, lastCellInEvent, mcmap);
-
+    printf("converteing: %d, %d \n", firstCellInEvent, lastCellInEvent);
+    LOG(INFO) << "Converting ";
+    convertCellsToDigits(cells, firstCellInEvent, lastCellInEvent);
     // Collect digits to clusters
+    printf("makeClu \n");
     makeClusters(mDigits);
-
     // Unfold overlapped clusters
     // Split clusters with several local maxima if necessary
     if (o2::phos::PHOSSimParams::Instance().mUnfoldClusters) {
       makeUnfoldings(mDigits);
     }
+    printf("cluprop \n");
 
     // Calculate properties of collected clusters (Local position, energy, disp etc.)
     evalCluProperties(mDigits, clusters, dmc, cluMC);
+    printf("cdone \n");
 
     LOG(DEBUG) << "Found clusters from " << indexStart << " to " << clusters->size();
 
-    trigRec->emplace_back(tr.getBCData(), indexStart, clusters->size());
+    trigRec->emplace_back(tr.getBCData(), indexStart, clusters->size() - indexStart);
   }
 }
 //____________________________________________________________________________
-void Clusterer::convertCellsToDigits(gsl::span<const Cell> cells, int firstCellInEvent, int lastCellInEvent, gsl::span<const unsigned int> mcmap)
+void Clusterer::convertCellsToDigits(gsl::span<const Cell> cells, int firstCellInEvent, int lastCellInEvent)
 {
 
   mDigits.clear();
   if (mDigits.capacity() < lastCellInEvent - firstCellInEvent) {
     mDigits.reserve(lastCellInEvent - firstCellInEvent);
   }
-  int iLab = 0, nLab = mcmap.size();
-  while (iLab < nLab) {
-    if (mcmap[iLab] >= firstCellInEvent) {
-      break;
-    }
-    ++iLab;
-  }
-
   for (int i = firstCellInEvent; i < lastCellInEvent; i++) {
     const Cell c = cells[i];
     //short cell, float amplitude, float time, int label
-    int label = -1;
-    if (mcmap[iLab] == i) {
-      label = iLab;
-      ++iLab;
-      if (iLab >= nLab) {
-        --iLab;
-      }
-    }
-    mDigits.emplace_back(c.getAbsId(), c.getEnergy(), c.getTime(), label);
+    mDigits.emplace_back(c.getAbsId(), c.getEnergy(), c.getTime(), i);
     mDigits.back().setHighGain(c.getHighGain());
   }
   mFirstDigitInEvent = 0;
@@ -443,7 +434,7 @@ void Clusterer::evalCluProperties(gsl::span<const Digit> digits, std::vector<Clu
   }
 
   int labelIndex = 0;
-  if (cluMC) {
+  if (mProcessMC) {
     labelIndex = cluMC->getIndexedSize();
   }
   auto clu = mClusters.begin();
@@ -464,7 +455,7 @@ void Clusterer::evalCluProperties(gsl::span<const Digit> digits, std::vector<Clu
     if (clu->getEnergy() > 1.e-4) { //Non-empty cluster
       clusters->emplace_back(*clu);
 
-      if (cluMC) { //Handle labels
+      if (mProcessMC) { //Handle labels
         //Calculate list of primaries
         //loop over entries in digit MCTruthContainer
         const std::vector<FullCluster::CluElement>* vl = clu->getElementList();
@@ -472,14 +463,18 @@ void Clusterer::evalCluProperties(gsl::span<const Digit> digits, std::vector<Clu
         while (ll != vl->end()) {
           int i = (*ll).label; //index
           float sc = (*ll).scale;
-          if (i < 0) {
+          gsl::span<const MCLabel> spDigList = dmc->getLabels(i);
+          if (spDigList.size() == 0 || spDigList.begin()->isFake()) {
             ++ll;
             continue;
           }
-          gsl::span<const MCLabel> spDigList = dmc->getLabels(i);
           gsl::span<MCLabel> spCluList = cluMC->getLabels(labelIndex); //get updated list
           auto digL = spDigList.begin();
           while (digL != spDigList.end()) {
+            if (digL->isFake()) {
+              digL++;
+              continue;
+            }
             bool merged = false;
             auto cluL = spCluList.begin();
             while (cluL != spCluList.end()) {

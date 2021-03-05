@@ -64,9 +64,11 @@ void RawToCellConverterSpec::init(framework::InitContext& ctx)
 void RawToCellConverterSpec::run(framework::ProcessingContext& ctx)
 {
   LOG(DEBUG) << "[EMCALRawToCellConverter - run] called";
+  const double CONVADCGEV = 0.016; // Conversion from ADC counts to energy: E = 16 MeV / ADC
 
   // Cache cells from for bunch crossings as the component reads timeframes from many links consecutively
   std::map<o2::InteractionRecord, std::shared_ptr<std::vector<o2::emcal::Cell>>> cellBuffer; // Internal cell buffer
+  std::map<o2::InteractionRecord, uint32_t> triggerBuffer;
 
   int firstEntry = 0;
   for (const auto& rawData : framework::InputRecordWalker(ctx.inputs())) {
@@ -83,6 +85,7 @@ void RawToCellConverterSpec::run(framework::ProcessingContext& ctx)
       auto triggerBC = o2::raw::RDHUtils::getTriggerBC(header);
       auto triggerOrbit = o2::raw::RDHUtils::getTriggerOrbit(header);
       auto feeID = o2::raw::RDHUtils::getFEEID(header);
+      auto triggerbits = o2::raw::RDHUtils::getTriggerType(header);
 
       o2::InteractionRecord currentIR(triggerBC, triggerOrbit);
       std::shared_ptr<std::vector<o2::emcal::Cell>> currentCellContainer;
@@ -90,6 +93,8 @@ void RawToCellConverterSpec::run(framework::ProcessingContext& ctx)
       if (found == cellBuffer.end()) {
         currentCellContainer = std::make_shared<std::vector<o2::emcal::Cell>>();
         cellBuffer[currentIR] = currentCellContainer;
+        // also add trigger bits
+        triggerBuffer[currentIR] = triggerbits;
       } else {
         currentCellContainer = found->second;
       }
@@ -126,15 +131,14 @@ void RawToCellConverterSpec::run(framework::ProcessingContext& ctx)
         int CellID = mGeometry->GetAbsCellIdFromCellIndexes(iSM, iRow, iCol);
 
         // define the conatiner for the fit results, and perform the raw fitting using the stadnard raw fitter
-        double amp = 0., time = 0.;
         o2::emcal::CaloFitResults fitResults = mRawFitter->evaluate(chan.getBunches(), 0, 0);
-        if (fitResults.getAmp() > 0) {
+        if (fitResults.getAmp() < 0) {
           fitResults.setAmp(0.);
         }
         if (fitResults.getTime() < 0) {
           fitResults.setTime(0.);
         }
-        currentCellContainer->emplace_back(CellID, amp, time, chantype);
+        currentCellContainer->emplace_back(CellID, fitResults.getAmp() * CONVADCGEV, fitResults.getTime(), chantype);
       }
     }
   }
@@ -143,7 +147,7 @@ void RawToCellConverterSpec::run(framework::ProcessingContext& ctx)
   mOutputCells.clear();
   mOutputTriggerRecords.clear();
   for (auto [bc, cells] : cellBuffer) {
-    mOutputTriggerRecords.emplace_back(bc, mOutputCells.size(), cells->size());
+    mOutputTriggerRecords.emplace_back(bc, triggerBuffer[bc], mOutputCells.size(), cells->size());
     if (cells->size()) {
       // Sort cells according to cell ID
       std::sort(cells->begin(), cells->end(), [](o2::emcal::Cell& lhs, o2::emcal::Cell& rhs) { return lhs.getTower() < rhs.getTower(); });

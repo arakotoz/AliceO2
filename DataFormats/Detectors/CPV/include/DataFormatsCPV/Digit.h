@@ -36,19 +36,9 @@ class Digit : public DigitBase
   /// \brief Main Digit constructor
   /// \param cell absId of a cell, amplitude energy deposited in a cell, time time measured in cell, label label of a
   /// particle in case of MC \return constructed Digit
-  Digit(short cell, float amplitude, int label);
-
-  /// \brief Digit constructor from Hit
-  /// \param CPV Hit
-  /// \return constructed Digit
-  Digit(const Hit& hit, int label);
+  Digit(unsigned short cell, float amplitude, int label);
 
   ~Digit() = default; // override
-
-  /// \brief Replace content of this digit with new one, from hit
-  /// \param CPV Hit
-  /// \return
-  void fillFromHit(const Hit& hit);
 
   /// \brief Comparison oparator, based on time and absId
   /// \param another CPV Digit
@@ -89,12 +79,12 @@ class Digit : public DigitBase
   bool canAdd(const Digit other) const;
   /// \brief if addable, adds energy and list of primaries.
   /// \param another CPV Digit
-  /// \return digit with sum of energies and longer list of primaries
+  /// \return digit with sum of energies
   Digit& operator+=(const Digit& other); //
 
   /// \brief Absolute sell id
-  short getAbsId() const { return mAbsId; }
-  void setAbsId(short cellId) { mAbsId = cellId; }
+  unsigned short getAbsId() const { return mAbsId; }
+  void setAbsId(unsigned short cellId) { mAbsId = cellId; }
 
   /// \brief Energy deposited in a cell
   float getAmplitude() const { return mAmplitude; }
@@ -103,15 +93,24 @@ class Digit : public DigitBase
   /// \brief index of entry in MCLabels array
   /// \return ndex of entry in MCLabels array
   int getLabel() const { return mLabel; }
+  void setLabel(int l) { mLabel = l; }
+
+  //put all parameters to default
+  void reset()
+  {
+    mAbsId = 0;
+    mLabel = -1;
+    mAmplitude = 0.;
+  }
 
   void PrintStream(std::ostream& stream) const;
 
  private:
   // friend class boost::serialization::access;
 
-  short mAbsId = 0;     ///< pad index (absolute pad ID)
-  int mLabel = -1;      ///< Index of the corresponding entry/entries in the MC label array
-  float mAmplitude = 0; ///< Amplitude
+  unsigned short mAbsId = 0; ///< pad index (absolute pad ID)
+  int mLabel = -1;           ///< Index of the corresponding entry/entries in the MC label array
+  float mAmplitude = 0;      ///< Amplitude
 
   ClassDefNV(Digit, 2);
 };

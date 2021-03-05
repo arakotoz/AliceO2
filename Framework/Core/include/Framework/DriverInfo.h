@@ -33,6 +33,8 @@ class ConfigContext;
 /// Possible states for the DPL Driver application
 ///
 /// INIT => Initial state where global initialization should happen
+/// MERGE_CONFIGS => Invoked to rework the configuration so that common
+///                  options are homogeneous between different invokations.
 /// SCHEDULE => Invoked whenever the topology or the resources associated
 ///             to it change.
 /// RUNNING => At least one device is running and processing data.
@@ -69,6 +71,7 @@ enum struct DriverState {
   MATERIALISE_WORKFLOW,
   IMPORT_CURRENT_WORKFLOW,
   DO_CHILD,
+  MERGE_CONFIGS,
   LAST
 };
 
@@ -134,12 +137,19 @@ struct DriverInfo {
   std::string uniqueWorkflowId = "";
   /// Metrics gathering interval
   unsigned short resourcesMonitoringInterval;
+  /// Port used by the websocket control. 0 means not initialised.
+  unsigned short port = 0;
   /// Last port used for tracy
   short tracyPort = 8086;
   /// Aggregate metrics calculated in the driver itself
   DeviceMetricsInfo metrics;
   /// Skip shared memory cleanup if set
   bool noSHMCleanup;
+  /// Default value for the --driver-client-backend. Notice that if we start from
+  /// the driver, the default backend will be the websocket one.  On the other hand,
+  /// if the device is started standalone, the default becomes the old stdout:// so
+  /// that it works as it used to in AliECS.
+  std::string defaultDriverClient = "invalid";
 };
 
 struct DriverInfoHelper {

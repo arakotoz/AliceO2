@@ -21,9 +21,9 @@
 #include "Framework/CustomWorkflowTerminationHook.h"
 #include "Framework/CommonServices.h"
 #include "Framework/WorkflowCustomizationHelpers.h"
+#include "Framework/RuntimeError.h"
 #include "Framework/Logger.h"
 
-#include <unistd.h>
 #include <vector>
 #include <cstring>
 #include <exception>
@@ -109,9 +109,6 @@ void overridePipeline(o2::framework::ConfigContext& ctx, std::vector<o2::framewo
 /// Helper used to customize a workflow via a template data processor
 void overrideCloning(o2::framework::ConfigContext& ctx, std::vector<o2::framework::DataProcessorSpec>& workflow);
 
-/// Helper used to customize the workflow via a global suffix.
-void overrideSuffix(o2::framework::ConfigContext& ctx, std::vector<o2::framework::DataProcessorSpec>& workflow);
-
 // This comes from the framework itself. This way we avoid code duplication.
 int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& specs,
            std::vector<o2::framework::ChannelConfigurationPolicy> const& channelPolicies,
@@ -121,6 +118,9 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& specs,
            o2::framework::ConfigContext& configContext);
 
 void doBoostException(boost::exception& e);
+void doDPLException(o2::framework::RuntimeErrorRef& ref);
+void doUnknownException(std::string const& s);
+void doDefaultWorkflowTerminationHook();
 
 int main(int argc, char** argv)
 {
@@ -158,7 +158,6 @@ int main(int argc, char** argv)
     ConfigContext configContext(workflowOptionsRegistry, argc, argv);
     o2::framework::WorkflowSpec specs = defineDataProcessing(configContext);
     overrideCloning(configContext, specs);
-    overrideSuffix(configContext, specs);
     overridePipeline(configContext, specs);
     for (auto& spec : specs) {
       UserCustomizationsHelper::userDefinedCustomization(spec.requiredServices, 0);
@@ -171,9 +170,11 @@ int main(int argc, char** argv)
   } catch (boost::exception& e) {
     doBoostException(e);
   } catch (std::exception const& error) {
-    LOG(ERROR) << "error while setting up workflow: " << error.what();
+    doUnknownException(error.what());
+  } catch (o2::framework::RuntimeErrorRef& ref) {
+    doDPLException(ref);
   } catch (...) {
-    LOG(ERROR) << "Unknown error while setting up workflow.";
+    doUnknownException("");
   }
 
   char* idstring = nullptr;
@@ -186,7 +187,7 @@ int main(int argc, char** argv)
   o2::framework::OnWorkflowTerminationHook onWorkflowTerminationHook;
   UserCustomizationsHelper::userDefinedCustomization(onWorkflowTerminationHook, 0);
   onWorkflowTerminationHook(idstring);
-  LOG(INFO) << "Process " << getpid() << " is exiting.";
+  doDefaultWorkflowTerminationHook();
   return result;
 }
 
