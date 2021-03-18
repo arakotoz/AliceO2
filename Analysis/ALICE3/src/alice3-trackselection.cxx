@@ -8,9 +8,10 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-//
-// Task performing basic track selection.
-//
+///
+/// \file   alice3-trackselection.cxx
+/// \brief  Track selection for the ALICE3 studies
+///
 
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/AnalysisTask.h"
@@ -51,6 +52,6 @@ struct TrackSelectionTask {
 //****************************************************************************************
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
-  WorkflowSpec workflow{adaptAnalysisTask<TrackSelectionTask>(cfgc, "track-selection")};
+  WorkflowSpec workflow{adaptAnalysisTask<TrackSelectionTask>(cfgc, TaskName{"track-selection"})};
   return workflow;
 }

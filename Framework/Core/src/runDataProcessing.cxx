@@ -109,7 +109,7 @@
 #include <sched.h>
 #elif __has_include(<linux/getcpu.h>)
 #include <linux/getcpu.h>
-#elif __has_include(<cpuid.h>)
+#elif __has_include(<cpuid.h>) && (__x86_64__ || __i386__)
 #include <cpuid.h>
 #define CPUID(INFO, LEAF, SUBLEAF) __cpuid_count(LEAF, SUBLEAF, INFO[0], INFO[1], INFO[2], INFO[3])
 #define GETCPU(CPU)                                 \
@@ -509,6 +509,14 @@ struct ControlWebSocketHandler : public WebSocketHandler {
     ParsedConfigMatch configMatch;
     ParsedMetricMatch metricMatch;
 
+    auto doParseConfig = [](std::string const& token, ParsedConfigMatch& configMatch, DeviceInfo& info) -> bool {
+      auto ts = "                 " + token;
+      if (DeviceConfigHelper::parseConfig(ts, configMatch)) {
+        DeviceConfigHelper::processConfig(configMatch, info);
+        return true;
+      }
+      return false;
+    };
     LOG(debug3) << "Data received: " << std::string_view(frame, s);
     if (DeviceMetricsHelper::parseMetric(token, metricMatch)) {
       // We use this callback to cache which metrics are needed to provide a
@@ -517,13 +525,10 @@ struct ControlWebSocketHandler : public WebSocketHandler {
       DeviceMetricsHelper::processMetric(metricMatch, (*mContext.metrics)[mIndex], newMetricCallback);
       didProcessMetric = true;
       didHaveNewMetric |= hasNewMetric;
-    } else if (ControlServiceHelpers::parseControl(token, match)) {
-      assert(mContext.infos);
+    } else if (ControlServiceHelpers::parseControl(token, match) && mContext.infos) {
       ControlServiceHelpers::processCommand(*mContext.infos, mPid, match[1].str(), match[2].str());
-    } else if (DeviceConfigHelper::parseConfig(std::string{"                 "} + token, configMatch)) {
+    } else if (doParseConfig(token, configMatch, (*mContext.infos)[mIndex]) && mContext.infos) {
       LOG(debug2) << "Found configuration information for pid " << mPid;
-      assert(mContext.infos);
-      DeviceConfigHelper::processConfig(configMatch, (*mContext.infos)[mIndex]);
     } else {
       LOG(error) << "Unexpected control data: " << std::string_view(frame, s);
     }
@@ -1462,7 +1467,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
         parentCPU = sched_getcpu();
 #elif __has_include(<linux/getcpu.h>)
         getcpu(&parentCPU, &parentNode, nullptr);
-#elif __has_include(<cpuid.h>)
+#elif __has_include(<cpuid.h>) && (__x86_64__ || __i386__)
         // FIXME: this is a last resort as it is apparently buggy
         //        on some Intel CPUs.
         GETCPU(parentCPU);

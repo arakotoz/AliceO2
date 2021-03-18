@@ -1,4 +1,4 @@
-/// \file CheckTopologies.C
+/// \file CreateDictionaries.C
 /// Macros to test the generation of a dictionary of topologies. Three dictionaries are generated: one with signal-cluster only, one with noise-clusters only and one with all the clusters.
 
 #if !defined(__CLING__) || defined(__ROOTCLING__)
@@ -32,12 +32,13 @@
 #include <unordered_map>
 #endif
 
-void CheckTopologies(std::string clusfile = "o2clus_its.root",
-                     std::string hitfile = "o2sim_HitsITS.root",
-                     std::string collContextfile = "collisioncontext.root",
-                     std::string inputGeom = "",
-                     float checkOutliers = 2., // reject outliers (MC dX or dZ exceeds row/col span by a factor above the threshold)
-                     float minPtMC = 0.01)     // account only MC hits with pT above threshold
+void CreateDictionaries(bool saveDeltas = false,
+                        std::string clusfile = "o2clus_its.root",
+                        std::string hitfile = "o2sim_HitsITS.root",
+                        std::string collContextfile = "collisioncontext.root",
+                        std::string inputGeom = "",
+                        float checkOutliers = 2., // reject outliers (MC dX or dZ exceeds row/col span by a factor above the threshold)
+                        float minPtMC = 0.01)     // account only MC hits with pT above threshold
 {
   const int QEDSourceID = 99; // Clusters from this MC source correspond to QED electrons
 
@@ -56,6 +57,14 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
   std::unordered_map<int, int> hadronicMCMap;            // mapping from MC event entry to hadronic event ID
   std::vector<HitVec*> hitVecPool;
   std::vector<MC2HITS_map> mc2hitVec;
+
+  TFile* fout = nullptr;
+  TNtuple* nt = nullptr;
+  if (saveDeltas) {
+    fout = TFile::Open("CreateDictionaries.root", "recreate");
+    nt = new TNtuple("nt", "hashes ntuple", "hash:dx:dz");
+  }
+
   const o2::steer::DigitizationContext* digContext = nullptr;
   TStopwatch sw;
   sw.Start();
@@ -214,6 +223,9 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
               const auto locC = o2::itsmft::TopologyDictionary::getClusterCoordinates(cluster, pattern, false);
               dX = locH.X() - locC.X();
               dZ = locH.Z() - locC.Z();
+              if (saveDeltas) {
+                nt->Fill(topology.getHash(), dX, dZ);
+              }
               if (checkOutliers > 0.) {
                 if (std::abs(dX) > topology.getRowSpan() * o2::itsmft::SegmentationAlpide::PitchRow * checkOutliers ||
                     std::abs(dZ) > topology.getColumnSpan() * o2::itsmft::SegmentationAlpide::PitchCol * checkOutliers) { // ignore outlier
@@ -298,5 +310,9 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
     cSignal->Write();
     sw.Stop();
     sw.Print();
+  }
+  if (saveDeltas) {
+    fout->cd();
+    nt->Write();
   }
 }

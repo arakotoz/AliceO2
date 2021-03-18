@@ -262,6 +262,21 @@ void DataProcessingDevice::Init()
       mState.inputChannelInfos[ci].state = InputChannelState::Pull;
     }
   }
+  /// This should post a message on the queue...
+  SubscribeToNewTransition("dpl", [loop = mState.loop](fair::mq::Transition t) {
+    if (loop) {
+      uv_async_t handle;
+      int res = uv_async_init(loop, &handle, nullptr);
+      if (res < 0) {
+        LOG(ERROR) << "Unable to initialise subscription";
+      }
+      res = uv_async_send(&handle);
+      if (res < 0) {
+        LOG(ERROR) << "Unable to notify subscription";
+      }
+      LOG(debug) << "State transition requested";
+    }
+  });
 }
 
 void on_signal_callback(uv_signal_t* handle, int signum)
@@ -409,6 +424,7 @@ void DataProcessingDevice::fillContext(DataProcessorContext& context)
 
 void DataProcessingDevice::PreRun()
 {
+  mServiceRegistry.preStartCallbacks();
   mServiceRegistry.get<CallbackService>()(CallbackService::Id::Start);
 }
 
@@ -433,7 +449,15 @@ bool DataProcessingDevice::ConditionalRun()
     auto shouldNotWait = (mWasActive &&
                           (mDataProcessorContexes.at(0).state->streaming != StreamingState::Idle) && (mState.activeSignals.empty())) ||
                          (mDataProcessorContexes.at(0).state->streaming == StreamingState::EndOfStreaming);
+    if (NewStatePending()) {
+      shouldNotWait = true;
+    }
     uv_run(mState.loop, shouldNotWait ? UV_RUN_NOWAIT : UV_RUN_ONCE);
+
+    // A new state was requested, we exit.
+    if (NewStatePending()) {
+      return false;
+    }
   }
 
   // Notify on the main thread the new region callbacks, making sure

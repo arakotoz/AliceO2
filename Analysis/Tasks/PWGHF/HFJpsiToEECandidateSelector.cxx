@@ -76,7 +76,7 @@ struct HFJpsiToEECandidateSelector {
   template <typename T>
   bool daughterSelection(const T& track)
   {
-    if (track.charge() == 0) {
+    if (track.sign() == 0) {
       return false;
     }
     /*if (track.tpcNClsFound() == 0) {
@@ -202,5 +202,5 @@ struct HFJpsiToEECandidateSelector {
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<HFJpsiToEECandidateSelector>(cfgc, "hf-jpsi-toee-candidate-selector")};
+    adaptAnalysisTask<HFJpsiToEECandidateSelector>(cfgc, TaskName{"hf-jpsi-toee-candidate-selector"})};
 }

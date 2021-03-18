@@ -50,7 +50,7 @@ struct UPCSpectraProviderTask {
     }
     auto track1 = tracks.begin();
     auto track2 = track1 + 1;
-    if (track1.charge() * track2.charge() >= 0) {
+    if (track1.sign() * track2.sign() >= 0) {
       return;
     }
     UChar_t clustermap1 = track1.itsClusterMap();
@@ -72,5 +72,5 @@ struct UPCSpectraProviderTask {
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<UPCSpectraProviderTask>(cfgc, "upcspectra-task-skim-provider")};
+    adaptAnalysisTask<UPCSpectraProviderTask>(cfgc, TaskName{"upcspectra-task-skim-provider"})};
 }

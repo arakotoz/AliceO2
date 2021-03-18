@@ -8,14 +8,11 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#include "DataFormatsZDC/PedestalData.h"
+// This file provides information about how O2 was built
+// and potentially other version information.
 
-using namespace o2::zdc;
+#pragma once
 
-void PedestalData::print() const
-{
-  printf("Orbit %9u bc %4u\n", ir.orbit, ir.bc);
-  for (int i = 0; i < NChannels; i++) {
-    printf("channel %2d : %9.3f\n", i, asFloat(i));
-  }
-}
+#define O2_GIT_REVISION "@O2_GIT_REVISION@"
+#define ALIDIST_GIT_REVISION "@ALIDIST_GIT_REVISION@"
+

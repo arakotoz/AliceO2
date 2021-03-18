@@ -213,8 +213,8 @@ struct DileptonEE {
 
   float* fValues;
 
-  Partition<MyBarrelTracksSelected> posTracks = aod::reducedtrack::charge > 0 && aod::reducedtrack::isBarrelSelected > uint8_t(0);
-  Partition<MyBarrelTracksSelected> negTracks = aod::reducedtrack::charge < 0 && aod::reducedtrack::isBarrelSelected > uint8_t(0);
+  Partition<MyBarrelTracksSelected> posTracks = aod::reducedtrack::sign > 0 && aod::reducedtrack::isBarrelSelected > uint8_t(0);
+  Partition<MyBarrelTracksSelected> negTracks = aod::reducedtrack::sign < 0 && aod::reducedtrack::isBarrelSelected > uint8_t(0);
 
   Configurable<std::string> fConfigTrackCuts{"cfgBarrelTrackCuts", "lmeePID_TPChadrej,lmeePID_TOFrec,lmeePID_TPChadrejTOFrec", "Comma separated list of barrel track cuts"};
   Configurable<std::string> fConfigPairCuts{"cfgPairCuts", "pairMassLow", "Comma separated list of pair cuts"};
@@ -331,9 +331,9 @@ struct DileptonEE {
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<EventSelection>(cfgc, "my-event-selection"),
-    adaptAnalysisTask<BarrelTrackSelection>(cfgc, "barrel-track-selection"),
-    adaptAnalysisTask<DileptonEE>(cfgc, "dilepton-ee"),
+    adaptAnalysisTask<EventSelection>(cfgc, TaskName{"my-event-selection"}),
+    adaptAnalysisTask<BarrelTrackSelection>(cfgc, TaskName{"barrel-track-selection"}),
+    adaptAnalysisTask<DileptonEE>(cfgc, TaskName{"dilepton-ee"}),
 
   };
 }

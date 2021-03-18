@@ -83,7 +83,7 @@ struct HFLcCandidateSelector {
   template <typename T>
   bool daughterSelection(const T& track)
   {
-    if (track.charge() == 0) {
+    if (track.sign() == 0) {
       return false;
     }
     /*if (track.tpcNClsFound() == 0) {
@@ -369,5 +369,5 @@ struct HFLcCandidateSelector {
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<HFLcCandidateSelector>(cfgc, "hf-lc-candidate-selector")};
+    adaptAnalysisTask<HFLcCandidateSelector>(cfgc, TaskName{"hf-lc-candidate-selector"})};
 }
