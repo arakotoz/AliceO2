@@ -117,23 +117,23 @@ void STFDecoder<Mapping>::run(ProcessingContext& pc)
   std::vector<GBTCalibData> calibVec;
   std::vector<ROFRecord> digROFVec;
 */
-  std::decay_t<decltype(pc.outputs().make<std::vector<Digit>>(Output{"xxx", "xxx"}))>* digVec{nullptr};
-  std::decay_t<decltype(pc.outputs().make<std::vector<ROFRecord>>(Output{"xxx", "xxx"}))>* digROFVec{nullptr};
-  std::decay_t<decltype(pc.outputs().make<std::vector<GBTCalibData>>(Output{"xxx", "xxx"}))>* calVec{nullptr};
+  std::optional<std::reference_wrapper<std::decay_t<decltype(pc.outputs().make<std::vector<Digit>>(Output{"xxx", "xxx"}))>>> digVec;
+  std::optional<std::reference_wrapper<std::decay_t<decltype(pc.outputs().make<std::vector<ROFRecord>>(Output{"xxx", "xxx"}))>>> digROFVec;
+  std::optional<std::reference_wrapper<std::decay_t<decltype(pc.outputs().make<std::vector<GBTCalibData>>(Output{"xxx", "xxx"}))>>> calVec;
   if (mDoDigits) {
-    digVec = &pc.outputs().make<std::vector<Digit>>(Output{orig, "DIGITS", 0, Lifetime::Timeframe});
-    digROFVec = &pc.outputs().make<std::vector<ROFRecord>>(Output{orig, "DIGITSROF", 0, Lifetime::Timeframe});
+    digVec.emplace( pc.outputs().make<std::vector<Digit>>(Output{orig, "DIGITS", 0, Lifetime::Timeframe}) );
+    digROFVec.emplace( pc.outputs().make<std::vector<ROFRecord>>(Output{orig, "DIGITSROF", 0, Lifetime::Timeframe}) );
     if (mDoCalibData) {
-      calVec = &pc.outputs().make<std::vector<GBTCalibData>>(Output{orig, "GBTCALIB", 0, Lifetime::Timeframe});
+      calVec.emplace( pc.outputs().make<std::vector<GBTCalibData>>(Output{orig, "GBTCALIB", 0, Lifetime::Timeframe}) );
     }
   }
 
   mDecoder->setDecodeNextAuto(false);
   while (mDecoder->decodeNextTrigger()) {
     if (mDoDigits) {                                    // call before clusterization, since the latter will hide the digits
-      mDecoder->fillDecodedDigits(*digVec, *digROFVec); // lot of copying involved
+      mDecoder->fillDecodedDigits(digVec->get(), digROFVec->get()); // lot of copying involved
       if (mDoCalibData) {
-        mDecoder->fillCalibData(*calVec);
+        mDecoder->fillCalibData(calVec->get());
       }
     }
 
@@ -157,7 +157,7 @@ void STFDecoder<Mapping>::run(ProcessingContext& pc)
     LOG(INFO) << mSelfName << " Built " << clusCompVec.size() << " clusters in " << clusROFVec.size() << " ROFs";
   }
   if (mDoDigits) {
-    LOG(INFO) << mSelfName << " Decoded " << digVec->size() << " Digits in " << digROFVec->size() << " ROFs";
+    LOG(INFO) << mSelfName << " Decoded " << digVec->get().size() << " Digits in " << digROFVec->get().size() << " ROFs";
   }
   mTimer.Stop();
   LOG(INFO) << mSelfName << " Total time for TF " << mTFCounter << " : CPU: " << mTimer.CpuTime() - timeCPU0 << " Real: " << mTimer.RealTime() - timeReal0;
