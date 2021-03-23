@@ -8,24 +8,8 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file   FT0DigitWriterSpec.h
+/// \file   CTFHelper.cxx
+/// \author ruben.shahoyan@cern.ch
+/// \brief  Helper for TRD CTF creation
 
-#ifndef O2_FT0DIGITWRITERDPL_H
-#define O2_FT0DIGITWRITERDPL_H
-
-#include "Framework/DataProcessorSpec.h"
-
-using namespace o2::framework;
-
-namespace o2
-{
-namespace ft0
-{
-
-/// create a processor spec
-framework::DataProcessorSpec getFT0DigitWriterDPLSpec();
-
-} // namespace ft0
-} // namespace o2
-
-#endif /* O2_FT0DIGITWRITER_H */
+#include "TRDReconstruction/CTFHelper.h"

@@ -1876,26 +1876,26 @@ void initialiseDriverControl(bpo::variables_map const& varmap,
     control.forcedTransitions = {
       DriverState::EXIT,                    //
       DriverState::PERFORM_CALLBACKS,       //
-      DriverState::SCHEDULE,                //
       DriverState::MERGE_CONFIGS,           //
       DriverState::IMPORT_CURRENT_WORKFLOW, //
       DriverState::MATERIALISE_WORKFLOW     //
     };
-  } else if (varmap["o2-control"].as<bool>()) {
-    control.callbacks = {[](WorkflowSpec const& workflow,
-                            DeviceSpecs const& specs,
-                            DeviceExecutions const& executions,
-                            DataProcessorInfos&) {
-      dumpDeviceSpec2O2Control(std::cout, specs, executions);
-    }};
+  } else if (!varmap["o2-control"].as<std::string>().empty()) {
+    control.callbacks = {[workflowName = varmap["o2-control"].as<std::string>()] //
+                         (WorkflowSpec const& workflow,
+                          DeviceSpecs const& specs,
+                          DeviceExecutions const& executions,
+                          DataProcessorInfos&) {
+                           dumpDeviceSpec2O2Control(workflowName, specs, executions);
+                         }};
     control.forcedTransitions = {
       DriverState::EXIT,                    //
       DriverState::PERFORM_CALLBACKS,       //
-      DriverState::SCHEDULE,                //
       DriverState::MERGE_CONFIGS,           //
       DriverState::IMPORT_CURRENT_WORKFLOW, //
       DriverState::MATERIALISE_WORKFLOW     //
     };
+
   } else if (varmap.count("id")) {
     // FIXME: for the time being each child needs to recalculate the workflow,
     //        so that it can understand what it needs to do. This is obviously
@@ -2033,6 +2033,7 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
     ("stop,s", bpo::value<bool>()->zero_tokens()->default_value(false), "stop before device start")                                            //                                                                                                           //
     ("single-step", bpo::value<bool>()->zero_tokens()->default_value(false), "start in single step mode")                                      //                                                                                                             //
     ("batch,b", bpo::value<bool>()->zero_tokens()->default_value(isatty(fileno(stdout)) == 0), "batch processing mode")                        //                                                                                                               //
+    ("no-batch", bpo::value<bool>()->zero_tokens()->default_value(false), "force gui processing mode")                                         //                                                                                                            //
     ("no-cleanup", bpo::value<bool>()->zero_tokens()->default_value(false), "do not cleanup the shm segment")                                  //                                                                                                               //
     ("hostname", bpo::value<std::string>()->default_value("localhost"), "hostname to deploy")                                                  //                                                                                                                 //
     ("resources", bpo::value<std::string>()->default_value(""), "resources allocated for the workflow")                                        //                                                                                                                   //
@@ -2051,7 +2052,7 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
     ("dump-workflow-file", bpo::value<std::string>()->default_value("-"), "file to which do the dump")                                         //                                                                                                                                      //
     ("run", bpo::value<bool>()->zero_tokens()->default_value(false), "run workflow merged so far")                                             //                                                                                                                                        //
     ("no-IPC", bpo::value<bool>()->zero_tokens()->default_value(false), "disable IPC topology optimization")                                   //                                                                                                                                        //
-    ("o2-control,o2", bpo::value<bool>()->zero_tokens()->default_value(false), "create O2 Control configuration")                              //
+    ("o2-control,o2", bpo::value<std::string>()->default_value(""), "dump O2 Control workflow configuration under the specified name")         //
     ("resources-monitoring", bpo::value<unsigned short>()->default_value(0), "enable cpu/memory monitoring for provided interval in seconds"); //
   // some of the options must be forwarded by default to the device
   executorOptions.add(DeviceSpecHelpers::getForwardedDeviceOptions());
@@ -2230,6 +2231,7 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
   conflicting_options(varmap, "run", "dump-workflow");
   conflicting_options(varmap, "run", "graphviz");
   conflicting_options(varmap, "dump-workflow", "graphviz");
+  conflicting_options(varmap, "no-batch", "batch");
 
   if (varmap.count("help")) {
     printHelp(varmap, executorOptions, physicalWorkflow, currentWorkflowOptions);
@@ -2247,7 +2249,7 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
   driverInfo.dispatchPolicies = dispatchPolicies;
   driverInfo.argc = argc;
   driverInfo.argv = argv;
-  driverInfo.batch = varmap["batch"].as<bool>();
+  driverInfo.batch = varmap["no-batch"].defaulted() ? varmap["batch"].as<bool>() : false;
   driverInfo.noSHMCleanup = varmap["no-cleanup"].as<bool>();
   driverInfo.terminationPolicy = varmap["completion-policy"].as<TerminationPolicy>();
   if (varmap["error-policy"].defaulted() && driverInfo.batch == false) {
