@@ -8,13 +8,24 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifdef __CLING__
+#ifndef O2_FRAMEWORK_COMMANDINFO_H_
+#define O2_FRAMEWORK_COMMANDINFO_H_
 
-#pragma link off all globals;
-#pragma link off all classes;
-#pragma link off all functions;
+#include <string>
 
-#pragma link C++ namespace o2;
-#pragma link C++ namespace o2::mch;
+namespace o2::framework
+{
 
-#endif
+struct CommandInfo {
+  CommandInfo() = default;
+  CommandInfo(std::string command) : command(std::move(command)) {}
+  CommandInfo(int argc, char* const* argv);
+
+  void merge(CommandInfo const& other);
+
+  std::string command;
+};
+
+} // namespace o2::framework
+
+#endif //O2_FRAMEWORK_COMMANDINFO_H_

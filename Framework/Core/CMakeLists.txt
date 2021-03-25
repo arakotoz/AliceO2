@@ -16,6 +16,7 @@
 
 o2_add_library(Framework
                SOURCES src/AODReaderHelpers.cxx
+                       src/ArrowSupport.cxx
                        src/ASoA.cxx
                        src/AnalysisHelpers.cxx
                        src/AnalysisDataModelHelpers.cxx
@@ -24,6 +25,7 @@ o2_add_library(Framework
                        src/ChannelMatching.cxx
                        src/ChannelConfigurationPolicyHelpers.cxx
                        src/ChannelSpecHelpers.cxx
+                       src/CommandInfo.cxx
                        src/CommonDataProcessors.cxx
                        src/CommonServices.cxx
                        src/CommonMessageBackends.cxx
@@ -51,6 +53,7 @@ o2_add_library(Framework
                        src/DeviceConfigInfo.cxx
                        src/DeviceMetricsInfo.cxx
                        src/DeviceSpec.cxx
+                       src/DeviceController.cxx
                        src/DeviceSpecHelpers.cxx
                        src/DPLMonitoringBackend.cxx
                        src/DriverControl.cxx

@@ -8,13 +8,21 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifdef __CLING__
+#ifndef O2_FRAMEWORK_DEVICECONTROLLER_H_
+#define O2_FRAMEWORK_DEVICECONTROLLER_H_
 
-#pragma link off all globals;
-#pragma link off all classes;
-#pragma link off all functions;
+namespace o2::framework
+{
 
-#pragma link C++ namespace o2;
-#pragma link C++ namespace o2::mch;
+struct WSDPLHandler;
 
-#endif
+struct DeviceController {
+  DeviceController(WSDPLHandler* handler);
+  void hello();
+
+  WSDPLHandler* mHandler;
+};
+
+} // namespace o2::framework
+
+#endif // O2_FRAMEWORK_DEVICECONTROLLER_H_

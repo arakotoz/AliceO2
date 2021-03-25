@@ -8,16 +8,27 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#include "AnalysisCore/TriggerAliases.h"
+#include "Framework/DeviceController.h"
+#include "DPLWebSocket.h"
+#include "HTTPParser.h"
 #include "Framework/Logger.h"
+#include <uv.h>
+#include <vector>
 
-void TriggerAliases::AddClassIdToAlias(uint32_t aliasId, int classId)
+namespace o2::framework
 {
-  if (classId < 0 || classId > 99) {
-    LOGF(fatal, "Invalid classId = %d for aliasId = %d\n", classId, aliasId);
-  } else if (classId < 50) {
-    mAliasToTriggerMask[aliasId] |= 1ull << classId;
-  } else {
-    mAliasToTriggerMaskNext50[aliasId] |= 1ull << (classId - 50);
-  }
+
+DeviceController::DeviceController(WSDPLHandler* handler)
+  : mHandler{handler}
+{
 }
+
+void DeviceController::hello()
+{
+  LOG(INFO) << "Saying hello";
+  std::vector<uv_buf_t> outputs;
+  encode_websocket_frames(outputs, "hello", strlen("hello"), WebSocketOpCode::Binary, 0);
+  mHandler->write(outputs);
+}
+
+} // namespace o2::framework
