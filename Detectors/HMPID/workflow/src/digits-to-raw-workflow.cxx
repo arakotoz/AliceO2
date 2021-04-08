@@ -22,7 +22,10 @@
 #include "Framework/CompletionPolicy.h"
 #include "Framework/CompletionPolicyHelpers.h"
 #include "Framework/DispatchPolicy.h"
+#include "Framework/ConfigParamSpec.h"
+#include "Framework/Variant.h"
 #include "CommonUtils/ConfigurableParam.h"
+#include "DetectorsCommonDataFormats/NameConf.h"
 
 // customize the completion policy
 void customize(std::vector<o2::framework::CompletionPolicy>& policies)
@@ -36,6 +39,8 @@ void customize(std::vector<o2::framework::CompletionPolicy>& policies)
 void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
 {
   std::string keyvaluehelp("Semicolon separated key=value strings ...");
+  //workflowOptions.push_back(ConfigParamSpec{"digitization-config", o2::framework::VariantType::String, std::string(o2::base::NameConf::DIGITIZATIONCONFIGFILE), "configKeyValues file from digitization, used for raw output only!!!");
+  workflowOptions.push_back(o2::framework::ConfigParamSpec{"digitization-config", o2::framework::VariantType::String, "none", {"configKeyValues file from digitization, used for raw output only!!!"}});
   workflowOptions.push_back(o2::framework::ConfigParamSpec{"configKeyValues", o2::framework::VariantType::String, "", {keyvaluehelp}});
 }
 
@@ -48,9 +53,12 @@ using namespace o2::framework;
 WorkflowSpec defineDataProcessing(const ConfigContext& configcontext)
 {
   WorkflowSpec specs;
+  std::string confDig = configcontext.options().get<std::string>("digitization-config");
+  if (!confDig.empty() && confDig != "none") {
+    o2::conf::ConfigurableParam::updateFromFile(confDig);
+  }
   o2::conf::ConfigurableParam::updateFromString(configcontext.options().get<std::string>("configKeyValues"));
   DataProcessorSpec consumer = o2::hmpid::getDigitsToRawSpec();
   specs.push_back(consumer);
-
   return specs;
 }

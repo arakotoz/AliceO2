@@ -316,7 +316,7 @@ void WorkflowHelpers::injectServiceDevices(WorkflowSpec& workflow, ConfigContext
         case Lifetime::Condition: {
           if (hasConditionOption == false) {
             processor.options.emplace_back(ConfigParamSpec{"condition-backend", VariantType::String, "http://localhost:8080", {"URL for CCDB"}});
-            processor.options.emplace_back(ConfigParamSpec{"condition-timestamp", VariantType::String, "", {"Force timestamp for CCDB lookup"}});
+            processor.options.emplace_back(ConfigParamSpec{"condition-timestamp", VariantType::Int64, 0ll, {"Force timestamp for CCDB lookup"}});
             hasConditionOption = true;
           }
           requestedCCDBs.emplace_back(input);
@@ -409,7 +409,7 @@ void WorkflowHelpers::injectServiceDevices(WorkflowSpec& workflow, ConfigContext
   }
 
   if (aodSpawner.outputs.empty() == false) {
-    extraSpecs.push_back(aodSpawner);
+    extraSpecs.push_back(timePipeline(aodSpawner, ctx.options().get<int64_t>("spawners")));
   }
 
   if (indexBuilder.outputs.empty() == false) {
