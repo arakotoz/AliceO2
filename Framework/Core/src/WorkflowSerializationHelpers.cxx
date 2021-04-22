@@ -500,13 +500,13 @@ struct WorkflowImporter : public rapidjson::BaseReaderHandler<rapidjson::UTF8<>,
     } else if (in(State::IN_INPUT_BINDING)) {
       binding = s;
     } else if (in(State::IN_INPUT_ORIGIN)) {
-      origin.runtimeInit(s.c_str(), std::min(s.size(), 16UL));
+      origin.runtimeInit(s.c_str(), std::min(s.size(), 4UL));
     } else if (in(State::IN_INPUT_DESCRIPTION)) {
       description.runtimeInit(s.c_str(), std::min(s.size(), 16UL));
     } else if (in(State::IN_OUTPUT_BINDING)) {
       binding = s;
     } else if (in(State::IN_OUTPUT_ORIGIN)) {
-      origin.runtimeInit(s.c_str(), std::min(s.size(), 16UL));
+      origin.runtimeInit(s.c_str(), std::min(s.size(), 4UL));
     } else if (in(State::IN_OUTPUT_DESCRIPTION)) {
       description.runtimeInit(s.c_str(), std::min(s.size(), 16UL));
     } else if (in(State::IN_OPTION_NAME)) {
@@ -695,7 +695,7 @@ void WorkflowSerializationHelpers::dump(std::ostream& out,
       auto origin = DataSpecUtils::getOptionalOrigin(input);
       if (origin.has_value()) {
         w.Key("origin");
-        w.String(origin->str, strnlen(origin->str, 16));
+        w.String(origin->str, strnlen(origin->str, 4));
       }
       auto description = DataSpecUtils::getOptionalDescription(input);
       if (description.has_value()) {
@@ -765,7 +765,7 @@ void WorkflowSerializationHelpers::dump(std::ostream& out,
     w.Key("options");
     w.StartArray();
     for (auto& option : processor.options) {
-      if (option.name == "start-value-enumeration" || option.name == "end-value-enumeration" || option.name == "step-value-enumeration") {
+      if (option.name == "start-value-enumeration" || option.name == "end-value-enumeration" || option.name == "step-value-enumeration" || option.name == "orbit-offset-enumeration" || option.name == "orbit-multiplier-enumeration") {
         continue;
       }
       w.StartObject();
