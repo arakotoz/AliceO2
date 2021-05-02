@@ -154,6 +154,7 @@ EndConfig()
 BeginSubConfig(GPUSettingsDisplay, GL, configStandalone, "GL", 'g', "OpenGL display settings")
 AddOption(clustersOnly, bool, false, "", 0, "Visualize clusters only")
 AddOption(clustersOnNominalRow, bool, false, "", 0, "Show clusters at nominal x of pad row for early-transformed data")
+AddOption(showTPCTracksFromO2Format, bool, false, "", 0, "Use TPC tracks in O2 output format instead of GPU format")
 AddHelp("help", 'h')
 EndConfig()
 
@@ -316,7 +317,7 @@ AddSubConfig(GPUSettingsDisplay, GL)
 AddSubConfig(GPUSettingsDisplayLight, GLlight)
 AddSubConfig(GPUSettingsEG, EG)
 EndConfig()
-#endif
+#endif // BeginConfig
 
 //Settings for the O2 workfllow
 #if !defined(QCONFIG_PARSER_CXX) && (defined(GPUCA_O2_LIB) || defined(GPUCA_O2_INTERFACE))

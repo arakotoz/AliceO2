@@ -77,8 +77,8 @@ void CosmicsMatchingSpec::init(InitContext& ic)
   mTimer.Reset();
   //-------- init geometry and field --------//
   o2::base::GeometryManager::loadGeometry();
-  o2::base::Propagator::initFieldFromGRP(o2::base::NameConf::getGRPFileName());
-  std::unique_ptr<o2::parameters::GRPObject> grp{o2::parameters::GRPObject::loadFrom(o2::base::NameConf::getGRPFileName())};
+  o2::base::Propagator::initFieldFromGRP();
+  std::unique_ptr<o2::parameters::GRPObject> grp{o2::parameters::GRPObject::loadFrom()};
   const auto& alpParams = o2::itsmft::DPLAlpideParam<DetID::ITS>::Instance();
   if (!grp->isDetContinuousReadOut(DetID::ITS)) {
     mMatching.setITSROFrameLengthMUS(alpParams.roFrameLengthTrig / 1.e3); // ITS ROFrame duration in \mus
@@ -87,9 +87,9 @@ void CosmicsMatchingSpec::init(InitContext& ic)
   }
   //
   std::string dictPath = ic.options().get<std::string>("its-dictionary-path");
-  std::string dictFile = o2::base::NameConf::getDictionaryFileName(DetID::ITS, dictPath, ".bin");
+  std::string dictFile = o2::base::NameConf::getAlpideClusterDictionaryFileName(DetID::ITS, dictPath, ".bin");
   auto itsDict = std::make_unique<o2::itsmft::TopologyDictionary>();
-  if (o2::base::NameConf::pathExists(dictFile)) {
+  if (o2::utils::Str::pathExists(dictFile)) {
     itsDict->readBinaryFile(dictFile);
     LOG(INFO) << "Matching is running with a provided ITS dictionary: " << dictFile;
   } else {
@@ -101,7 +101,7 @@ void CosmicsMatchingSpec::init(InitContext& ic)
   // this is a hack to provide Mat.LUT from the local file, in general will be provided by the framework from CCDB
   std::string matLUTPath = ic.options().get<std::string>("material-lut-path");
   std::string matLUTFile = o2::base::NameConf::getMatLUTFileName(matLUTPath);
-  if (o2::base::NameConf::pathExists(matLUTFile)) {
+  if (o2::utils::Str::pathExists(matLUTFile)) {
     auto* lut = o2::base::MatLayerCylSet::loadFromFile(matLUTFile);
     o2::base::Propagator::Instance()->setMatLUT(lut);
     LOG(INFO) << "Loaded material LUT from " << matLUTFile;

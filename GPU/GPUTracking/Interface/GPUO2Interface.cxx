@@ -20,6 +20,8 @@
 #include "GPUParam.inc"
 #include "GPUQA.h"
 #include "GPUOutputControl.h"
+#include "TPCPadGainCalib.h"
+#include "TPCdEdxCalibrationSplines.h"
 #include <iostream>
 #include <fstream>
 
@@ -159,4 +161,19 @@ int GPUO2Interface::registerMemoryForGPU(const void* ptr, size_t size)
 int GPUO2Interface::unregisterMemoryForGPU(const void* ptr)
 {
   return mRec->unregisterMemoryForGPU(ptr);
+}
+
+std::unique_ptr<TPCPadGainCalib> GPUO2Interface::getPadGainCalibDefault()
+{
+  return std::make_unique<TPCPadGainCalib>();
+}
+
+std::unique_ptr<TPCPadGainCalib> GPUO2Interface::getPadGainCalib(const o2::tpc::CalDet<float>& in)
+{
+  return std::make_unique<TPCPadGainCalib>(in);
+}
+
+std::unique_ptr<TPCdEdxCalibrationSplines> GPUO2Interface::getdEdxCalibrationSplinesDefault()
+{
+  return std::make_unique<TPCdEdxCalibrationSplines>();
 }

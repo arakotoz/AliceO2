@@ -46,11 +46,11 @@ void SecondaryVertexingSpec::init(InitContext& ic)
 {
   //-------- init geometry and field --------//
   o2::base::GeometryManager::loadGeometry();
-  o2::base::Propagator::initFieldFromGRP("o2sim_grp.root");
+  o2::base::Propagator::initFieldFromGRP();
   // this is a hack to provide Mat.LUT from the local file, in general will be provided by the framework from CCDB
   std::string matLUTPath = ic.options().get<std::string>("material-lut-path");
   std::string matLUTFile = o2::base::NameConf::getMatLUTFileName(matLUTPath);
-  if (o2::base::NameConf::pathExists(matLUTFile)) {
+  if (o2::utils::Str::pathExists(matLUTFile)) {
     auto* lut = o2::base::MatLayerCylSet::loadFromFile(matLUTFile);
     o2::base::Propagator::Instance()->setMatLUT(lut);
     LOG(INFO) << "Loaded material LUT from " << matLUTFile;

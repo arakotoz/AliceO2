@@ -207,7 +207,7 @@ struct GPUTrackingInOutDigits {
   static constexpr unsigned int NSLICES = GPUDataTypes::NSLICES;
   const o2::tpc::Digit* tpcDigits[NSLICES] = {nullptr};
   size_t nTPCDigits[NSLICES] = {0};
-  GPUTPCDigitsMCInput* tpcDigitsMC = nullptr;
+  const GPUTPCDigitsMCInput* tpcDigitsMC = nullptr;
 };
 
 struct GPUTrackingInOutPointers {
@@ -235,13 +235,13 @@ struct GPUTrackingInOutPointers {
   const GPUTPCGMMergedTrackHit* mergedTrackHits = nullptr;
   const GPUTPCGMMergedTrackHitXYZ* mergedTrackHitsXYZ = nullptr;
   unsigned int nMergedTrackHits = 0;
-  unsigned int* mergedTrackHitAttachment = nullptr;
-  unsigned char* mergedTrackHitStates = nullptr;
-  o2::tpc::TrackTPC* outputTracksTPCO2 = nullptr;
+  const unsigned int* mergedTrackHitAttachment = nullptr;
+  const unsigned char* mergedTrackHitStates = nullptr;
+  const o2::tpc::TrackTPC* outputTracksTPCO2 = nullptr;
   unsigned int nOutputTracksTPCO2 = 0;
-  unsigned int* outputClusRefsTPCO2 = nullptr;
+  const unsigned int* outputClusRefsTPCO2 = nullptr;
   unsigned int nOutputClusRefsTPCO2 = 0;
-  o2::MCCompLabel* outputTracksTPCO2MC = nullptr;
+  const o2::MCCompLabel* outputTracksTPCO2MC = nullptr;
   const o2::tpc::CompressedClustersFlat* tpcCompressedClusters = nullptr;
   const GPUTRDTrackletWord* trdTracklets = nullptr;
   unsigned int nTRDTracklets = 0;

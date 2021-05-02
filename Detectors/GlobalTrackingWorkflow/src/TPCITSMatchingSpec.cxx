@@ -79,8 +79,8 @@ void TPCITSMatchingDPL::init(InitContext& ic)
   mTimer.Reset();
   //-------- init geometry and field --------//
   o2::base::GeometryManager::loadGeometry();
-  o2::base::Propagator::initFieldFromGRP(o2::base::NameConf::getGRPFileName());
-  std::unique_ptr<o2::parameters::GRPObject> grp{o2::parameters::GRPObject::loadFrom(o2::base::NameConf::getGRPFileName())};
+  o2::base::Propagator::initFieldFromGRP();
+  std::unique_ptr<o2::parameters::GRPObject> grp{o2::parameters::GRPObject::loadFrom()};
   mMatching.setITSTriggered(!grp->isDetContinuousReadOut(o2::detectors::DetID::ITS));
   const auto& alpParams = o2::itsmft::DPLAlpideParam<o2::detectors::DetID::ITS>::Instance();
   if (mMatching.isITSTriggered()) {
@@ -93,8 +93,8 @@ void TPCITSMatchingDPL::init(InitContext& ic)
   mMatching.setVDriftCalib(mCalibMode);
   //
   std::string dictPath = ic.options().get<std::string>("its-dictionary-path");
-  std::string dictFile = o2::base::NameConf::getDictionaryFileName(o2::detectors::DetID::ITS, dictPath, ".bin");
-  if (o2::base::NameConf::pathExists(dictFile)) {
+  std::string dictFile = o2::base::NameConf::getAlpideClusterDictionaryFileName(o2::detectors::DetID::ITS, dictPath, ".bin");
+  if (o2::utils::Str::pathExists(dictFile)) {
     mITSDict.readBinaryFile(dictFile);
     LOG(INFO) << "Matching is running with a provided ITS dictionary: " << dictFile;
   } else {
@@ -104,7 +104,7 @@ void TPCITSMatchingDPL::init(InitContext& ic)
   // this is a hack to provide Mat.LUT from the local file, in general will be provided by the framework from CCDB
   std::string matLUTPath = ic.options().get<std::string>("material-lut-path");
   std::string matLUTFile = o2::base::NameConf::getMatLUTFileName(matLUTPath);
-  if (o2::base::NameConf::pathExists(matLUTFile)) {
+  if (o2::utils::Str::pathExists(matLUTFile)) {
     auto* lut = o2::base::MatLayerCylSet::loadFromFile(matLUTFile);
     o2::base::Propagator::Instance()->setMatLUT(lut);
     LOG(INFO) << "Loaded material LUT from " << matLUTFile;
