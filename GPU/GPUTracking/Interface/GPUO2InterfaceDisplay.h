@@ -15,8 +15,8 @@
 #define GPUO2INTERFACEDisplay_H
 
 // Some defines denoting that we are compiling for O2
-#ifndef HAVE_O2HEADERS
-#define HAVE_O2HEADERS
+#ifndef GPUCA_HAVE_O2HEADERS
+#define GPUCA_HAVE_O2HEADERS
 #endif
 #ifndef GPUCA_TPC_GEOMETRY_O2
 #define GPUCA_TPC_GEOMETRY_O2
@@ -31,6 +31,7 @@
 namespace o2::gpu
 {
 class GPUDisplay;
+class GPUQA;
 struct GPUParam;
 struct GPUTrackingInOutPointers;
 struct GPUO2InterfaceConfiguration;
@@ -47,6 +48,7 @@ class GPUO2InterfaceDisplay
 
  private:
   std::unique_ptr<GPUDisplay> mDisplay;
+  std::unique_ptr<GPUQA> mQA;
   std::unique_ptr<GPUParam> mParam;
   std::unique_ptr<GPUDisplayBackend> mBackend;
   std::unique_ptr<GPUO2InterfaceConfiguration> mConfig;

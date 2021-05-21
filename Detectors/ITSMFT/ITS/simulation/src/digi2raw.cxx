@@ -13,11 +13,11 @@
 
 #include <boost/program_options.hpp>
 #include <TTree.h>
-#include <TSystem.h>
 #include <TChain.h>
 #include <TFile.h>
 #include <TStopwatch.h>
 #include "Framework/Logger.h"
+#include <filesystem>
 #include <vector>
 #include <string>
 #include <iomanip>
@@ -114,13 +114,14 @@ void digi2raw(std::string_view inpName, std::string_view outDir, std::string_vie
   o2::raw::HBFUtils::Instance().print();
 
   // if needed, create output directory
-  if (gSystem->AccessPathName(outDir.data())) {
-    if (gSystem->mkdir(outDir.data(), kTRUE)) {
+  if (!std::filesystem::exists(outDir)) {
+    if (!std::filesystem::create_directories(outDir)) {
       LOG(FATAL) << "could not create output directory " << outDir;
     } else {
       LOG(INFO) << "created output directory " << outDir;
     }
   }
+
   ///-------> input
   std::string digTreeName{o2::base::NameConf::MCTTREENAME.data()};
   TChain digTree(digTreeName.c_str());
@@ -201,19 +202,14 @@ void setupLinks(o2::itsmft::MC2RawEncoder<MAP>& m2r, std::string_view outDir, st
   int lnkAssign[3][MaxLinksPerRU] = {
     // requested link cabling for IB, MB and OB
     /* // uncomment this to have 1 link per RU
-    {9, 0, 0}, // IB
-    {16, 0, 0}, // MB
-    {28, 0, 0} // OB
+    {9, 0, 0},  // IB
+    {28, 0, 0}, // MB
+    {28, 0, 0}  // OB
      */
-    /* //  uncomment this to have 3 link per RU
-    {3, 3, 3}, // IB
-    {5, 5, 6}, // MB
-    {9, 9, 10} // OB
-    */
     // partition according to https://indico.cern.ch/event/907685/contributions/3818967/attachments/2019436/3376161/20200411_SOX_EOX_Proposal.pdf
-    {3, 3, 3},  // IB
-    {8, 8, 0},  // MB
-    {14, 14, 0} // OB
+    {3, 3, 3},   // IB
+    {14, 14, 0}, // MB
+    {14, 14, 0}  // OB
   };
   std::vector<std::vector<int>> defRU{// number of RUs per CRU at each layer
                                       {6, 6},

@@ -14,8 +14,8 @@
 #ifndef GPUO2INTERFACECONFIGURATION_H
 #define GPUO2INTERFACECONFIGURATION_H
 
-#ifndef HAVE_O2HEADERS
-#define HAVE_O2HEADERS
+#ifndef GPUCA_HAVE_O2HEADERS
+#define GPUCA_HAVE_O2HEADERS
 #endif
 #ifndef GPUCA_TPC_GEOMETRY_O2
 #define GPUCA_TPC_GEOMETRY_O2
@@ -88,7 +88,7 @@ struct GPUO2InterfaceConfiguration {
   GPUSettingsQA configQA;
   GPUInterfaceSettings configInterface;
   GPURecoStepConfiguration configWorkflow;
-  GPUCalibObjects configCalib;
+  GPUCalibObjectsConst configCalib;
 
   GPUSettingsO2 ReadConfigurableParam();
 

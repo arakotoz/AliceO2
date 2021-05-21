@@ -18,6 +18,7 @@ o2_add_library(TPCReconstruction
                        src/HwClusterer.cxx
                        src/HwClustererParam.cxx
                        src/KrBoxClusterFinder.cxx
+                       src/KrBoxClusterFinderParam.cxx
                        src/RawReader.cxx
                        src/RawReaderCRU.cxx
                        src/RawReaderEventSync.cxx
@@ -46,6 +47,7 @@ o2_target_root_dictionary(
           include/TPCReconstruction/HwClusterer.h
           include/TPCReconstruction/HwClustererParam.h
           include/TPCReconstruction/KrBoxClusterFinder.h
+          include/TPCReconstruction/KrBoxClusterFinderParam.h
           include/TPCReconstruction/KrCluster.h
           include/TPCReconstruction/RawReader.h
           include/TPCReconstruction/RawReaderCRU.h
@@ -119,7 +121,7 @@ o2_add_test_root_macro(macro/readClusters.C
                        PUBLIC_LINK_LIBRARIES O2::DataFormatsTPC
                                              O2::SimulationDataFormat
                                              O2::TPCBase
-                       LABELS tpc)
+                       LABELS tpc COMPILE_ONLY)
 o2_add_test_root_macro(macro/testRawRead.C
                        PUBLIC_LINK_LIBRARIES O2::TPCReconstruction
                        LABELS tpc)

@@ -34,15 +34,10 @@ int GPUChainTracking::RunTRDTracking()
   if (mIOPtrs.nTRDTracklets == 0) {
     return 0;
   }
+  Tracker.SetGenerateSpacePoints(mIOPtrs.trdSpacePoints == nullptr);
 
   mRec->PushNonPersistentMemory(qStr2Tag("TRDTRACK"));
   SetupGPUProcessor(&Tracker, true);
-
-  for (unsigned int iTracklet = 0; iTracklet < mIOPtrs.nTRDTracklets; ++iTracklet) {
-    if (Tracker.LoadTracklet(mIOPtrs.trdTracklets[iTracklet], mIOPtrs.trdTrackletsMC ? mIOPtrs.trdTrackletsMC[iTracklet].mLabel : nullptr)) {
-      return 1;
-    }
-  }
 
   for (unsigned int i = 0; i < mIOPtrs.nMergedTracks; i++) {
     const GPUTPCGMMergedTrack& trk = mIOPtrs.mergedTracks[i];
@@ -54,7 +49,7 @@ int GPUChainTracking::RunTRDTracking()
       continue;
     }
 
-    if (Tracker.LoadTrack(trktrd, -1, nullptr, -1, i, false)) {
+    if (Tracker.LoadTrack(trktrd, i, false)) {
       return 1;
     }
   }
@@ -70,7 +65,7 @@ int GPUChainTracking::RunTRDTracking()
 
 int GPUChainTracking::DoTRDGPUTracking()
 {
-#ifdef HAVE_O2HEADERS
+#ifdef GPUCA_HAVE_O2HEADERS
   bool doGPU = GetRecoStepsGPU() & RecoStep::TRDTracking;
   GPUTRDTrackerGPU& Tracker = processors()->trdTrackerGPU;
   GPUTRDTrackerGPU& TrackerShadow = doGPU ? processorsShadow()->trdTrackerGPU : Tracker;
