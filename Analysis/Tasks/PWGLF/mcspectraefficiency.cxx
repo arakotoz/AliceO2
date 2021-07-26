@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -67,7 +68,7 @@ struct GeneratedTask {
       if (abs(mcParticle.eta()) > 0.8) {
         continue;
       }
-      if (isPhysicalPrimary(mcParticles, mcParticle)) {
+      if (isPhysicalPrimary<aod::McParticles>(mcParticle)) {
         const auto pdg = Form("%i", mcParticle.pdgCode());
         pdgH->Fill(pdg, 1);
         const float pdgbin = pdgH->GetXaxis()->GetBinCenter(pdgH->GetXaxis()->FindBin(pdg));
@@ -112,8 +113,9 @@ struct ReconstructedTask {
   {
     LOGF(info, "vtx-z (data) = %f | vtx-z (MC) = %f", collision.posZ(), collision.mcCollision().posZ());
     for (auto& track : tracks) {
-      const auto pdg = Form("%i", track.mcParticle().pdgCode());
-      if (!isPhysicalPrimary(mcParticles, track.mcParticle())) {
+      const auto particle = track.mcParticle();
+      const auto pdg = Form("%i", particle.pdgCode());
+      if (!isPhysicalPrimary<aod::McParticles>(particle)) {
         pdgsecH->Fill(pdg, 1);
         const float pdgbinsec = pdgH->GetXaxis()->GetBinCenter(pdgsecH->GetXaxis()->FindBin(pdg));
         dcaxysecH->Fill(track.dcaXY(), pdgbinsec);
@@ -129,8 +131,8 @@ struct ReconstructedTask {
       dcaxyH->Fill(track.dcaXY(), pdgbin);
       dcazH->Fill(track.dcaZ(), pdgbin);
 
-      etaDiff->Fill(track.mcParticle().eta() - track.eta(), pdgbin);
-      auto delta = track.mcParticle().phi() - track.phi();
+      etaDiff->Fill(particle.eta() - track.eta(), pdgbin);
+      auto delta = particle.phi() - track.phi();
       if (delta > M_PI) {
         delta -= 2 * M_PI;
       }
@@ -138,8 +140,8 @@ struct ReconstructedTask {
         delta += 2 * M_PI;
       }
       phiDiff->Fill(delta, pdgbin);
-      pDiff->Fill(sqrt(track.mcParticle().px() * track.mcParticle().px() + track.mcParticle().py() * track.mcParticle().py() + track.mcParticle().pz() * track.mcParticle().pz()) - track.p(), pdgbin);
-      ptDiff->Fill(track.mcParticle().pt() - track.pt(), pdgbin);
+      pDiff->Fill(sqrt(particle.px() * particle.px() + particle.py() * particle.py() + particle.pz() * particle.pz()) - track.p(), pdgbin);
+      ptDiff->Fill(particle.pt() - track.pt(), pdgbin);
     }
   }
 };

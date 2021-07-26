@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -70,10 +71,10 @@ struct ValidationGenLevel {
 
     for (auto& particle : particlesMC) {
       int particlePdgCode = particle.pdgCode();
-      if (particle.mother0() < 0) {
+      if (!particle.has_mother0()) {
         continue;
       }
-      auto mother = particlesMC.iteratorAt(particle.mother0());
+      auto mother = particle.mother0_as<aod::McParticles>();
       if (particlePdgCode != mother.pdgCode()) {
         switch (particlePdgCode) {
           case kCharm:
@@ -179,7 +180,7 @@ struct ValidationRecLevel {
         registry.fill(HIST("histPy"), candidate.py() - mother.py());
         registry.fill(HIST("histPz"), candidate.pz() - mother.pz());
         //Compare Secondary vertex and decay length with MC
-        auto daughter0 = particlesMC.iteratorAt(mother.daughter0());
+        auto daughter0 = mother.daughter0_as<aod::McParticles>();
         double vertexDau[3] = {daughter0.vx(), daughter0.vy(), daughter0.vz()};
         double vertexMoth[3] = {mother.vx(), mother.vy(), mother.vz()};
         decayLength = RecoDecay::distance(vertexMoth, vertexDau);

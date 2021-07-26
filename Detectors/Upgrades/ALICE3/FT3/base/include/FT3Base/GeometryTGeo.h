@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -89,6 +90,7 @@ class GeometryTGeo : public o2::itsmft::GeometryTGeo
 
   void Print(Option_t* opt = "") const;
   static const char* getFT3VolPattern() { return sVolumeName.c_str(); }
+  static const char* getFT3InnerVolPattern() { return sInnerVolumeName.c_str(); }
   static const char* getFT3LayerPattern() { return sLayerName.c_str(); }
   static const char* getFT3ChipPattern() { return sChipName.c_str(); }
   static const char* getFT3SensorPattern() { return sSensorName.c_str(); }
@@ -101,10 +103,11 @@ class GeometryTGeo : public o2::itsmft::GeometryTGeo
  protected:
   static constexpr int MAXLAYERS = 15; ///< max number of active layers
 
-  Int_t mNumberOfLayers;          ///< number of layers
-  static std::string sVolumeName; ///< Mother volume name
-  static std::string sLayerName;  ///< Layer name
-  static std::string sChipName;   ///< Chip name
+  Int_t mNumberOfLayers;               ///< number of layers
+  static std::string sInnerVolumeName; ///< Mother inner volume name
+  static std::string sVolumeName;      ///< Mother volume name
+  static std::string sLayerName;       ///< Layer name
+  static std::string sChipName;        ///< Chip name
 
   static std::string sSensorName; ///< Sensor name
 

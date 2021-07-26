@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -138,8 +139,11 @@ void TPCITSMatchingDPL::run(ProcessingContext& pc)
   mMatching.run(recoData);
 
   pc.outputs().snapshot(Output{"GLO", "TPCITS", 0, Lifetime::Timeframe}, mMatching.getMatchedTracks());
+  pc.outputs().snapshot(Output{"GLO", "TPCITSAB_REFS", 0, Lifetime::Timeframe}, mMatching.getABTrackletRefs());
+  pc.outputs().snapshot(Output{"GLO", "TPCITSAB_CLID", 0, Lifetime::Timeframe}, mMatching.getABTrackletClusterIDs());
   if (mUseMC) {
     pc.outputs().snapshot(Output{"GLO", "TPCITS_MC", 0, Lifetime::Timeframe}, mMatching.getMatchLabels());
+    pc.outputs().snapshot(Output{"GLO", "TPCITSAB_MC", 0, Lifetime::Timeframe}, mMatching.getMatchLabels());
   }
 
   if (mCalibMode) {
@@ -163,20 +167,22 @@ DataProcessorSpec getTPCITSMatchingSpec(GTrackID::mask_t src, bool useFT0, bool 
   auto dataRequest = std::make_shared<DataRequest>();
 
   dataRequest->requestTracks(src, useMC);
-  dataRequest->requestClusters(src, false); // no MC labels for clusters needed for refit only
-
+  dataRequest->requestTPCClusters(false);
+  dataRequest->requestITSClusters(useMC); // Only ITS clusters labels are needed for the afterburner
   if (useFT0) {
     dataRequest->requestFT0RecPoints(false);
   }
   outputs.emplace_back("GLO", "TPCITS", 0, Lifetime::Timeframe);
+  outputs.emplace_back("GLO", "TPCITSAB_REFS", 0, Lifetime::Timeframe); // AftetBurner ITS tracklet references (referred by GlobalTrackID::ITSAB) on cluster indices
+  outputs.emplace_back("GLO", "TPCITSAB_CLID", 0, Lifetime::Timeframe); // cluster indices of ITS tracklets attached by the AfterBurner
 
   if (calib) {
     outputs.emplace_back("GLO", "TPCITS_VDHDTGL", 0, Lifetime::Timeframe);
   }
 
   if (useMC) {
-    dataRequest->inputs.emplace_back("clusITSMCTR", "ITS", "CLUSTERSMCTR", 0, Lifetime::Timeframe); // for afterburner
     outputs.emplace_back("GLO", "TPCITS_MC", 0, Lifetime::Timeframe);
+    outputs.emplace_back("GLO", "TPCITSAB_MC", 0, Lifetime::Timeframe); // AfterBurner ITS tracklet MC
   }
 
   return DataProcessorSpec{

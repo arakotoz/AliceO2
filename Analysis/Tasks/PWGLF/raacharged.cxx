@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -177,14 +178,15 @@ struct raacharged {
       if (!isMC) {
         continue;
       }
-      if (MC::isPhysicalPrimary(mcParticles, track.mcParticle())) {
+      const auto particle = track.mcParticle();
+      if (MC::isPhysicalPrimary<aod::McParticles>(particle)) {
         mcInfoVal = 0.0;
       } else {
         mcInfoVal = 1.0;
       }
 
-      Double_t MCpt = track.mcParticle().pt();
-      Double_t parType = (Double_t)WhichParticle(track.mcParticle().pdgCode());
+      Double_t MCpt = particle.pt();
+      Double_t parType = (Double_t)WhichParticle(particle.pdgCode());
       Double_t MCcharge = (Double_t)track.sign();
       Double_t MCvalues[4] = {MCpt, parType, mcInfoVal, MCcharge};
 
@@ -196,7 +198,7 @@ struct raacharged {
         if (abs(mcParticle.eta()) > 0.8) {
           continue;
         }
-        if (!MC::isPhysicalPrimary(mcParticles, mcParticle)) {
+        if (!MC::isPhysicalPrimary<aod::McParticles>(mcParticle)) {
           continue;
         }
 

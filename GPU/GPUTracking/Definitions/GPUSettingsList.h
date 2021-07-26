@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -82,6 +83,7 @@ BeginSubConfig(GPUSettingsRecTRD, trd, configStandalone.rec, "RECTRD", 0, "Recon
 AddOptionRTC(minTrackPt, float, .5f, "", 0, "Min Pt for tracks to be propagated through the TRD")
 AddOptionRTC(maxChi2, float, 15.f, "", 0, "Max chi2 for TRD tracklets to be matched to a track")
 AddOptionRTC(penaltyChi2, float, 12.f, "", 0, "Chi2 penalty for no available TRD tracklet (effective chi2 cut value)")
+AddOptionRTC(nSigmaTerrITSTPC, float, 4.f, "", 0, "Number of sigmas for ITS-TPC track time error estimate")
 AddOptionRTC(stopTrkAfterNMissLy, unsigned char, 6, "", 0, "Abandon track following after N layers without a TRD match")
 AddHelp("help", 'h')
 EndConfig()
@@ -157,8 +159,11 @@ AddOption(prefetchTPCpageScan, char, 0, "", 0, "Prefetch Data for TPC page scan 
 AddOption(runMC, bool, false, "", 0, "Process MC labels")
 AddOption(runQA, int, 0, "qa", 'q', "Enable tracking QA (negative number to provide bitmask for QA tasks)", message("Running QA: %s"), def(1))
 AddOption(outputSharedClusterMap, bool, false, "", 0, "Ship optional shared cluster map as output for further use")
+AddOption(disableTPCNoisyPadFilter, bool, false, "", 0, "Disables all TPC noisy pad filters (Not the normal noise filter!)")
 AddOption(createO2Output, char, 2, "", 0, "Create Track output in O2 format (2 = skip non-O2 output in GPU track format (reverts to =1 if QA is requested))")
 AddOption(clearO2OutputFromGPU, bool, false, "", 0, "Free the GPU memory used for O2 output after copying to host, prevents further O2 processing on the GPU")
+AddOption(ignoreNonFatalGPUErrors, bool, false, "", 0, "Continue running after having received non fatal GPU errors, e.g. abort due to overflow")
+AddOption(tpcIncreasedMinClustersPerRow, unsigned int, 0, "", 0, "Impose a minimum buffer size for the clustersPerRow during TPC clusterization")
 AddVariable(eventDisplay, GPUCA_NAMESPACE::gpu::GPUDisplayBackend*, nullptr)
 AddSubConfig(GPUSettingsProcessingRTC, rtc)
 AddHelp("help", 'h')
@@ -351,7 +356,7 @@ AddOption(zsFilter, int, -1, "", 0, "Apply Zero-Suppression when loading digits 
 AddOption(zs12bit, bool, true, "", 0, "Perform 12 bit zero-suppression encoding / filter")
 AddOption(dumpEvents, bool, false, "", 0, "Dump events (after transformation such as encodeZS")
 AddOption(stripDumpedEvents, bool, false, "", 0, "Remove redundant inputs (e.g. digits and ZS) before dumping")
-AddOption(printSettings, bool, false, "", 0, "Print all settings")
+AddOption(printSettings, int, 0, "", 0, "Print all settings", def(1))
 AddOption(memoryStat, bool, false, "", 0, "Print memory statistics")
 AddOption(testSyncAsync, bool, false, "syncAsync", 0, "Test first synchronous and then asynchronous processing")
 AddOption(testSync, bool, false, "sync", 0, "Test settings for synchronous phase")
@@ -366,7 +371,6 @@ AddOption(rundEdx, int, -1, "", 0, "Enable dEdx processing")
 AddOption(runCompression, int, 1, "", 0, "Enable TPC Compression")
 AddOption(runTransformation, int, 1, "", 0, "Enable TPC Transformation")
 AddOption(runRefit, bool, false, "", 0, "Enable final track refit")
-AddOption(memoryBufferScaleFactor, float, 1.f, "", 0, "Factor to scale buffer size estimations")
 AddHelp("help", 'h')
 AddHelpAll("helpall", 'H')
 AddSubConfig(GPUSettingsRec, rec)
@@ -395,8 +399,8 @@ AddOption(matLUTFile, std::string, "", "", 0, "File name of material LUT file")
 AddOption(gainCalibFile, std::string, "", "", 0, "File name of TPC pad gain calibration")
 AddOption(allocateOutputOnTheFly, bool, true, "", 0, "Allocate shm output buffers on the fly, instead of using preallocated buffer with upper bound size")
 AddOption(outputBufferSize, unsigned long, 200000000ul, "", 0, "Size of the output buffers to be allocated")
-AddOption(memoryBufferScaleFactor, float, 1.f, "", 0, "Factor to scale buffer size estimations")
 AddOption(mutexMemReg, bool, false, "", 0, "Global mutex to serialize GPU memory registration")
+AddOption(printSettings, int, 0, "", 0, "Print all settings", def(1))
 EndConfig()
 #endif // GPUCA_O2_LIB
 #endif // !GPUCA_GPUCODE_DEVICE

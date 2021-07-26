@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -26,6 +27,7 @@
 #include "ReconstructionDataFormats/VtxTrackIndex.h"
 #include "ReconstructionDataFormats/VtxTrackRef.h"
 #include "ReconstructionDataFormats/TrackCosmics.h"
+#include "DataFormatsITSMFT/TrkClusRef.h"
 
 using namespace o2::globaltracking;
 using namespace o2::framework;
@@ -88,8 +90,11 @@ void DataRequest::requestTPCTracks(bool mc)
 void DataRequest::requestITSTPCTracks(bool mc)
 {
   addInput({"trackITSTPC", "GLO", "TPCITS", 0, Lifetime::Timeframe});
+  addInput({"trackITSTPCABREFS", "GLO", "TPCITSAB_REFS", 0, Lifetime::Timeframe});
+  addInput({"trackITSTPCABCLID", "GLO", "TPCITSAB_CLID", 0, Lifetime::Timeframe});
   if (mc) {
     addInput({"trackITSTPCMCTR", "GLO", "TPCITS_MC", 0, Lifetime::Timeframe});
+    addInput({"trackITSTPCABMCTR", "GLO", "TPCITSAB_MC", 0, Lifetime::Timeframe});
   }
   requestMap["trackITSTPC"] = mc;
 }
@@ -107,8 +112,9 @@ void DataRequest::requestTPCTOFTracks(bool mc)
 void DataRequest::requestITSTPCTRDTracks(bool mc)
 {
   addInput({"trackITSTPCTRD", "TRD", "MATCHTRD_GLO", 0, Lifetime::Timeframe});
+  addInput({"trigITSTPCTRD", "TRD", "TRKTRG_GLO", 0, Lifetime::Timeframe});
   if (mc) {
-    LOG(ERROR) << "TRD Tracks does not support MC truth";
+    LOG(WARNING) << "TRD Tracks does not support MC truth, dummy label will be returned";
   }
   requestMap["trackITSTPCTRD"] = false;
 }
@@ -116,8 +122,9 @@ void DataRequest::requestITSTPCTRDTracks(bool mc)
 void DataRequest::requestTPCTRDTracks(bool mc)
 {
   addInput({"trackTPCTRD", "TRD", "MATCHTRD_TPC", 0, Lifetime::Timeframe});
+  addInput({"trigTPCTRD", "TRD", "TRKTRG_TPC", 0, Lifetime::Timeframe});
   if (mc) {
-    LOG(ERROR) << "TRD Tracks does not support MC truth";
+    LOG(WARNING) << "TRD Tracks does not support MC truth, dummy label will be returned";
   }
   requestMap["trackTPCTRD"] = false;
 }
@@ -167,6 +174,7 @@ void DataRequest::requestTRDTracklets(bool mc)
 {
   addInput({"trdtracklets", o2::header::gDataOriginTRD, "TRACKLETS", 0, Lifetime::Timeframe});
   addInput({"trdctracklets", o2::header::gDataOriginTRD, "CTRACKLETS", 0, Lifetime::Timeframe});
+  addInput({"trdtrigrecmask", o2::header::gDataOriginTRD, "TRIGRECMASK", 0, Lifetime::Timeframe});
   addInput({"trdtriggerrec", o2::header::gDataOriginTRD, "TRKTRGRD", 0, Lifetime::Timeframe});
   if (mc) {
     addInput({"trdtrackletlabels", o2::header::gDataOriginTRD, "TRKLABELS", 0, Lifetime::Timeframe});
@@ -217,7 +225,7 @@ void DataRequest::requestPrimaryVerterticesTMP(bool mc) // primary vertices befo
 
 void DataRequest::requestSecondaryVertertices(bool)
 {
-  addInput({"v0s", "GLO", "V0s", 0, Lifetime::Timeframe});
+  addInput({"v0s", "GLO", "V0S", 0, Lifetime::Timeframe});
   addInput({"p2v0s", "GLO", "PVTX_V0REFS", 0, Lifetime::Timeframe});
   addInput({"cascs", "GLO", "CASCS", 0, Lifetime::Timeframe});
   addInput({"p2cascs", "GLO", "PVTX_CASCREFS", 0, Lifetime::Timeframe});
@@ -462,8 +470,11 @@ void RecoContainer::addTPCTracks(ProcessingContext& pc, bool mc)
 void RecoContainer::addITSTPCTracks(ProcessingContext& pc, bool mc)
 {
   commonPool[GTrackID::ITSTPC].registerContainer(pc.inputs().get<gsl::span<o2d::TrackTPCITS>>("trackITSTPC"), TRACKS);
+  commonPool[GTrackID::ITSAB].registerContainer(pc.inputs().get<gsl::span<o2::itsmft::TrkClusRef>>("trackITSTPCABREFS"), TRACKREFS);
+  commonPool[GTrackID::ITSAB].registerContainer(pc.inputs().get<gsl::span<int>>("trackITSTPCABCLID"), INDICES);
   if (mc) {
     commonPool[GTrackID::ITSTPC].registerContainer(pc.inputs().get<gsl::span<o2::MCCompLabel>>("trackITSTPCMCTR"), MCLABELS);
+    commonPool[GTrackID::ITSAB].registerContainer(pc.inputs().get<gsl::span<o2::MCCompLabel>>("trackITSTPCABMCTR"), MCLABELS);
   }
 }
 
@@ -471,12 +482,14 @@ void RecoContainer::addITSTPCTracks(ProcessingContext& pc, bool mc)
 void RecoContainer::addITSTPCTRDTracks(ProcessingContext& pc, bool mc)
 {
   commonPool[GTrackID::ITSTPCTRD].registerContainer(pc.inputs().get<gsl::span<o2::trd::TrackTRD>>("trackITSTPCTRD"), TRACKS);
+  commonPool[GTrackID::ITSTPCTRD].registerContainer(pc.inputs().get<gsl::span<o2::trd::TrackTriggerRecord>>("trigITSTPCTRD"), TRACKREFS);
 }
 
 //__________________________________________________________
 void RecoContainer::addTPCTRDTracks(ProcessingContext& pc, bool mc)
 {
   commonPool[GTrackID::TPCTRD].registerContainer(pc.inputs().get<gsl::span<o2::trd::TrackTRD>>("trackTPCTRD"), TRACKS);
+  commonPool[GTrackID::TPCTRD].registerContainer(pc.inputs().get<gsl::span<o2::trd::TrackTriggerRecord>>("trigTPCTRD"), TRACKREFS);
 }
 
 //__________________________________________________________
@@ -658,16 +671,16 @@ RecoContainer::GlobalIDSet RecoContainer::getSingleDetectorRefs(GTrackID gidx) c
     const auto& parent1 = getTPCITSTrack(parent0.getEvIdxTrack().getIndex());
     table[GTrackID::ITSTPC] = parent0.getEvIdxTrack().getIndex();
     table[GTrackID::TOF] = {unsigned(parent0.getEvIdxTOFCl().getIndex()), GTrackID::TOF};
-    table[GTrackID::ITS] = parent1.getRefITS();
     table[GTrackID::TPC] = parent1.getRefTPC();
+    table[parent1.getRefITS().getSource()] = parent1.getRefITS(); // ITS source might be an ITS track or ITSAB tracklet
   } else if (src == GTrackID::TPCTOF) {
     const auto& parent0 = getTPCTOFMatch(gidx); //TPC : TOF
     table[GTrackID::TOF] = {unsigned(parent0.getEvIdxTOFCl().getIndex()), GTrackID::TOF};
     table[GTrackID::TPC] = parent0.getEvIdxTrack().getIndex();
   } else if (src == GTrackID::ITSTPC) {
     const auto& parent0 = getTPCITSTrack(gidx);
-    table[GTrackID::ITS] = parent0.getRefITS();
     table[GTrackID::TPC] = parent0.getRefTPC();
+    table[parent0.getRefITS().getSource()] = parent0.getRefITS(); // ITS source might be an ITS track or ITSAB tracklet
   }
   return std::move(table);
 }

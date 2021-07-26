@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -12,7 +13,6 @@
 
 #include "MFTWorkflow/TrackerSpec.h"
 
-#include "MFTTracking/TrackerConfig.h"
 #include "MFTTracking/ROframe.h"
 #include "MFTTracking/IOUtils.h"
 #include "MFTTracking/Tracker.h"
@@ -59,13 +59,13 @@ void TrackerDPL::init(InitContext& ic)
                                                    o2::math_utils::TransformType::T2G));
 
     // tracking configuration parameters
-    auto& mftTrackingParam = MFTTrackingParam::Instance();
+    auto& trackingParam = MFTTrackingParam::Instance();
     // create the tracker: set the B-field, the configuration and initialize
     mTracker = std::make_unique<o2::mft::Tracker>(mUseMC);
     double centerMFT[3] = {0, 0, -61.4}; // Field at center of MFT
     mTracker->setBz(field->getBz(centerMFT));
-    mTracker->initConfig(mftTrackingParam, true);
-    mTracker->initialize();
+    mTracker->initConfig(trackingParam, true);
+    mTracker->initialize(trackingParam.FullClusterScan);
   } else {
     throw std::runtime_error(o2::utils::Str::concat_string("Cannot retrieve GRP from the ", filename));
   }
@@ -121,6 +121,9 @@ void TrackerDPL::run(ProcessingContext& pc)
   Bool_t continuous = mGRP->isDetContinuousReadOut("MFT");
   LOG(INFO) << "MFTTracker RO: continuous=" << continuous;
 
+  // tracking configuration parameters
+  auto& trackingParam = MFTTrackingParam::Instance();
+
   // snippet to convert found tracks to final output tracks with separate cluster indices
   auto copyTracks = [&event](auto& tracks, auto& allTracks, auto& allClusIdx) {
     for (auto& trc : tracks) {
@@ -140,7 +143,7 @@ void TrackerDPL::run(ProcessingContext& pc)
       int nclUsed = ioutils::loadROFrameData(rof, event, compClusters, pattIt, mDict, labels, mTracker.get());
       if (nclUsed) {
         event.setROFrameId(roFrame);
-        event.initialize();
+        event.initialize(trackingParam.FullClusterScan);
         LOG(INFO) << "ROframe: " << roFrame << ", clusters loaded : " << nclUsed;
         mTracker->setROFrame(roFrame);
         mTracker->clustersToTracks(event);

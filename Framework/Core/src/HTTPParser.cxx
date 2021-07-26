@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -64,14 +65,14 @@ void encode_websocket_frames(std::vector<uv_buf_t>& outputs, char const* src, si
     WebSocketFrameShort* header = (WebSocketFrameShort*)buffer;
     memset(buffer, 0, headerSize);
     header->len = 126;
-    header->len16 = size;
+    header->len16 = htons(size);
   } else {
     headerSize = sizeof(WebSocketFrameHuge);
     buffer = (char*)malloc(headerSize + size);
-    WebSocketFrameHuge* header;
+    WebSocketFrameHuge* header = (WebSocketFrameHuge*)buffer;
     memset(buffer, 0, headerSize);
     header->len = 127;
-    header->len64 = size;
+    header->len64 = htonll(size);
   }
   size_t fullHeaderSize = (mask ? 4 : 0) + headerSize;
   startPayload = buffer + fullHeaderSize;
@@ -142,11 +143,11 @@ void decode_websocket(char* start, size_t size, WebSocketHandler& handler)
       headerSize = 2 + (header->mask ? 4 : 0);
     } else if (header->len == 126) {
       WebSocketFrameShort* headerSmall = (WebSocketFrameShort*)cur;
-      payloadSize = headerSmall->len16;
+      payloadSize = ntohs(headerSmall->len16);
       headerSize = 2 + 2 + (header->mask ? 4 : 0);
     } else if (header->len == 127) {
       WebSocketFrameHuge* headerSmall = (WebSocketFrameHuge*)cur;
-      payloadSize = headerSmall->len64;
+      payloadSize = ntohs(headerSmall->len64);
       headerSize = 2 + 8 + (header->mask ? 4 : 0);
     }
     size_t availableSize = size - (cur - start);

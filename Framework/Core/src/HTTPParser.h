@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -11,6 +12,7 @@
 #ifndef O2_FRAMEWORK_HTTPPARSER_H_
 #define O2_FRAMEWORK_HTTPPARSER_H_
 
+#include "Framework/Endian.h"
 #include <fmt/format.h>
 #include <uv.h>
 #include <string>
@@ -21,6 +23,15 @@ namespace o2::framework
 {
 
 struct __attribute__((__packed__)) WebSocketFrameTiny {
+#if O2_HOST_BYTE_ORDER == O2_LITTLE_ENDIAN
+  unsigned char opcode : 4;
+  unsigned char rsv3 : 1;
+  unsigned char rsv2 : 1;
+  unsigned char rsv1 : 1;
+  unsigned char fin : 1;
+  unsigned char len : 7;
+  unsigned char mask : 1;
+#elif O2_HOST_BYTE_ORDER == O2_BIG_ENDIAN
   unsigned char fin : 1;
   unsigned char rsv1 : 1;
   unsigned char rsv2 : 1;
@@ -28,9 +39,21 @@ struct __attribute__((__packed__)) WebSocketFrameTiny {
   unsigned char opcode : 4;
   unsigned char mask : 1;
   unsigned char len : 7;
+#else
+#error Uknown endiannes
+#endif
 };
 
 struct __attribute__((__packed__)) WebSocketFrameShort {
+#if O2_HOST_BYTE_ORDER == O2_LITTLE_ENDIAN
+  unsigned char opcode : 4;
+  unsigned char rsv3 : 1;
+  unsigned char rsv2 : 1;
+  unsigned char rsv1 : 1;
+  unsigned char fin : 1;
+  unsigned char len : 7;
+  unsigned char mask : 1;
+#elif O2_HOST_BYTE_ORDER == O2_BIG_ENDIAN
   unsigned char fin : 1;
   unsigned char rsv1 : 1;
   unsigned char rsv2 : 1;
@@ -38,10 +61,22 @@ struct __attribute__((__packed__)) WebSocketFrameShort {
   unsigned char opcode : 4;
   unsigned char mask : 1;
   unsigned char len : 7;
+#else
+#error Uknown endiannes
+#endif
   uint16_t len16;
 };
 
 struct __attribute__((__packed__)) WebSocketFrameHuge {
+#if O2_HOST_BYTE_ORDER == O2_LITTLE_ENDIAN
+  unsigned char opcode : 4;
+  unsigned char rsv3 : 1;
+  unsigned char rsv2 : 1;
+  unsigned char rsv1 : 1;
+  unsigned char fin : 1;
+  unsigned char len : 7;
+  unsigned char mask : 1;
+#elif O2_HOST_BYTE_ORDER == O2_BIG_ENDIAN
   unsigned char fin : 1;
   unsigned char rsv1 : 1;
   unsigned char rsv2 : 1;
@@ -49,6 +84,9 @@ struct __attribute__((__packed__)) WebSocketFrameHuge {
   unsigned char opcode : 4;
   unsigned char mask : 1;
   unsigned char len : 7;
+#else
+#error Uknown endiannes
+#endif
   uint64_t len64;
 };
 
@@ -87,6 +125,8 @@ void encode_websocket_frames(std::vector<uv_buf_t>& outputs, char const* src, si
 
 /// An handler for a websocket message stream.
 struct WebSocketHandler {
+  virtual ~WebSocketHandler() = default;
+
   /// Invoked when all the headers are received.
   virtual void headers(std::map<std::string, std::string> const& headers){};
   /// FIXME: not implemented

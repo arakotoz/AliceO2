@@ -1,8 +1,9 @@
-// Copyright CERN and copyright holders of ALICE O2. This software is
-// distributed under the terms of the GNU General Public License v3 (GPL
-// Version 3), copied verbatim in the file "COPYING".
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
 //
-// See http://alice-o2.web.cern.ch/license for full licensing information.
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
 //
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
@@ -44,6 +45,7 @@ namespace o2::trd
 class Tracklet64;
 class CalibratedTracklet;
 class TriggerRecord;
+class TrackTriggerRecord;
 //class TrackTRD;
 struct RecoInputContainer;
 } // namespace o2::trd
@@ -68,6 +70,7 @@ namespace o2::itsmft
 {
 class ROFRecord;
 class CompClusterExt;
+class TrkClusRef;
 } // namespace o2::itsmft
 
 namespace o2::tof
@@ -300,7 +303,12 @@ struct RecoContainer {
     return getObject<U>(gid, TRACKS);
   }
 
-  o2::MCCompLabel getTrackMCLabel(GTrackID id) const { return getObject<o2::MCCompLabel>(id, MCLABELS); }
+  o2::MCCompLabel getTrackMCLabel(GTrackID id) const
+  {
+    //RS FIXME: THIS IS TEMPORARY: some labels are still not implemented: in this case return dummy label
+    return commonPool[id.getSource()].getSize(MCLABELS) ? getObject<o2::MCCompLabel>(id, MCLABELS) : o2::MCCompLabel{};
+    //return getObject<o2::MCCompLabel>(id, MCLABELS);
+  }
 
   //--------------------------------------------
   // fetch track param
@@ -315,6 +323,11 @@ struct RecoContainer {
   auto getITSTracksROFRecords() const { return getSpan<o2::itsmft::ROFRecord>(GTrackID::ITS, TRACKREFS); }
   auto getITSTracksClusterRefs() const { return getSpan<int>(GTrackID::ITS, INDICES); }
   auto getITSTracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::ITS, MCLABELS); }
+  auto getITSABRefs() const { return getSpan<o2::itsmft::TrkClusRef>(GTrackID::ITSAB, TRACKREFS); }
+  const o2::itsmft::TrkClusRef& getITSABRef(GTrackID gid) const { return getObject<o2::itsmft::TrkClusRef>(gid, TRACKREFS); }
+  auto getITSABClusterRefs() const { return getSpan<int>(GTrackID::ITSAB, INDICES); }
+  auto getITSABMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::ITSAB, MCLABELS); }
+
   // ITS clusters
   auto getITSClustersROFRecords() const { return getSpan<o2::itsmft::ROFRecord>(GTrackID::ITS, CLUSREFS); }
   auto getITSClusters() const { return getSpan<o2::itsmft::CompClusterExt>(GTrackID::ITS, CLUSTERS); }
@@ -359,6 +372,11 @@ struct RecoContainer {
   {
     return getTracks<U>(GTrackID::ITSTPCTRD);
   }
+  auto getITSTPCTRDTriggers() const
+  {
+    return getSpan<o2::trd::TrackTriggerRecord>(GTrackID::ITSTPCTRD, TRACKREFS);
+  }
+
   // TPC-TRD
   template <class U>
   auto getTPCTRDTrack(GTrackID id) const
@@ -369,6 +387,10 @@ struct RecoContainer {
   auto getTPCTRDTracks() const
   {
     return getTracks<U>(GTrackID::TPCTRD);
+  }
+  auto getTPCTRDTriggers() const
+  {
+    return getSpan<o2::trd::TrackTriggerRecord>(GTrackID::TPCTRD, TRACKREFS);
   }
   // TRD tracklets
   gsl::span<const o2::trd::Tracklet64> getTRDTracklets() const;
