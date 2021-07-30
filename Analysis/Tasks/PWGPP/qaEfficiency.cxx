@@ -209,7 +209,7 @@ struct QaTrackingEfficiency {
     }
     recoEvt.resize(nevts);
 
-    auto rejectParticle = [&](auto p, auto h) {
+    auto rejectParticle = [&](const auto& p, auto h) {
       histos.fill(h, 1);
       const auto evtReconstructed = std::find(recoEvt.begin(), recoEvt.end(), p.mcCollision().globalIndex()) != recoEvt.end();
       if (!evtReconstructed) { // Check that the event is reconstructed
@@ -229,7 +229,7 @@ struct QaTrackingEfficiency {
         return true;
       }
       histos.fill(h, 5);
-      if ((selPrim == 1) && (!MC::isPhysicalPrimary<o2::aod::McParticles>(p))) { // Requiring is physical primary
+      if ((selPrim == 1) && (!MC::isPhysicalPrimary(p))) { // Requiring is physical primary
         return true;
       }
       histos.fill(h, 6);
