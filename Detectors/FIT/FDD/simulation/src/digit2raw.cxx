@@ -30,8 +30,8 @@
 
 namespace bpo = boost::program_options;
 
-void digit2raw(const std::string& inpName, const std::string& outDir, int verbosity, bool filePerLink, uint32_t rdhV = 4, bool noEmptyHBF = false,
-               int superPageSizeInB = 1024 * 1024);
+void digit2raw(const std::string& inpName, const std::string& outDir, int verbosity, const std::string& fileFor, uint32_t rdhV, bool noEmptyHBF, const std::string& flpName,
+               const std::string& ccdbUrl, const std::string& lutPath, int superPageSizeInB = 1024 * 1024);
 
 int main(int argc, char** argv)
 {
@@ -48,14 +48,16 @@ int main(int argc, char** argv)
     add_option("verbosity,v", bpo::value<int>()->default_value(0), "verbosity level");
     //    add_option("input-file,i", bpo::value<std::string>()->default_value(o2::base::NameConf::getDigitsFileName(o2::detectors::DetID::FDD)),"input FDD digits file"); // why not used?
     add_option("input-file,i", bpo::value<std::string>()->default_value("fdddigits.root"), "input FDD digits file");
-    add_option("file-per-link,l", bpo::value<bool>()->default_value(false)->implicit_value(true), "create output file per CRU (default: per layer)");
+    add_option("flp-name", bpo::value<std::string>()->default_value("alio2-cr1-flp180-fdd"), "single file per: all,flp,cru,link"); //temporary, beacause FIT deployed only on one node
+    add_option("file-for,f", bpo::value<std::string>()->default_value("all"), "single file per: all,flp,cru,link");
     add_option("output-dir,o", bpo::value<std::string>()->default_value("./"), "output directory for raw data");
     uint32_t defRDH = o2::raw::RDHUtils::getVersion<o2::header::RAWDataHeader>();
     add_option("rdh-version,r", bpo::value<uint32_t>()->default_value(defRDH), "RDH version to use");
     add_option("no-empty-hbf,e", bpo::value<bool>()->default_value(false)->implicit_value(true), "do not create empty HBF pages (except for HBF starting TF)");
     add_option("hbfutils-config,u", bpo::value<std::string>()->default_value(std::string(o2::base::NameConf::DIGITIZATIONCONFIGFILE)), "config file for HBFUtils (or none)");
     add_option("configKeyValues", bpo::value<std::string>()->default_value(""), "comma-separated configKeyValues");
-
+    add_option("ccdb-path", bpo::value<std::string>()->default_value(""), "CCDB url which contains LookupTable");
+    add_option("lut-path", bpo::value<std::string>()->default_value(""), "LookupTable path, e.g. FDD/LookupTable");
     opt_all.add(opt_general).add(opt_hidden);
     bpo::store(bpo::command_line_parser(argc, argv).options(opt_all).positional(opt_pos).run(), vm);
 
@@ -83,22 +85,32 @@ int main(int argc, char** argv)
   digit2raw(vm["input-file"].as<std::string>(),
             vm["output-dir"].as<std::string>(),
             vm["verbosity"].as<int>(),
-            vm["file-per-link"].as<bool>(),
+            vm["file-for"].as<std::string>(),
             vm["rdh-version"].as<uint32_t>(),
-            vm["no-empty-hbf"].as<bool>());
+            vm["no-empty-hbf"].as<bool>(),
+            vm["flp-name"].as<std::string>(),
+            vm["ccdb-path"].as<std::string>(),
+            vm["lut-path"].as<std::string>());
 
   o2::raw::HBFUtils::Instance().print();
 
   return 0;
 }
 
-void digit2raw(const std::string& inpName, const std::string& outDir, int verbosity, bool filePerLink, uint32_t rdhV, bool noEmptyHBF, int superPageSizeInB)
+void digit2raw(const std::string& inpName, const std::string& outDir, int verbosity, const std::string& fileFor, uint32_t rdhV, bool noEmptyHBF, const std::string& flpName, const std::string& ccdbUrl, const std::string& lutPath, int superPageSizeInB)
 {
   TStopwatch swTot;
   swTot.Start();
   o2::fdd::RawWriterFDD m2r;
-  m2r.setFilePerLink(filePerLink);
+  m2r.setFileFor(fileFor);
+  m2r.setFlpName(flpName);
   m2r.setVerbosity(verbosity);
+  if (ccdbUrl != "") {
+    m2r.setCCDBurl(ccdbUrl);
+  }
+  if (lutPath != "") {
+    m2r.setLUTpath(lutPath);
+  }
   auto& wr = m2r.getWriter();
   std::string inputGRP = o2::base::NameConf::getGRPFileName();
   const auto grp = o2::parameters::GRPObject::loadFrom(inputGRP);

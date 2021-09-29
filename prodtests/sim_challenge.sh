@@ -8,6 +8,8 @@
 # ----------- START WITH ACTUAL SCRIPT ---------------------------
 
 
+if [ -z "$SHMSIZE" ]; then export SHMSIZE=10000000000; fi
+
 # default number of events
 nevPP=10
 nevPbPb=10
@@ -26,7 +28,7 @@ generPbPb="pythia8hi"
 engine="TGeant3"
 
 # options to pass to every workflow
-gloOpt=" -b --run --shm-segment-size 10000000000"
+gloOpt=" -b --run --shm-segment-size $SHMSIZE"
 
 # ITS reco options depends on pp or pbpb
 ITSRecOpt=""
@@ -123,9 +125,10 @@ fi
 
 
 if [ "$doreco" == "1" ]; then
+
   echo "Running TPC reco flow"
   #needs TPC digitized data
-  taskwrapper tpcreco.log o2-tpc-reco-workflow $gloOpt --input-type digits --output-type clusters,tracks
+  taskwrapper tpcreco.log o2-tpc-reco-workflow $gloOpt --input-type digits --output-type clusters,tracks,send-clusters-per-sector  --configKeyValues "GPU_rec.maxTrackQPt=20"
   echo "Return status of tpcreco: $?"
 
   echo "Running ITS reco flow"
@@ -141,12 +144,31 @@ if [ "$doreco" == "1" ]; then
   taskwrapper mftreco.log  o2-mft-reco-workflow  $gloOpt
   echo "Return status of mftreco: $?"
 
+  echo "Running MCH reco flow"
+  taskwrapper mchreco.log o2-mch-reco-workflow $gloOpt
+  echo "Return status of mchreco: $?"
+
   echo "Running FT0 reco flow"
   #needs FT0 digitized data
   taskwrapper ft0reco.log o2-ft0-reco-workflow $gloOpt
   echo "Return status of ft0reco: $?"
 
-  echo "Running ITS-TPC macthing flow"
+  echo "Running FDD reco flow"
+  #needs FDD digitized data
+  taskwrapper fddreco.log o2-fdd-reco-workflow $gloOpt
+  echo "Return status of fddreco: $?"
+
+  echo "Running FV0 reco flow"
+  #needs FV0 digitized data
+  taskwrapper fv0reco.log o2-fv0-reco-workflow $gloOpt
+  echo "Return status of fv0reco: $?"
+
+  echo "Running MID reco flow"
+  #needs MID digitized data
+  taskwrapper midreco.log "o2-mid-digits-reader-workflow | o2-mid-reco-workflow $gloOpt"
+  echo "Return status of midreco: $?"
+
+  echo "Running ITS-TPC matching flow"
   #needs results of o2-tpc-reco-workflow, o2-its-reco-workflow and o2-fit-reco-workflow
   taskwrapper itstpcMatch.log o2-tpcits-match-workflow $gloOpt
   echo "Return status of itstpcMatch: $?"
@@ -157,6 +179,11 @@ if [ "$doreco" == "1" ]; then
   echo "Return status of trdTrkltTransf: $?"
   taskwrapper trdMatch.log o2-trd-global-tracking $gloOpt
   echo "Return status of trdTracker: $?"
+
+  echo "Running MFT-MCH matching flow"
+  #needs results of o2-mch-reco-workflow and o2-mft-reco-workflow
+  taskwrapper mftmchMatch.log o2-globalfwd-matcher-workflow $gloOpt
+  echo "Return status of mftmchMatch: $?"
 
   echo "Running TOF reco flow to produce clusters"
   #needs results of TOF digitized data and results of o2-tpcits-match-workflow

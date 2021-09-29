@@ -12,13 +12,13 @@
 #include "Framework/ServiceRegistry.h"
 #include "Framework/ControlService.h"
 #include "Framework/CCDBParamSpec.h"
+#include "Framework/DataRefUtils.h"
 #include "DataFormatsTOF/CalibLHCphaseTOF.h"
 
 #include <chrono>
 #include <thread>
 
 using namespace o2::framework;
-using namespace o2::header;
 
 // This is how you can define your processing in a declarative way
 WorkflowSpec defineDataProcessing(ConfigContext const&)
@@ -26,17 +26,18 @@ WorkflowSpec defineDataProcessing(ConfigContext const&)
   return WorkflowSpec{
     {
       "A",
-      {InputSpec{"somecondition", "TOF", "LHCphase", 0, Lifetime::Condition, {ccdbParamSpec("TOF/LHCphase")}},
+      {InputSpec{"somecondition", "TOF", "LHCphase", 0, Lifetime::Condition, ccdbParamSpec("TOF/LHCphase")},
        InputSpec{"sometimer", "TST", "BAR", 0, Lifetime::Timer, {startTimeParamSpec(1638548475371)}}},
       {OutputSpec{"TST", "A1", 0, Lifetime::Timeframe}},
       AlgorithmSpec{
         adaptStateless([](DataAllocator& outputs, InputRecord& inputs, ControlService& control) {
           auto ref = inputs.get("somecondition");
-          auto header = o2::header::get<o2::header::DataHeader*>(ref.header);
-          if (header->payloadSize != 2048) {
-            LOGP(ERROR, "Wrong size for condition payload (expected {}, found {}", 2048, header->payloadSize);
+          auto payloadSize = DataRefUtils::getPayloadSize(ref);
+          if (payloadSize != 2048) {
+            LOGP(ERROR, "Wrong size for condition payload (expected {}, found {}", 2048, payloadSize);
           }
           auto condition = inputs.get<o2::dataformats::CalibLHCphaseTOF*>("somecondition");
+          LOG(ERROR) << "Condition size" << condition->size();
           for (size_t pi = 0; pi < condition->size(); pi++) {
             LOGP(INFO, "Phase at {} for timestamp {} is {}", pi, condition->timestamp(pi), condition->LHCphase(pi));
           }

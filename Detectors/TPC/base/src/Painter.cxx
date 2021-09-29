@@ -17,10 +17,12 @@
 #include "TAxis.h"
 #include "TH1.h"
 #include "TH2.h"
+#include "TH3.h"
 #include "TH2Poly.h"
 #include "TCanvas.h"
 #include "TLine.h"
 #include "TLatex.h"
+#include "TStyle.h"
 
 #include "DataFormatsTPC/Defs.h"
 #include "TPCBase/ROC.h"
@@ -30,6 +32,13 @@
 #include "TPCBase/CalArray.h"
 #include "TPCBase/Painter.h"
 #include "TPCBase/Utils.h"
+
+// for conversion CalDet to TH3
+#include <deque>
+#include <boost/geometry.hpp>
+#include <boost/geometry/geometries/point_xy.hpp>
+#include <boost/geometry/geometries/polygon.hpp>
+#include "MathUtils/Utils.h"
 
 using namespace o2::tpc;
 
@@ -466,8 +475,9 @@ void painter::fillPoly2D(TH2Poly& h2D, const CalDet<T>& calDet, Side side)
     for (int irow = 0; irow < nrows; ++irow) {
       const int padMax = mapper.getNumberOfPadsInRowROC(roc, irow) - 1;
       for (int ipad = 0; ipad <= padMax; ++ipad) {
-        const auto val = calDet.getValue(roc, irow, (side == Side::A) ? ipad : padMax - ipad); // C-Side is mirrored
-        h2D.SetBinContent(bin++, val);
+        const auto pos = mapper.getPadCentre(PadROCPos(calROC.getPadSubsetNumber(), irow, ipad));
+        const auto val = calDet.getValue(roc, irow, ipad);
+        h2D.Fill(pos.X(), pos.Y(), val);
       }
     }
   }
@@ -572,6 +582,196 @@ void painter::drawSectorsXY(Side side, int sectorLineColor, int sectorTextColor)
     lat.DrawLatex(xText, yText, fmt::format("{}", isector).data());
   }
 }
+
+void painter::drawSectorLocalPadNumberPoly(short padTextColor, float lineScalePS)
+{
+  static const Mapper& mapper = Mapper::instance();
+  const auto coords = getPadCoordinatesSector();
+  TLatex lat;
+  lat.SetTextAlign(12);
+  lat.SetTextSize(0.002f);
+  lat.SetTextColor(padTextColor);
+  gStyle->SetLineScalePS(lineScalePS);
+
+  for (unsigned int iregion = 0; iregion < Mapper::NREGIONS; ++iregion) {
+    const auto padInf = mapper.getPadRegionInfo(iregion);
+    for (unsigned int irow = 0; irow < Mapper::ROWSPERREGION[iregion]; ++irow) {
+      for (unsigned int ipad = 0; ipad < Mapper::PADSPERROW[iregion][irow]; ++ipad) {
+        const GlobalPadNumber padNum = o2::tpc::Mapper::getGlobalPadNumber(irow, ipad, iregion);
+        const auto coordinate = coords[padNum];
+        const float yPos = (coordinate.yVals[0] + coordinate.yVals[2]) / 2;
+        const float xPos = (coordinate.xVals[0] + coordinate.xVals[2]) / 2;
+        lat.DrawLatex(xPos, yPos, Form("%i", ipad));
+      }
+    }
+  }
+}
+
+void painter::drawSectorInformationPoly(short regionLineColor, short rowTextColor)
+{
+  static const Mapper& mapper = Mapper::instance();
+
+  TLatex lat;
+  lat.SetTextColor(rowTextColor);
+  lat.SetTextSize(0.02f);
+  lat.SetTextAlign(12);
+
+  TLine line;
+  line.SetLineColor(regionLineColor);
+
+  std::vector<float> radii(Mapper::NREGIONS + 1);
+  radii.back() = 247;
+  for (unsigned int ireg = 0; ireg < Mapper::NREGIONS; ++ireg) {
+    const auto reg = mapper.getPadRegionInfo(ireg);
+    const float rad = reg.getRadiusFirstRow();
+    radii[ireg] = rad;
+    line.DrawLine(rad, -43, rad, 43);
+  }
+
+  // draw top region information
+  for (unsigned int ireg = 0; ireg < Mapper::NREGIONS; ++ireg) {
+    lat.DrawLatex((radii[ireg] + radii[ireg + 1]) / 2, 45, Form("%i", ireg));
+  }
+
+  lat.SetTextSize(0.002f);
+  lat.SetTextAlign(13);
+  // draw local and global rows
+  const std::array<float, Mapper::NREGIONS> posRow{16.2f, 18.2f, 20.2f, 22.3f, 26.f, 29.f, 33.f, 35.f, 39.f, 42.5f};
+  int globalRow = 0;
+  for (unsigned int ireg = 0; ireg < Mapper::NREGIONS; ++ireg) {
+    const auto reg = mapper.getPadRegionInfo(ireg);
+    const float nRows = reg.getNumberOfPadRows();
+    for (int i = 0; i < nRows; ++i) {
+      const float padHeight = reg.getPadHeight();
+      const float radiusFirstRow = reg.getRadiusFirstRow();
+      const float xPos = radiusFirstRow + (i + 0.5f) * padHeight;
+      const float yPos = posRow[ireg];
+      // row in region
+      lat.DrawLatex(xPos, yPos, Form("%i", i));
+      lat.DrawLatex(xPos, -yPos, Form("%i", i));
+      // row in sector
+      const float offs = 0.5f;
+      lat.DrawLatex(xPos, yPos + offs, Form("%i", globalRow));
+      lat.DrawLatex(xPos, -yPos - offs, Form("%i", globalRow++));
+    }
+  }
+}
+
+template <typename DataT>
+TH3F painter::convertCalDetToTH3(const std::vector<CalDet<DataT>>& calDet, const bool norm, const int nRBins, const float rMin, const float rMax, const int nPhiBins, const float zMax)
+{
+  const int nZBins = calDet.size();
+  TH3F histConvSum("hisCalDet", "hisCalDet", nPhiBins, 0, o2::constants::math::TwoPI, nRBins, rMin, rMax, 2 * nZBins, -zMax, zMax); // final converted histogram
+  TH3F histConvWeight("histConvWeight", "histConvWeight", nPhiBins, 0, o2::constants::math::TwoPI, nRBins, rMin, rMax, 2 * nZBins, -zMax, zMax);
+
+  typedef boost::geometry::model::polygon<boost::geometry::model::d2::point_xy<float>> polygon;
+  const auto coords = o2::tpc::painter::getPadCoordinatesSector(); // coordinates of the pads in one sector
+
+  // create polygons per pad of the input histogram
+  std::vector<polygon> geoBin;
+  const int nGeoBins = nPhiBins * nRBins;
+  geoBin.reserve(nGeoBins);
+  for (int iphi = 1; iphi <= nPhiBins; ++iphi) {
+    const double phiLow = histConvSum.GetXaxis()->GetBinLowEdge(iphi);
+    const double phiUp = histConvSum.GetXaxis()->GetBinUpEdge(iphi);
+    for (int ir = 1; ir <= nRBins; ++ir) {
+      const double rLow = histConvSum.GetYaxis()->GetBinLowEdge(ir);
+      const double rUp = histConvSum.GetYaxis()->GetBinUpEdge(ir);
+      const double xPos1 = rLow * std::cos(phiLow);
+      const double yPos1 = rLow * std::sin(phiLow);
+      const double xPos2 = rLow * std::cos(phiUp);
+      const double yPos2 = rLow * std::sin(phiUp);
+      const double xPos4 = rUp * std::cos(phiLow);
+      const double yPos4 = rUp * std::sin(phiLow);
+      const double xPos3 = rUp * std::cos(phiUp);
+      const double yPos3 = rUp * std::sin(phiUp);
+      // round the values due to problems in intersection in boost with polygons close to each other
+      boost::geometry::read_wkt(Form("POLYGON((%.4f %.4f, %.4f %.4f, %.4f %.4f, %.4f %.4f, %.4f %.4f))", xPos1, yPos1, xPos2, yPos2, xPos3, yPos3, xPos4, yPos4, xPos1, yPos1), geoBin.emplace_back());
+      boost::geometry::correct(geoBin.back());
+    }
+  }
+
+  for (unsigned int sector = 0; sector < Mapper::NSECTORS / 2; ++sector) {
+    for (unsigned int region = 0; region < Mapper::NREGIONS; ++region) {
+      const unsigned int rowsRegion = o2::tpc::Mapper::ROWSPERREGION[region];
+      for (unsigned int iRow = 0; iRow < rowsRegion; ++iRow) {
+        const unsigned int padsInRow = o2::tpc::Mapper::PADSPERROW[region][iRow] - 1;
+        for (unsigned int iPad = 0; iPad <= padsInRow; ++iPad) {
+          const GlobalPadNumber padNum = Mapper::getGlobalPadNumber(iRow, iPad, region);
+
+          const float angDeg = 10.f + sector * 20;
+          auto coordinate = coords[padNum];
+          coordinate.rotate(angDeg);
+
+          const std::array<double, 2> radiusPadCoord{
+            std::sqrt(coordinate.xVals[0] * coordinate.xVals[0] + coordinate.yVals[0] * coordinate.yVals[0]),
+            std::sqrt(coordinate.xVals[2] * coordinate.xVals[2] + coordinate.yVals[2] * coordinate.yVals[2]),
+          };
+
+          std::array<float, 4> phiPadCoord{
+            static_cast<float>(std::atan2(coordinate.yVals[0], coordinate.xVals[0])),
+            static_cast<float>(std::atan2(coordinate.yVals[1], coordinate.xVals[1])),
+            static_cast<float>(std::atan2(coordinate.yVals[2], coordinate.xVals[2])),
+            static_cast<float>(std::atan2(coordinate.yVals[3], coordinate.xVals[3]))};
+
+          for (auto& phi : phiPadCoord) {
+            o2::math_utils::bringTo02PiGen(phi);
+          }
+
+          // bins of the histogram of the edges of the pad
+          const int binRBottomStart = std::clamp(histConvSum.GetYaxis()->FindBin(radiusPadCoord[0]) - 1, 1, nRBins);
+          const int binRTopEnd = std::clamp(histConvSum.GetYaxis()->FindBin(radiusPadCoord[1]) + 1, 1, nRBins);
+          int binPhiStart = std::min(histConvSum.GetXaxis()->FindBin(phiPadCoord[0]), histConvSum.GetXaxis()->FindBin(phiPadCoord[1]));
+          std::clamp(binPhiStart - 1, 1, nPhiBins);
+          int binPhiEnd = std::max(histConvSum.GetXaxis()->FindBin(phiPadCoord[2]), histConvSum.GetXaxis()->FindBin(phiPadCoord[3]));
+          std::clamp(binPhiEnd + 1, 1, nPhiBins);
+
+          // define boost geoemtry object
+          polygon geoPad;
+          boost::geometry::read_wkt(Form("POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))", coordinate.xVals[0], coordinate.yVals[0], coordinate.xVals[1], coordinate.yVals[1], coordinate.xVals[2], coordinate.yVals[2], coordinate.xVals[3], coordinate.yVals[3], coordinate.xVals[0], coordinate.yVals[0]), geoPad);
+          boost::geometry::correct(geoPad);
+
+          for (int binR = binRBottomStart; binR <= binRTopEnd; ++binR) {
+            for (int binPhi = binPhiStart; binPhi <= binPhiEnd; ++binPhi) {
+              const int ind = (binPhi - 1) * nRBins + binR - 1;
+
+              std::deque<polygon> output;
+              boost::geometry::intersection(geoPad, geoBin[ind], output);
+              if (output.empty()) {
+                continue;
+              }
+              const double area = boost::geometry::area(output.front());
+              const double fac = area * Mapper::PADAREA[region];
+
+              for (int iSide = 0; iSide < 2; ++iSide) {
+                const Side side = iSide == 0 ? Side::C : Side::A;
+                const unsigned int iCRU = side == Side::A ? (sector * Mapper::NREGIONS + region) : ((sector + Mapper::NSECTORS / 2) * Mapper::NREGIONS + region);
+                const CRU cru(iCRU);
+
+                for (int iz = 0; iz < nZBins; ++iz) {
+                  const auto val = calDet[iz].getValue(cru, iRow, (side == Side::A) ? iPad : padsInRow - iPad);
+                  const int zBin = side == Side::A ? (nZBins + iz + 1) : (nZBins - iz);
+                  const auto globBin = histConvSum.GetBin(binPhi, binR, zBin);
+                  histConvSum.AddBinContent(globBin, val * fac);
+                  if (norm) {
+                    histConvWeight.AddBinContent(globBin, fac);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (norm) {
+    histConvSum.Divide(&histConvWeight);
+  }
+
+  return histConvSum;
+}
+
 // ===| explicit instantiations |===============================================
 // this is required to force the compiler to create instances with the types
 // we usually would like to deal with
@@ -607,3 +807,5 @@ template std::vector<TCanvas*> painter::makeSummaryCanvases<bool>(const CalDet<b
 template TCanvas* painter::draw<bool>(const CalArray<bool>& calArray);
 template TH2* painter::getHistogram2D<bool>(const CalDet<bool>& calDet, Side side);
 template TH2* painter::getHistogram2D<bool>(const CalArray<bool>& calArray);
+
+template TH3F painter::convertCalDetToTH3<float>(const std::vector<CalDet<float>>&, const bool, const int, const float, const float, const int, const float);

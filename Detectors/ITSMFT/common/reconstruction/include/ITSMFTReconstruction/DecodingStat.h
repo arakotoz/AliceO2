@@ -24,6 +24,7 @@ namespace o2
 {
 namespace itsmft
 {
+class ChipPixelData;
 
 struct ChipStat {
 
@@ -39,7 +40,9 @@ struct ChipStat {
     TruncatedLondData,    // Data was truncated in the LongData record
     WrongDataLongPattern, // LongData pattern has highest bit set
     NoDataFound,          // Region is not followed by Short or Long data
-    UnknownWord,          // Unknow word was seen
+    UnknownWord,          // Unknown word was seen
+    RepeatingPixel,       // Same pixel fired more than once
+    WrongRow,             // Non-existing row decoded
     NErrorsDefined
   };
 
@@ -55,7 +58,9 @@ struct ChipStat {
     "Data truncated after LongData",                // TruncatedLondData
     "LongData pattern has highest bit set",         // WrongDataLongPattern
     "Region is not followed by Short or Long data", // NoDataFound
-    "Unknown word"                                  // UnknownWord
+    "Unknown word",                                 // UnknownWord
+    "Same pixel fired multiple times",              // RepeatingPixel
+    "Non-existing row decoded"                      // WrongRow
   };
 
   uint16_t id = -1;
@@ -71,7 +76,8 @@ struct ChipStat {
   }
 
   uint32_t getNErrors() const;
-  void addErrors(uint32_t mask, uint16_t chID);
+  void addErrors(uint32_t mask, uint16_t chID, int verbosity);
+  void addErrors(const ChipPixelData& d, int verbosity);
   void print(bool skipNoErr = true, const std::string& pref = "FEEID") const;
 
   ClassDefNV(ChipStat, 1);

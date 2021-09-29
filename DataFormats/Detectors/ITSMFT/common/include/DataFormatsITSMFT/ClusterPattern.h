@@ -50,9 +50,9 @@ class ClusterPattern
   ClusterPattern();
   /// Standard constructor
   ClusterPattern(int nRow, int nCol, const unsigned char patt[MaxPatternBytes]);
-  /// Constructor from cluster patterns
+
   template <class iterator>
-  ClusterPattern(iterator& pattIt)
+  void acquirePattern(iterator& pattIt)
   {
     mBitmap[0] = *pattIt++;
     mBitmap[1] = *pattIt++;
@@ -64,10 +64,18 @@ class ClusterPattern
     memcpy(&mBitmap[2], &(*pattIt), nBytes);
     pattIt += nBytes;
   }
+
+  /// Constructor from cluster patterns
+  template <class iterator>
+  ClusterPattern(iterator& pattIt)
+  {
+    acquirePattern(pattIt);
+  }
+
   /// Maximum number of bytes for the cluster puttern + 2 bytes respectively for the number of rows and columns of the bounding box
   static constexpr int kExtendedPatternBytes = MaxPatternBytes + 2;
   /// Returns the pattern
-  std::array<unsigned char, kExtendedPatternBytes> getPattern() const { return mBitmap; }
+  const std::array<unsigned char, kExtendedPatternBytes>& getPattern() const { return mBitmap; }
   /// Returns a specific byte of the pattern
   unsigned char getByte(int n) const;
   /// Returns the number of rows
@@ -76,6 +84,8 @@ class ClusterPattern
   int getColumnSpan() const { return (int)mBitmap[1]; }
   /// Returns the number of bytes used for the pattern
   int getUsedBytes() const;
+  /// Returns the number of fired pixels
+  int getNPixels() const;
   /// Prints the pattern
   friend std::ostream& operator<<(std::ostream& os, const ClusterPattern& top);
   /// Sets the pattern
@@ -85,7 +95,35 @@ class ClusterPattern
   /// Static: Compute pattern's COG position. Returns the number of fired pixels
   static int getCOG(int rowSpan, int colSpan, const unsigned char patt[MaxPatternBytes], float& xCOG, float& zCOG);
   /// Compute pattern's COG position. Returns the number of fired pixels
-  int getCOG(float& xCOG, float& zCOG) const;
+  int getCOG(float& xCOG, float& zCOG) const { return ClusterPattern::getCOG(getRowSpan(), getColumnSpan(), mBitmap.data() + 2, xCOG, zCOG); }
+
+  bool isSet(int row, int col) const
+  {
+    const auto bmap = mBitmap.data() + 2;
+    int pos = row * getColumnSpan() + col;
+    return pos < getColumnSpan() * getRowSpan() && (bmap[pos >> 3] & (0x1 << (7 - (pos % 8))));
+  }
+
+  void resetPixel(int row, int col)
+  {
+    const auto bmap = mBitmap.data() + 2;
+    int pos = row * getColumnSpan() + col;
+    if (pos < getColumnSpan() * getRowSpan()) {
+      bmap[pos >> 3] &= 0xff & ~(0x1 << (7 - (pos % 8)));
+    }
+  }
+
+  void setPixel(int row, int col)
+  {
+    const auto bmap = mBitmap.data() + 2;
+    int pos = row * getColumnSpan() + col;
+    if (pos < getColumnSpan() * getRowSpan()) {
+      bmap[pos >> 3] |= 0x1 << (7 - (pos % 8));
+    }
+  }
+
+  template <typename Processor>
+  void process(Processor procRowCol);
 
   friend ClusterTopology;
   friend TopologyDictionary;
@@ -104,6 +142,37 @@ class ClusterPattern
 
   ClassDefNV(ClusterPattern, 1);
 };
+
+template <typename Processor>
+void ClusterPattern::process(Processor procRowCol)
+{
+  auto cspan = getColumnSpan(), rspan = getRowSpan();
+  uint32_t nBits = cspan * rspan;
+  uint32_t nBytes = (nBits >> 3) + (nBits % 8 != 0);
+  const auto bmap = mBitmap.data() + 2;
+  uint16_t ic = 0, ir = 0;
+  for (unsigned int i = 0; i < nBytes; i++) {
+    int s = 128; // 0b10000000
+    while (s > 0) {
+      if ((bmap[i] & s) != 0) {
+        procRowCol(ir, ic);
+      }
+      ic++;
+      s >>= 1;
+      if (uint32_t(ir + 1) * ic == nBits) {
+        break;
+      }
+      if (ic == cspan) {
+        ic = 0;
+        ir++;
+      }
+    }
+    if (uint32_t(ir + 1) * ic == nBits) {
+      break;
+    }
+  }
+}
+
 } // namespace itsmft
 } // namespace o2
 #endif /* ALICEO2_ITS_CLUSTERPATTERN_H */

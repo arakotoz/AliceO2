@@ -43,8 +43,8 @@ Word 1  |  link 7 error flags   |   link 6 error flags  |  link 5 error flags   
         -------------------------------------------------------------------------------------------------
 Word 2  |  link 11 error flags  |   link 10 error flags |  link 9 error flags   |  link 8 error flags   |
         -------------------------------------------------------------------------------------------------
-Word 2  |  link 12 error flags  |  link 13 error flags  |  link 14 error flags  |      reserved 2       |
-        -------------------------------------------------------------------------------------------------
+Word 2  |      reserved 2       |  link 14 error flags  |  link 13 error flags  |  link 12 error flags  |
+         ------------------------------------------------------------------------------------------------
 Word 3  |                                          reserved 3                                           |
         -------------------------------------------------------------------------------------------------
 Word 3  |                                          reserved 4                                           |
@@ -229,9 +229,9 @@ struct DigitHCHeader {
   // uint32_t:   00000000000000000000000000000000
   //
   union { // section 15.6.1 in tdp
-    uint32_t word0;
+    uint32_t word;
     struct {
-      uint32_t res0 : 2;
+      uint32_t res : 2;
       uint32_t side : 1;
       uint32_t stack : 3;
       uint32_t layer : 3;
@@ -242,27 +242,31 @@ struct DigitHCHeader {
       uint32_t version : 1;
     } __attribute__((__packed__));
   };
-
+};
+//The next hcheaders are all optional, there can be 8, we only have 3 for now.
+//They can all be distinguished by their res.
+struct DigitHCHeader1 {
   //             10987654321098765432109876543210
   // uint32_t:   00000000000000000000000000000000
   //
   union { //section 15.6.2 in tdp
-    uint32_t word1;
+    uint32_t word;
     struct {
-      uint32_t res1 : 2;
+      uint32_t res : 2;
       uint32_t ptrigcount : 4;
       uint32_t ptrigphase : 4;
       uint32_t bunchcrossing : 16;
       uint32_t numtimebins : 6;
     } __attribute__((__packed__));
   };
-#ifdef DIGITALHCOPTIONALHEADER
+};
+struct DigitHCHeader2 {
   //             10987654321098765432109876543210
   // uint32_t:   00000000000000000000000000000000
   union { //section 15.6.3 in tdp
-    uint32_t word2;
+    uint32_t word;
     struct {
-      uint32_t res2 : 6;
+      uint32_t res : 6;
       uint32_t dfilter : 6;
       uint32_t rfilter : 1;
       uint32_t nlfilter : 1;
@@ -272,17 +276,18 @@ struct DigitHCHeader {
       uint32_t pfilter : 6;
     } __attribute__((__packed__));
   };
+};
+struct DigitHCHeader3 {
   //             10987654321098765432109876543210
   // uint32_t:   00000000000000000000000000000000
   union { //section 15.6.4 in tdp
-    uint32_t word3;
+    uint32_t word;
     struct {
-      uint32_t res3 : 6;
+      uint32_t res : 6;
       uint32_t svnrver : 13; //readout program svn revision
       uint32_t svnver : 13;  //assember programm svn revision
     } __attribute__((__packed__));
   };
-#endif
 };
 
 struct DigitMCMHeader {
@@ -307,10 +312,10 @@ struct DigitMCMADCMask {
   union {
     uint32_t word; //MCM ADC MASK header
     struct {
-      uint32_t n : 2; // unused always 0x3
-      uint32_t c : 5; // unused always 0x1f
+      uint32_t j : 4; // 0xc
       uint32_t adcmask : 21;
-      uint32_t j : 4; // unused always 0xc
+      uint32_t c : 5; // ~(number of bits set in adcmask)
+      uint32_t n : 2; // 0b01
     } __attribute__((__packed__));
   };
 };
@@ -440,8 +445,11 @@ std::ostream& operator<<(std::ostream& stream, const HalfCRUHeader& halfcru);
 bool trackletMCMHeaderSanityCheck(o2::trd::TrackletMCMHeader& header);
 bool trackletHCHeaderSanityCheck(o2::trd::TrackletHCHeader& header);
 bool digitMCMHeaderSanityCheck(o2::trd::DigitMCMHeader* header);
+bool digitMCMADCMaskSanityCheck(o2::trd::DigitMCMADCMask& mask, int numberofbitsset);
+bool digitMCMWordSanityCheck(o2::trd::DigitMCMData* word, int adcchannel);
 void printDigitMCMHeader(o2::trd::DigitMCMHeader& header);
-void printDigitHCHeader(o2::trd::DigitHCHeader& header);
+int getDigitHCHeaderWordType(uint32_t word);
+void printDigitHCHeader(o2::trd::DigitHCHeader& header, uint32_t headers[3]);
 DigitMCMADCMask buildBlankADCMask();
 int getNumberofTracklets(o2::trd::TrackletMCMHeader& header);
 void setNumberOfTrackletsInHeader(o2::trd::TrackletMCMHeader& header, int numberoftracklets);

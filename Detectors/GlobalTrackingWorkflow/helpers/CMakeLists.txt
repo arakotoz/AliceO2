@@ -16,11 +16,15 @@ o2_add_library(GlobalTrackingWorkflowHelpers
                PRIVATE_LINK_LIBRARIES O2::GlobalTracking # We link all the workflow libs etc as PRIVATE, such that we do not expose tons of headers automatically
                                       O2::ITSWorkflow
                                       O2::ITSMFTWorkflow
+                                      O2::MCHWorkflow
                                       O2::MFTWorkflow
                                       O2::TPCWorkflow
                                       O2::GlobalTrackingWorkflowReaders
                                       O2::TOFWorkflowIO
                                       O2::FT0Workflow
+                                      O2::FV0Workflow
+                                      O2::FDDWorkflow
+                                      O2::ZDCWorkflow
                                       O2::ITSMFTWorkflow
                                       O2::TRDWorkflowIO
                                       O2::TPCReaderWorkflow
@@ -30,4 +34,4 @@ o2_add_executable(track-cluster-reader
         COMPONENT_NAME global
         TARGETVARNAME targetName
         SOURCES src/GlobalTrackClusterReader.cxx
-        PUBLIC_LINK_LIBRARIES O2::GlobalTrackingWorkflowHelpers)
+        PUBLIC_LINK_LIBRARIES O2::GlobalTrackingWorkflowHelpers O2::DetectorsRaw)

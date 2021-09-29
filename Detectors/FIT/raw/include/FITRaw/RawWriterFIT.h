@@ -27,6 +27,7 @@
 #include "DetectorsRaw/RawFileWriter.h"
 #include "CommonUtils/StringUtils.h"
 #include <gsl/span>
+#include <fmt/format.h>
 
 namespace o2
 {
@@ -47,9 +48,12 @@ class RawWriterFIT
   RawWriterFIT() = default;
   ~RawWriterFIT() = default;
   o2::raw::RawFileWriter& getWriter() { return mWriter; }
-  void setFilePerLink(bool makeFilePerLink) { mOutputPerLink = makeFilePerLink; }
+  void setFileFor(const std::string& fileFor) { mFileFor = fileFor; }
+  void setFlpName(const std::string& flpName) { mFlpName = flpName; }
   bool getFilePerLink() const { return mOutputPerLink; }
   void setVerbosity(int verbosityLevel) { mVerbosity = verbosityLevel; }
+  void setCCDBurl(const std::string& ccdbPath) { LookupTable_t::setCCDBurl(ccdbPath); }
+  void setLUTpath(const std::string& lutPath) { LookupTable_t::setLUTpath(lutPath); }
   int getVerbosity() const { return mVerbosity; }
   int carryOverMethod(const header::RDHAny* rdh, const gsl::span<char> data,
                       const char* ptr, int maxSize, int splitID,
@@ -66,11 +70,22 @@ class RawWriterFIT
     mMapTopo2FEEmetadata.clear();
     mMapTopo2FEEmetadata = LookupTable_t::Instance().template makeMapFEEmetadata<o2::header::RAWDataHeader, RDHUtils>();
     //Preparing filenames
-    std::string detNameLowCase = LookupTable_t::sDetectorName;
-    std::for_each(detNameLowCase.begin(), detNameLowCase.end(), [](char& c) { c = ::tolower(c); });
+    std::string detName = LookupTable_t::sDetectorName;
     auto makeFilename = [&](const o2::header::RAWDataHeader& rdh) -> std::string {
-      std::string maskName = detNameLowCase + "_link";
-      std::string outputFilename = mOutputPerLink ? o2::utils::Str::concat_string(outputDir, maskName, std::to_string(RDHUtils::getFEEID(rdh)), ".raw") : o2::utils::Str::concat_string(outputDir, detNameLowCase + ".raw");
+      std::string maskName{};
+      if (mFileFor != "all") { // single file for all links
+        maskName += fmt::format("_{}", mFlpName);
+        if (mFileFor != "flp") {
+          maskName += fmt::format("_cru{}_{}", RDHUtils::getCRUID(rdh), RDHUtils::getEndPointID(rdh));
+          if (mFileFor != "cru") {
+            maskName += fmt::format("_lnk{}_feeid{}", RDHUtils::getLinkID(rdh), RDHUtils::getFEEID(rdh));
+            if (mFileFor != "link") {
+              throw std::runtime_error("invalid option provided for file grouping");
+            }
+          }
+        }
+      }
+      std::string outputFilename = o2::utils::Str::concat_string(outputDir, detName, maskName, ".raw");
       return outputFilename;
     };
     //Registering links
@@ -101,7 +116,11 @@ class RawWriterFIT
         const auto& topo = dataBlockPair.first;
         const auto& dataBlock = dataBlockPair.second;
         const auto itRdh = mMapTopo2FEEmetadata.find(topo);
-        assert(itRdh != mMapTopo2FEEmetadata.end());
+        if (itRdh == mMapTopo2FEEmetadata.end()) {
+          LOG(WARNING) << "No CRU entry in map! Data block: ";
+          dataBlock.print();
+          continue;
+        }
         if (mVerbosity > 0) {
           dataBlock.print();
         }
@@ -114,7 +133,11 @@ class RawWriterFIT
       const auto& topo = dataBlockPair.first;
       const auto& dataBlock = dataBlockPair.second;
       const auto itRdh = mMapTopo2FEEmetadata.find(topo);
-      assert(itRdh != mMapTopo2FEEmetadata.end());
+      if (itRdh == mMapTopo2FEEmetadata.end()) {
+        LOG(WARNING) << "No CRU entry in map! Data block: ";
+        dataBlock.print();
+        continue;
+      }
       if (mVerbosity > 0) {
         dataBlock.print();
       }
@@ -125,6 +148,8 @@ class RawWriterFIT
   }
 
   o2::raw::RawFileWriter mWriter{LookupTable_t::sDetectorName};
+  std::string mFlpName{};
+  std::string mFileFor{};
   std::map<Topo_t, o2::header::RAWDataHeader> mMapTopo2FEEmetadata;
   //const o2::raw::HBFUtils& mSampler = o2::raw::HBFUtils::Instance();
   bool mOutputPerLink = false;

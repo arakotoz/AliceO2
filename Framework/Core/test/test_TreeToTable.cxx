@@ -35,11 +35,14 @@ BOOST_AUTO_TEST_CASE(TreeToTableConversion)
   Float_t px, py, pz;
   Double_t random;
   Int_t ev;
+  uint8_t b;
   const Int_t nelem = 9;
   Double_t ij[nelem] = {0};
+  float xyzw[96];
+  memset(xyzw, 1, 96 * 4);
   TString leaflist = Form("ij[%i]/D", nelem);
 
-  Int_t ncols = 8;
+  Int_t ncols = 10;
   t1.Branch("ok", &ok, "ok/O");
   t1.Branch("px", &px, "px/F");
   t1.Branch("py", &py, "py/F");
@@ -48,6 +51,8 @@ BOOST_AUTO_TEST_CASE(TreeToTableConversion)
   t1.Branch("ev", &ev, "ev/I");
   t1.Branch("ij", ij, leaflist.Data());
   t1.Branch("tests", ts, "tests[5]/O");
+  t1.Branch("xyzw", xyzw, "xyzw[96]/F");
+  t1.Branch("small", &b, "small/b");
 
   //fill the tree
   int ntruein[2] = {0};
@@ -60,6 +65,7 @@ BOOST_AUTO_TEST_CASE(TreeToTableConversion)
     pz = px * px + py * py;
     random = gRandom->Rndm();
     ev = i + 1;
+    b = i % 3;
     for (Int_t jj = 0; jj < nelem; jj++) {
       ij[jj] = i + 100 * jj;
     }
@@ -76,12 +82,7 @@ BOOST_AUTO_TEST_CASE(TreeToTableConversion)
 
   // Create an arrow table from this.
   TreeToTable tr2ta;
-  auto stat = tr2ta.addAllColumns(&t1);
-  if (!stat) {
-    LOG(ERROR) << "Table was not created!";
-    return;
-  }
-
+  tr2ta.addAllColumns(&t1);
   tr2ta.fill(&t1);
   auto table = tr2ta.finalize();
   f1.Close();
@@ -90,14 +91,28 @@ BOOST_AUTO_TEST_CASE(TreeToTableConversion)
   BOOST_REQUIRE_EQUAL(table->Validate().ok(), true);
   BOOST_REQUIRE_EQUAL(table->num_rows(), ndp);
   BOOST_REQUIRE_EQUAL(table->num_columns(), ncols);
-  BOOST_REQUIRE_EQUAL(table->column(0)->type()->id(), arrow::boolean()->id());
-  BOOST_REQUIRE_EQUAL(table->column(1)->type()->id(), arrow::float32()->id());
-  BOOST_REQUIRE_EQUAL(table->column(2)->type()->id(), arrow::float32()->id());
-  BOOST_REQUIRE_EQUAL(table->column(3)->type()->id(), arrow::float32()->id());
-  BOOST_REQUIRE_EQUAL(table->column(4)->type()->id(), arrow::float64()->id());
-  BOOST_REQUIRE_EQUAL(table->column(5)->type()->id(), arrow::int32()->id());
-  BOOST_REQUIRE_EQUAL(table->column(6)->type()->id(), arrow::fixed_size_list(arrow::float64(), nelem)->id());
-  BOOST_REQUIRE_EQUAL(table->column(7)->type()->id(), arrow::fixed_size_list(arrow::boolean(), 5)->id());
+
+  BOOST_REQUIRE_EQUAL(table->column(0)->type()->id(), arrow::Type::BOOL);
+  BOOST_REQUIRE_EQUAL(table->column(1)->type()->id(), arrow::Type::FLOAT);
+  BOOST_REQUIRE_EQUAL(table->column(2)->type()->id(), arrow::Type::FLOAT);
+  BOOST_REQUIRE_EQUAL(table->column(3)->type()->id(), arrow::Type::FLOAT);
+  BOOST_REQUIRE_EQUAL(table->column(4)->type()->id(), arrow::Type::DOUBLE);
+  BOOST_REQUIRE_EQUAL(table->column(5)->type()->id(), arrow::Type::INT32);
+  BOOST_REQUIRE_EQUAL(table->column(6)->type()->id(), arrow::Type::FIXED_SIZE_LIST);
+  BOOST_REQUIRE_EQUAL(table->column(7)->type()->id(), arrow::Type::FIXED_SIZE_LIST);
+  BOOST_REQUIRE_EQUAL(table->column(8)->type()->id(), arrow::Type::FIXED_SIZE_LIST);
+  BOOST_REQUIRE_EQUAL(table->column(9)->type()->id(), arrow::Type::UINT8);
+
+  BOOST_REQUIRE(table->column(0)->type()->Equals(arrow::boolean()));
+  BOOST_REQUIRE(table->column(1)->type()->Equals(arrow::float32()));
+  BOOST_REQUIRE(table->column(2)->type()->Equals(arrow::float32()));
+  BOOST_REQUIRE(table->column(3)->type()->Equals(arrow::float32()));
+  BOOST_REQUIRE(table->column(4)->type()->Equals(arrow::float64()));
+  BOOST_REQUIRE(table->column(5)->type()->Equals(arrow::int32()));
+  BOOST_REQUIRE(table->column(6)->type()->Equals(arrow::fixed_size_list(arrow::float64(), nelem)));
+  BOOST_REQUIRE(table->column(7)->type()->Equals(arrow::fixed_size_list(arrow::boolean(), 5)));
+  BOOST_REQUIRE(table->column(8)->type()->Equals(arrow::fixed_size_list(arrow::float32(), 96)));
+  BOOST_REQUIRE(table->column(9)->type()->Equals(arrow::uint8()));
 
   // count number of rows with ok==true
   int ntrueout = 0;
@@ -127,9 +142,9 @@ BOOST_AUTO_TEST_CASE(TreeToTableConversion)
   BOOST_REQUIRE_EQUAL(ntruein[1], ntrueout);
 
   // save table as tree
-  TFile* f2 = new TFile("table2tree.root", "RECREATE");
+  TFile* f2 = TFile::Open("table2tree.root", "RECREATE");
   TableToTree ta2tr(table, f2, "mytree");
-  stat = ta2tr.addAllBranches();
+  ta2tr.addAllBranches();
 
   auto t2 = ta2tr.process();
   auto br = (TBranch*)t2->GetBranch("ok");

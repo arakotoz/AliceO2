@@ -17,6 +17,8 @@ o2_add_library(CommonUtils
                        src/ConfigurableParamHelper.cxx src/ConfigurableParam.cxx src/RootSerializableKeyValueStore.cxx
                        src/KeyValParam.cxx
                        src/FileSystemUtils.cxx
+                       src/FIFO.cxx
+                       src/FileFetcher.cxx
                PUBLIC_LINK_LIBRARIES ROOT::Hist ROOT::Tree Boost::iostreams O2::CommonDataFormat O2::Headers
                                      FairLogger::FairLogger)
 
@@ -25,7 +27,6 @@ o2_target_root_dictionary(CommonUtils
                                   include/CommonUtils/TreeStreamRedirector.h
                                   include/CommonUtils/RootChain.h
                                   include/CommonUtils/BoostSerializer.h
-                                  include/CommonUtils/BoostHistogramUtils.h
                                   include/CommonUtils/ShmManager.h
                                   include/CommonUtils/RngHelper.h
                                   include/CommonUtils/StringUtils.h
@@ -36,6 +37,7 @@ o2_target_root_dictionary(CommonUtils
                                   include/CommonUtils/ConfigurationMacroHelper.h
                                   include/CommonUtils/RootSerializableKeyValueStore.h
                                   include/CommonUtils/KeyValParam.h
+                                  include/CommonUtils/FileFetcher.h
         )
 
 o2_add_test(TreeStream

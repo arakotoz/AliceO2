@@ -9,9 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#include <TSystem.h>
 #include <TTree.h>
-#include <TSystem.h>
 #include <cassert>
 
 #include "FairLogger.h"
@@ -80,54 +78,46 @@ void MatchTPCITS::run(const o2::globaltracking::RecoContainer& inp)
   mStartIR = inp.startIR;
   updateTimeDependentParams();
 
-  ProcInfo_t procInfoStart, procInfoStop;
-  gSystem->GetProcInfo(&procInfoStart);
-  constexpr uint64_t kMB = 1024 * 1024;
-  LOGF(info, "Memory (GB) at entrance: RSS: %.3f VMem: %.3f\n", float(procInfoStart.fMemResident) / kMB, float(procInfoStart.fMemVirtual) / kMB);
-
   mTimer[SWTot].Start(false);
 
   clear();
+  while (1) {
+    if (!prepareITSData() || !prepareTPCData() || !prepareFITData()) {
+      break;
+    }
 
-  if (!prepareITSData() || !prepareTPCData() || !prepareFITData()) {
-    return;
-  }
+    mTimer[SWDoMatching].Start(false);
+    for (int sec = o2::constants::math::NSectors; sec--;) {
+      doMatching(sec);
+    }
+    mTimer[SWDoMatching].Stop();
+    if (0) { // enabling this creates very verbose output
+      mTimer[SWTot].Stop();
+      printCandidatesTPC();
+      printCandidatesITS();
+      mTimer[SWTot].Start(false);
+    }
 
-  mTimer[SWDoMatching].Start(false);
-  for (int sec = o2::constants::math::NSectors; sec--;) {
-    doMatching(sec);
-  }
-  mTimer[SWDoMatching].Stop();
-  if (0) { // enabling this creates very verbose output
-    mTimer[SWTot].Stop();
-    printCandidatesTPC();
-    printCandidatesITS();
-    mTimer[SWTot].Start(false);
-  }
+    selectBestMatches();
 
-  selectBestMatches();
+    refitWinners();
 
-  refitWinners();
-
-  if (mUseFT0 && Params::Instance().runAfterBurner) {
-    runAfterBurner();
-  }
+    if (mUseFT0 && Params::Instance().runAfterBurner) {
+      runAfterBurner();
+    }
 
 #ifdef _ALLOW_DEBUG_TREES_
-  if (mDBGOut && isDebugFlag(WinnerMatchesTree)) {
-    dumpWinnerMatches();
-  }
+    if (mDBGOut && isDebugFlag(WinnerMatchesTree)) {
+      dumpWinnerMatches();
+    }
 #endif
-
-  gSystem->GetProcInfo(&procInfoStop);
+    break;
+  }
   mTimer[SWTot].Stop();
 
   for (int i = 0; i < NStopWatches; i++) {
     LOGF(INFO, "Timing for %15s: Cpu: %.3e Real: %.3e s in %d slots of TF#%d", TimerName[i], mTimer[i].CpuTime(), mTimer[i].RealTime(), mTimer[i].Counter() - 1, mTFCount);
   }
-  LOGF(INFO, "Memory (GB) at exit: RSS: %.3f VMem: %.3f", float(procInfoStop.fMemResident) / kMB, float(procInfoStop.fMemVirtual) / kMB);
-  LOGF(INFO, "Memory increment: RSS: %.3f VMem: %.3f", float(procInfoStop.fMemResident - procInfoStart.fMemResident) / kMB,
-       float(procInfoStop.fMemVirtual - procInfoStart.fMemVirtual) / kMB);
   mTFCount++;
 }
 
@@ -427,6 +417,11 @@ bool MatchTPCITS::prepareTPCData()
     if constexpr (isITSTrack<decltype(trk)>()) {
       // do nothing, ITS tracks will be processed in a direct loop over ROFs
     }
+    if constexpr (!std::is_base_of_v<o2::track::TrackParCov, std::decay_t<decltype(trk)>>) {
+      return true;
+    } else if (std::abs(trk.getQ2Pt()) > mMinTPCTrackPtInv) {
+      return true;
+    }
     if constexpr (isTPCTrack<decltype(trk)>()) {
       // unconstrained TPC track, with t0 = TrackTPC.getTime0+0.5*(DeltaFwd-DeltaBwd) and terr = 0.5*(DeltaFwd+DeltaBwd) in TimeBins
       if (!this->mSkipTPCOnly) {
@@ -569,7 +564,6 @@ bool MatchTPCITS::prepareITSData()
       mITSTrackROFContMapping[irofCont] = irof;
     }
 
-    int cluROFOffset = mITSClusterROFRec[irof].getFirstEntry(); // clusters of this ROF start at this offset
     mITSROFTimes.emplace_back(tMin, tMax);                      // ITS ROF min/max time
 
     for (int sec = o2::constants::math::NSectors; sec--;) {         // start of sector's tracks for this ROF
@@ -580,7 +574,7 @@ bool MatchTPCITS::prepareITSData()
     for (int it = rofRec.getFirstEntry(); it < trlim; it++) {
       const auto& trcOrig = mITSTracksArray[it];
       if (mParams->runAfterBurner) {
-        flagUsedITSClusters(trcOrig, cluROFOffset);
+        flagUsedITSClusters(trcOrig);
       }
       if (trcOrig.getParamOut().getX() < 1.) {
         continue; // backward refit failed
@@ -738,6 +732,11 @@ void MatchTPCITS::doMatching(int sec)
       o2::math_utils::Bracketf_t trange(timeCorr - timeCorrErr, timeCorr + timeCorrErr);
       if (trefITS.tBracket.isOutside(trange)) {
         continue;
+      }
+      if (timeCorr < 0) { // RS TODO: similar check will be needed to other TF edge
+        if (timeCorr + mParams->tfEdgeTimeToleranceMUS < 0) {
+          //continue;
+        }
       }
 
       nCheckITSControl++;
@@ -1166,7 +1165,6 @@ void MatchTPCITS::print() const
   }
   printf("\n");
 
-  printf("TPC-ITS time(bins) bracketing safety margin: %6.2f\n", mParams->timeBinTolerance);
   printf("TPC Z->time(bins) bracketing safety margin: %6.2f\n", mParams->safeMarginTPCTimeEdge);
 
 #ifdef _ALLOW_DEBUG_TREES_
@@ -1227,15 +1225,21 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS)
     trfit.setZ(tITS.getZ()); // fix the seed Z
   }
   float deltaT = (trfit.getZ() - tTPC.getZ()) * mTPCVDrift0Inv; // time correction in \mus
+  float timeC = tTPC.getCorrectedTime(deltaT);                  /// precise time estimate
+  float timeErr = tTPC.constraint == TrackLocTPC::Constrained ? tTPC.timeErr : std::sqrt(tITS.getSigmaZ2() + tTPC.getSigmaZ2()) * mTPCVDrift0Inv; // estimate the error on time
+  if (timeC < 0) {                                                                                                                                // RS TODO similar check is needed for other edge of TF
+    if (timeC + std::min(timeErr, mParams->tfEdgeTimeToleranceMUS * mTPCTBinMUSInv) < 0) {
+      mMatchedTracks.pop_back(); // destroy failed track
+      return false;
+    }
+    timeC = 0.;
+  }
 
   // refit TPC track inward into the ITS
   int nclRefit = 0, ncl = itsTrOrig.getNumberOfClusters();
   float chi2 = 0.f;
   auto geom = o2::its::GeometryTGeo::Instance();
   auto propagator = o2::base::Propagator::Instance();
-  // NOTE: the ITS cluster index is stored wrt 1st cluster of relevant ROF, while here we extract clusters from the
-  // buffer for the whole TF. Therefore, we should shift the index by the entry of the ROF's 1st cluster in the global cluster buffer
-  int clusIndOffs = mITSClusterROFRec[tITS.roFrame].getFirstEntry();
   int clEntry = itsTrOrig.getFirstClusterEntry();
 
   float addErr2 = 0;
@@ -1247,7 +1251,7 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS)
   }
 
   for (int icl = 0; icl < ncl; icl++) {
-    const auto& clus = mITSClustersArray[clusIndOffs + mITSTrackClusIdx[clEntry++]];
+    const auto& clus = mITSClustersArray[mITSTrackClusIdx[clEntry++]];
     float alpha = geom->getSensorRefAlpha(clus.getSensorID()), x = clus.getX();
     if (!trfit.rotate(alpha) ||
         // note: here we also calculate the L,T integral (in the inward direction, but this is irrelevant)
@@ -1279,9 +1283,6 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS)
                                   maxStep, MatCorrType::USEMatCorrNONE, nullptr, &trfit.getLTIntegralOut())) {
     LOG(ERROR) << "LTOF integral might be incorrect";
   }
-
-  float timeC = tTPC.getCorrectedTime(deltaT);                                                                                                    /// precise time estimate
-  float timeErr = tTPC.constraint == TrackLocTPC::Constrained ? tTPC.timeErr : std::sqrt(tITS.getSigmaZ2() + tTPC.getSigmaZ2()) * mTPCVDrift0Inv; // estimate the error on time
 
   // outward refit
   auto& tracOut = trfit.getParamOut(); // this is a clone of ITS outward track already at the matching reference X
@@ -2205,12 +2206,12 @@ void MatchTPCITS::removeITSfromTPC(int itsID, int tpcID)
 }
 
 //______________________________________________
-void MatchTPCITS::flagUsedITSClusters(const o2::its::TrackITS& track, int rofOffset)
+void MatchTPCITS::flagUsedITSClusters(const o2::its::TrackITS& track)
 {
   // flag clusters used by this track
   int clEntry = track.getFirstClusterEntry();
   for (int icl = track.getNumberOfClusters(); icl--;) {
-    mABClusterLinkIndex[rofOffset + mITSTrackClusIdx[clEntry++]] = MinusTen;
+    mABClusterLinkIndex[mITSTrackClusIdx[clEntry++]] = MinusTen;
   }
 }
 

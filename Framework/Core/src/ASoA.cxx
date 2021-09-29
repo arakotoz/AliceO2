@@ -13,6 +13,7 @@
 #include "ArrowDebugHelpers.h"
 #include "Framework/RuntimeError.h"
 #include <arrow/util/key_value_metadata.h>
+#include <arrow/util/config.h>
 
 namespace o2::soa
 {
@@ -102,7 +103,7 @@ arrow::ChunkedArray* getIndexFromLabel(arrow::Table* table, const char* label)
 arrow::Status getSliceFor(int value, char const* key, std::shared_ptr<arrow::Table> const& input, std::shared_ptr<arrow::Table>& output, uint64_t& offset)
 {
   arrow::Datum value_counts;
-  auto options = arrow::compute::CountOptions::Defaults();
+  auto options = arrow::compute::ScalarAggregateOptions::Defaults();
   ARROW_ASSIGN_OR_RAISE(value_counts,
                         arrow::compute::CallFunction("value_counts", {input->GetColumnByName(key)},
                                                      &options));

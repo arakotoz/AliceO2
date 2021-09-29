@@ -89,7 +89,7 @@ void dumpDeviceSpec2DDS(std::ostream& out,
         out << fmt::format(R"({} )", arg);
       }
     }
-    out << "--plugin dds";
+    out << "--plugin odc";
     if (accumulatedChannelPrefix.empty() == false) {
       out << " --channel-config \"" << accumulatedChannelPrefix << "\"";
     }

@@ -18,6 +18,7 @@
 #include "Framework/WorkflowSpec.h"
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/ControlService.h"
+#include "Framework/DeviceSpec.h"
 #include "DataFormatsITSMFT/Digit.h"
 #include "DataFormatsITSMFT/ROFRecord.h"
 #include "ITSMFTReconstruction/RawPixelDecoder.h"
@@ -53,51 +54,76 @@ STFDecoder<Mapping>::STFDecoder(bool doClusters, bool doPatterns, bool doDigits,
 template <class Mapping>
 void STFDecoder<Mapping>::init(InitContext& ic)
 {
-  mDecoder = std::make_unique<RawPixelDecoder<Mapping>>();
-  mDecoder->init();
+  try {
+    mDecoder = std::make_unique<RawPixelDecoder<Mapping>>();
+    mDecoder->init();
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "exception was thrown in decoder creation: " << e.what();
+    throw;
+  } catch (...) {
+    LOG(ERROR) << "non-std::exception was thrown in decoder creation";
+    throw;
+  }
 
   auto detID = Mapping::getDetID();
-  mNThreads = std::max(1, ic.options().get<int>("nthreads"));
-  mDecoder->setNThreads(mNThreads);
-  mDecoder->setFormat(ic.options().get<bool>("old-format") ? GBTLink::OldFormat : GBTLink::NewFormat);
-  mDecoder->setVerbosity(ic.options().get<int>("decoder-verbosity"));
-  mDecoder->setFillCalibData(mDoCalibData);
-  std::string noiseFile = o2::base::NameConf::getAlpideClusterDictionaryFileName(detID, mNoiseName, "root");
-  if (o2::utils::Str::pathExists(noiseFile)) {
-    TFile* f = TFile::Open(noiseFile.data(), "old");
-    auto pnoise = (NoiseMap*)f->Get("Noise");
-    AlpideCoder::setNoisyPixels(pnoise);
-    LOG(INFO) << mSelfName << " loading noise map file: " << noiseFile;
-  } else {
-    LOG(INFO) << mSelfName << " Noise file " << noiseFile << " is absent, " << Mapping::getName() << " running without noise suppression";
+  try {
+    mNThreads = std::max(1, ic.options().get<int>("nthreads"));
+    mDecoder->setNThreads(mNThreads);
+    mDecoder->setFormat(ic.options().get<bool>("old-format") ? GBTLink::OldFormat : GBTLink::NewFormat);
+    mUnmutExtraLanes = ic.options().get<bool>("unmute-extra-lanes");
+    mVerbosity = ic.options().get<int>("decoder-verbosity");
+    mDecoder->setFillCalibData(mDoCalibData);
+    std::string noiseFile = o2::base::NameConf::getNoiseFileName(detID, mNoiseName, "root");
+    if (o2::utils::Str::pathExists(noiseFile)) {
+      TFile* f = TFile::Open(noiseFile.data(), "old");
+      auto pnoise = (NoiseMap*)f->Get("ccdb_object");
+      AlpideCoder::setNoisyPixels(pnoise);
+      LOG(INFO) << mSelfName << " loading noise map file: " << noiseFile;
+    } else {
+      LOG(INFO) << mSelfName << " Noise file " << noiseFile << " is absent, " << Mapping::getName() << " running without noise suppression";
+    }
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "exception was thrown in decoder configuration: " << e.what();
+    throw;
+  } catch (...) {
+    LOG(ERROR) << "non-std::exception was thrown in decoder configuration";
+    throw;
   }
 
   if (mDoClusters) {
-    mClusterer = std::make_unique<Clusterer>();
-    mClusterer->setNChips(Mapping::getNChips());
-    const auto grp = o2::parameters::GRPObject::loadFrom();
-    if (grp) {
-      mClusterer->setContinuousReadOut(grp->isDetContinuousReadOut(detID));
-    } else {
-      throw std::runtime_error("failed to retrieve GRP");
-    }
+    try {
+      mClusterer = std::make_unique<Clusterer>();
+      mClusterer->setNChips(Mapping::getNChips());
+      const auto grp = o2::parameters::GRPObject::loadFrom();
+      if (grp) {
+        mClusterer->setContinuousReadOut(grp->isDetContinuousReadOut(detID));
+      } else {
+        throw std::runtime_error("failed to retrieve GRP");
+      }
 
-    // settings for the fired pixel overflow masking
-    const auto& alpParams = DPLAlpideParam<Mapping::getDetID()>::Instance();
-    const auto& clParams = ClustererParam<Mapping::getDetID()>::Instance();
-    auto nbc = clParams.maxBCDiffToMaskBias;
-    nbc += mClusterer->isContinuousReadOut() ? alpParams.roFrameLengthInBC : (alpParams.roFrameLengthTrig / o2::constants::lhc::LHCBunchSpacingNS);
-    mClusterer->setMaxBCSeparationToMask(nbc);
-    mClusterer->setMaxRowColDiffToMask(clParams.maxRowColDiffToMask);
+      // settings for the fired pixel overflow masking
+      const auto& alpParams = DPLAlpideParam<Mapping::getDetID()>::Instance();
+      const auto& clParams = ClustererParam<Mapping::getDetID()>::Instance();
+      auto nbc = clParams.maxBCDiffToMaskBias;
+      nbc += mClusterer->isContinuousReadOut() ? alpParams.roFrameLengthInBC : (alpParams.roFrameLengthTrig / o2::constants::lhc::LHCBunchSpacingNS);
+      mClusterer->setMaxBCSeparationToMask(nbc);
+      mClusterer->setMaxRowColDiffToMask(clParams.maxRowColDiffToMask);
 
-    std::string dictFile = o2::base::NameConf::getAlpideClusterDictionaryFileName(detID, mDictName, "bin");
-    if (o2::utils::Str::pathExists(dictFile)) {
-      mClusterer->loadDictionary(dictFile);
-      LOG(INFO) << mSelfName << " clusterer running with a provided dictionary: " << dictFile;
-    } else {
-      LOG(INFO) << mSelfName << " Dictionary " << dictFile << " is absent, " << Mapping::getName() << " clusterer expects cluster patterns";
+      std::string dictFile = o2::base::NameConf::getAlpideClusterDictionaryFileName(detID, mDictName, "bin");
+      if (o2::utils::Str::pathExists(dictFile)) {
+        mClusterer->loadDictionary(dictFile);
+        LOG(INFO) << mSelfName << " clusterer running with a provided dictionary: " << dictFile;
+      } else {
+        LOG(INFO) << mSelfName << " Dictionary " << dictFile << " is absent, " << Mapping::getName() << " clusterer expects cluster patterns";
+      }
+      mClusterer->print();
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "exception was thrown in clustrizer configuration: " << e.what();
+      throw;
+    } catch (...) {
+      LOG(ERROR) << "non-std::exception was thrown in clusterizer configuration";
+      throw;
     }
-    mClusterer->print();
   }
 }
 
@@ -105,6 +131,13 @@ void STFDecoder<Mapping>::init(InitContext& ic)
 template <class Mapping>
 void STFDecoder<Mapping>::run(ProcessingContext& pc)
 {
+  static bool firstCall = true;
+  if (firstCall) {
+    firstCall = false;
+    mDecoder->setInstanceID(pc.services().get<const o2::framework::DeviceSpec>().inputTimesliceId);
+    mDecoder->setNInstances(pc.services().get<const o2::framework::DeviceSpec>().maxInputTimeslices);
+    mDecoder->setVerbosity(mDecoder->getInstanceID() == 0 ? mVerbosity : (mUnmutExtraLanes ? mVerbosity : -1));
+  }
   int nSlots = pc.inputs().getNofParts(0);
   double timeCPU0 = mTimer.CpuTime(), timeReal0 = mTimer.RealTime();
   mTimer.Start(false);
@@ -222,7 +255,8 @@ DataProcessorSpec getSTFDecoderITSSpec(bool doClusters, bool doPatterns, bool do
     Options{
       {"nthreads", VariantType::Int, 1, {"Number of decoding/clustering threads"}},
       {"old-format", VariantType::Bool, false, {"Use old format (1 trigger per CRU page)"}},
-      {"decoder-verbosity", VariantType::Int, 0, {"Verbosity level (-1: silent, 0: errors, 1: headers, 2: data)"}}}};
+      {"decoder-verbosity", VariantType::Int, 0, {"Verbosity level (-1: silent, 0: errors, 1: headers, 2: data) of 1st lane"}},
+      {"unmute-extra-lanes", VariantType::Bool, false, {"allow extra lanes to be as verbose as 1st one"}}}};
 }
 
 DataProcessorSpec getSTFDecoderMFTSpec(bool doClusters, bool doPatterns, bool doDigits, bool doCalib, bool askDISTSTF, const std::string& dict, const std::string& noise)
@@ -258,7 +292,8 @@ DataProcessorSpec getSTFDecoderMFTSpec(bool doClusters, bool doPatterns, bool do
     Options{
       {"nthreads", VariantType::Int, 1, {"Number of decoding/clustering threads"}},
       {"old-format", VariantType::Bool, false, {"Use old format (1 trigger per CRU page)"}},
-      {"decoder-verbosity", VariantType::Int, 0, {"Verbosity level (-1: silent, 0: errors, 1: headers, 2: data)"}}}};
+      {"decoder-verbosity", VariantType::Int, 0, {"Verbosity level (-1: silent, 0: errors, 1: headers, 2: data) of 1st lane"}},
+      {"unmute-extra-lanes", VariantType::Bool, false, {"allow extra lanes to be as verbose as 1st one"}}}};
 }
 
 } // namespace itsmft

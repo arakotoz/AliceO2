@@ -19,6 +19,7 @@ o2_add_library(CCDB
                                     ROOT::Hist
                                     O2::CommonUtils
                                     FairMQ::FairMQ
+                                    libjalien::libjalienO2
                TARGETVARNAME targetName)
 
 o2_target_root_dictionary(CCDB
@@ -51,6 +52,13 @@ o2_add_test(CcdbApi
             COMPONENT_NAME ccdb
             PUBLIC_LINK_LIBRARIES O2::CCDB
             LABELS ccdb)
+
+o2_add_test(CcdbApiConfigParam
+		SOURCES test/testCcdbApi_ConfigParam.cxx
+		COMPONENT_NAME ccdb
+		PUBLIC_LINK_LIBRARIES O2::CCDB O2::DetectorsVertexing
+		LABELS ccdb)
+
 
 o2_add_test(CcdbApi-Alien
 		SOURCES test/testCcdbApi_alien.cxx

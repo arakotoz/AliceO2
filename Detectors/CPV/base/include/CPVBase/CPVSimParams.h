@@ -23,7 +23,7 @@ namespace cpv
 // (mostly used in GEANT stepping and Digitizer)
 struct CPVSimParams : public o2::conf::ConfigurableParamHelper<CPVSimParams> {
 
-  std::string mCCDBPath = "localtest"; ///< use "localtest" to avoid connecting ccdb server, otherwise use ccdb-test.cern.ch
+  std::string mCCDBPath = "http://ccdb-test.cern.ch:8080"; ///< use "localtest" to avoid connecting ccdb server, otherwise use ccdb-test.cern.ch
 
   //Parameters used in conversion of deposited energy to APD response
   int mnCellX = 128;
@@ -61,6 +61,13 @@ struct CPVSimParams : public o2::conf::ConfigurableParamHelper<CPVSimParams> {
   float mLogWeight = 4.5;            ///< weight in cluster center of gravity calculation
   int mNMaxIterations = 10;          ///< Maximal number of iterations in unfolding procedure
   bool mUnfoldClusters = false;      ///< Perform cluster unfolding?
+
+  // Parameters used in pedestal calibration
+  uint16_t mPedClbToleratedGapWidth = 5;              ///< Tolerated gap between bins: if |bin1 - bin2| < width -> bin1 and bin2 belongs to same peak
+  float mPedClbToleratedChannelEfficiencyLow = 0.9;   ///< Tolerated channel efficiency (lower limit)
+  float mPedClbToleratedChannelEfficiencyHigh = 1.01; ///< Tolerated channel efficiency (upper limit)
+  uint32_t mPedClbMinEvents = 100;                    ///< Minimal number of events to produce calibration
+  float mPedClbSuspiciousPedestalRMS = 10.;           ///< Take additional care for channel if its RMS >  mPedClbSuspiciousPedestalRMS
 
   inline float CellWr() const { return 0.5 * mPadSizeX; } ///<  Distance between wires (2 wires above 1 pad)
 

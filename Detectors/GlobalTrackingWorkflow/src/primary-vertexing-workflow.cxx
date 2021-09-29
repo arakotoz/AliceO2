@@ -13,6 +13,7 @@
 #include "GlobalTrackingWorkflow/PrimaryVertexingSpec.h"
 #include "GlobalTrackingWorkflow/PrimaryVertexWriterSpec.h"
 #include "GlobalTrackingWorkflowReaders/TrackTPCITSReaderSpec.h"
+#include "GlobalTrackingWorkflowReaders/GlobalFwdTrackReaderSpec.h"
 #include "GlobalTrackingWorkflow/VertexTrackMatcherSpec.h"
 #include "ITSWorkflow/TrackReaderSpec.h"
 #include "TPCReaderWorkflow/TrackReaderSpec.h"
@@ -58,13 +59,12 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   WorkflowSpec specs;
 
   GID::mask_t allowedSourcesPV = GID::getSourcesMask("ITS,ITS-TPC,ITS-TPC-TRD,ITS-TPC-TOF");
-  GID::mask_t allowedSourcesVT = GID::getSourcesMask("ITS,MFT,TPC,ITS-TPC,,TPC-TOF,TPC-TRD,ITS-TPC-TRD,ITS-TPC-TOF");
+  GID::mask_t allowedSourcesVT = GID::getSourcesMask("ITS,MFT,TPC,ITS-TPC,MCH,MFT-MCH,TPC-TOF,TPC-TRD,ITS-TPC-TRD,ITS-TPC-TOF");
 
   // Update the (declared) parameters if changed from the command line
   o2::conf::ConfigurableParam::updateFromString(configcontext.options().get<std::string>("configKeyValues"));
   // write the configuration used for the workflow
   o2::conf::ConfigurableParam::writeINI("o2primary-vertexing-workflow_configuration.ini");
-
 
   auto useMC = !configcontext.options().get<bool>("disable-mc");
   auto disableRootOut = configcontext.options().get<bool>("disable-root-output");

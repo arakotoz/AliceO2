@@ -21,6 +21,7 @@ o2_add_library(Framework
                        src/ChannelMatching.cxx
                        src/ChannelConfigurationPolicyHelpers.cxx
                        src/ChannelSpecHelpers.cxx
+                       src/CCDBParamSpec.cxx
                        src/CommandInfo.cxx
                        src/CommonDataProcessors.cxx
                        src/CommonServices.cxx
@@ -69,6 +70,7 @@ o2_add_library(Framework
                        src/GraphvizHelpers.cxx
                        src/HTTPParser.cxx
                        src/InputRecord.cxx
+                       src/InputRouteHelpers.cxx
                        src/InputSpan.cxx
                        src/InputSpec.cxx
                        src/OutputSpec.cxx
@@ -162,6 +164,7 @@ foreach(t
         CheckTypes
         CompletionPolicy
         ComputingResourceHelpers
+        ComputingQuotaEvaluator
         ConfigParamStore
         ConfigParamRegistry
         DataDescriptorMatcher
@@ -191,6 +194,7 @@ foreach(t
         InputSpec
         Kernels
         LogParsingHelpers
+        OverrideLabels
         PtrHelpers
         Root2ArrowTable
         RootConfigParamHelpers

@@ -25,17 +25,17 @@ WorkflowSpec defineDataProcessing(ConfigContext const&)
   return WorkflowSpec{
     {
       "A",
-      {InputSpec{"somecondition", "TOF", "LHCphase", 0, Lifetime::Condition, {ccdbParamSpec("TOF/LHCphase")}},
+      {InputSpec{"somecondition", "TOF", "LHCphase", 0, Lifetime::Condition, ccdbParamSpec("TOF/LHCphase")},
        InputSpec{"sometimer", "TST", "BAR", 0, Lifetime::Timer, {startTimeParamSpec{1638548475371}}}},
       {OutputSpec{"TST", "A1", 0, Lifetime::Timeframe}},
       AlgorithmSpec{
         adaptStateless([](DataAllocator& outputs, InputRecord& inputs, ControlService& control) {
           DataRef condition = inputs.get("somecondition");
-          auto* header = o2::header::get<const DataHeader*>(condition.header);
-          if (header->payloadSize != 2048) {
-            LOGP(ERROR, "Wrong size for condition payload (expected {}, found {}", 2048, header->payloadSize);
+          auto payloadSize = DataRefUtils::getPayloadSize(condition);
+          if (payloadSize != 2048) {
+            LOGP(ERROR, "Wrong size for condition payload (expected {}, found {}", 2048, payloadSize);
           }
-          header->payloadSize;
+          payloadSize;
           control.readyToQuit(QuitRequest::All);
         })},
       Options{

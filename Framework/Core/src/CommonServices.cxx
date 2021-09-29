@@ -13,6 +13,7 @@
 #include "Framework/ControlService.h"
 #include "Framework/DriverClient.h"
 #include "Framework/CallbackService.h"
+#include "Framework/ServiceSpec.h"
 #include "Framework/TimesliceIndex.h"
 #include "Framework/DataTakingContext.h"
 #include "Framework/ServiceRegistry.h"
@@ -23,6 +24,7 @@
 #include "Framework/DataProcessingStats.h"
 #include "Framework/CommonMessageBackends.h"
 #include "Framework/DanglingContext.h"
+#include "InputRouteHelpers.h"
 #include "Framework/EndOfStreamContext.h"
 #include "Framework/RawDeviceService.h"
 #include "Framework/Tracing.h"
@@ -33,6 +35,7 @@
 #include "../src/DataProcessingStatus.h"
 #include "ArrowSupport.h"
 #include "DPLMonitoringBackend.h"
+#include "TDatabasePDG.h"
 
 #include <Configuration/ConfigurationInterface.h>
 #include <Configuration/ConfigurationFactory.h>
@@ -81,7 +84,9 @@ o2::framework::ServiceSpec CommonServices::monitoringSpec()
       o2::monitoring::Monitoring* monitoring;
       if (useDPL) {
         monitoring = new Monitoring();
-        monitoring->addBackend(std::make_unique<DPLMonitoringBackend>(registry));
+        auto dplBackend = std::make_unique<DPLMonitoringBackend>(registry);
+        (dynamic_cast<o2::monitoring::Backend*>(dplBackend.get()))->setVerbosity(o2::monitoring::Verbosity::Debug);
+        monitoring->addBackend(std::move(dplBackend));
       } else {
         auto backend = isDefault ? "infologger://" : options.GetPropertyAsString("monitoring-backend");
         monitoring = MonitoringFactory::Get(backend).release();
@@ -114,6 +119,10 @@ o2::framework::ServiceSpec CommonServices::datatakingContextSpec()
       auto& context = processingContext.services().get<DataTakingContext>();
       // Only on the first message
       if (context.source == OrbitResetTimeSource::Data) {
+        return;
+      }
+      // Only if we do not have already the proper number from CTP
+      if (context.source == OrbitResetTimeSource::CTP) {
         return;
       }
       context.source = OrbitResetTimeSource::Data;
@@ -162,6 +171,8 @@ o2::framework::ServiceSpec CommonServices::infologgerContextSpec()
       auto& infoLoggerContext = services.get<InfoLoggerContext>();
       auto run = services.get<RawDeviceService>().device()->fConfig->GetProperty<std::string>("runNumber", "unspecified");
       infoLoggerContext.setField(InfoLoggerContext::FieldName::Run, run);
+      auto partition = services.get<RawDeviceService>().device()->fConfig->GetProperty<std::string>("environment_id", "unspecified");
+      infoLoggerContext.setField(InfoLoggerContext::FieldName::Partition, partition);
     },
     .kind = ServiceKind::Serial};
 }
@@ -331,7 +342,10 @@ o2::framework::ServiceSpec CommonServices::timesliceIndex()
 {
   return ServiceSpec{
     .name = "timesliceindex",
-    .init = simpleServiceInit<TimesliceIndex, TimesliceIndex>(),
+    .init = [](ServiceRegistry& services, DeviceState&, fair::mq::ProgOptions& options) -> ServiceHandle {
+      return ServiceHandle{TypeIdHelpers::uniqueId<TimesliceIndex>(),
+                           new TimesliceIndex(InputRouteHelpers::maxLanes(services.get<DeviceSpec const>().inputs))};
+    },
     .configure = noConfiguration(),
     .kind = ServiceKind::Serial};
 }
@@ -469,7 +483,7 @@ auto flushMetrics(ServiceRegistry& registry, DataProcessingStats& stats) -> void
   for (size_t si = 0; si < stats.statesSize.load(); ++si) {
     auto value = std::atomic_load_explicit(&stats.relayerState[si], std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_acquire);
-    monitoring.send({value, fmt::format("data_relayer/{}", si)});
+    monitoring.send({value, fmt::format("data_relayer/{}", si, o2::monitoring::Verbosity::Debug)});
   }
   relayer.sendContextState();
   monitoring.flushBuffer();
@@ -528,5 +542,18 @@ std::vector<ServiceSpec> CommonServices::defaultServices(int numThreads)
   return specs;
 }
 
+o2::framework::ServiceSpec CommonAnalysisServices::databasePDGSpec()
+{
+  return ServiceSpec{
+    .name = "database-pdg",
+    .init = [](ServiceRegistry&, DeviceState&, fair::mq::ProgOptions&) -> ServiceHandle {
+      auto* ptr = new TDatabasePDG();
+      ptr->ReadPDGTable();
+      return ServiceHandle{TypeIdHelpers::uniqueId<TDatabasePDG>(), ptr, ServiceKind::Serial, "database-pdg"};
+    },
+    .configure = CommonServices::noConfiguration(),
+    .exit = [](ServiceRegistry&, void* service) { reinterpret_cast<TDatabasePDG*>(service)->Delete(); },
+    .kind = ServiceKind::Serial};
+}
 } // namespace o2::framework
 #pragma GCC diagnostic pop

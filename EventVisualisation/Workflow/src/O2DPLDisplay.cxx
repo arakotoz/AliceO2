@@ -49,6 +49,7 @@ void customize(std::vector<ConfigParamSpec>& workflowOptions)
   std::vector<o2::framework::ConfigParamSpec> options{
     {"jsons-folder", VariantType::String, "jsons", {"name of the folder to store json files"}},
     {"eve-hostname", VariantType::String, "", {"name of the host allowed to produce files (empty means no limit)"}},
+    {"eve-dds-collection-index", VariantType::Int, -1, {"number of dpl collection allowed to produce files (-1 means no limit)"}},
     {"number-of_files", VariantType::Int, 300, {"maximum number of json files in folder"}},
     {"number-of_tracks", VariantType::Int, -1, {"maximum number of track stored in json file (-1 means no limit)"}},
     {"time-interval", VariantType::Int, 5000, {"time interval in milliseconds between stored files"}},
@@ -202,6 +203,14 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
   char hostname[HOST_NAME_MAX];
   gethostname(hostname, HOST_NAME_MAX);
   bool eveHostNameMatch = eveHostName.empty() || eveHostName == hostname;
+
+  int eveDDSColIdx = cfgc.options().get<int>("eve-dds-collection-index");
+  if (eveDDSColIdx != -1) {
+    char* colIdx = getenv("DDS_COLLECTION_INDEX");
+    int myIdx = colIdx ? atoi(colIdx) : -1;
+    LOG(info) << "Restricting DPL Display to collection index, my index " << myIdx << ", enabled " << int(myIdx == eveDDSColIdx);
+    eveHostNameMatch &= myIdx == eveDDSColIdx;
+  }
 
   std::chrono::milliseconds timeInterval(cfgc.options().get<int>("time-interval"));
   int numberOfFiles = cfgc.options().get<int>("number-of_files");

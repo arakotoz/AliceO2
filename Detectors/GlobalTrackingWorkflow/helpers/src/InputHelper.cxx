@@ -21,14 +21,19 @@
 #include "TPCReaderWorkflow/ClusterReaderSpec.h"
 #include "TPCWorkflow/ClusterSharingMapSpec.h"
 #include "GlobalTrackingWorkflowReaders/TrackTPCITSReaderSpec.h"
+#include "GlobalTrackingWorkflowReaders/GlobalFwdTrackReaderSpec.h"
 #include "GlobalTrackingWorkflowReaders/PrimaryVertexReaderSpec.h"
 #include "GlobalTrackingWorkflowReaders/SecondaryVertexReaderSpec.h"
 #include "GlobalTrackingWorkflowReaders/TrackCosmicsReaderSpec.h"
 #include "TOFWorkflowIO/ClusterReaderSpec.h"
 #include "TOFWorkflowIO/TOFMatchedReaderSpec.h"
 #include "FT0Workflow/RecPointReaderSpec.h"
+#include "FV0Workflow/RecPointReaderSpec.h"
+#include "FDDWorkflow/RecPointReaderSpec.h"
+#include "ZDCWorkflow/RecEventReaderSpec.h"
 #include "TRDWorkflowIO/TRDTrackletReaderSpec.h"
 #include "TRDWorkflowIO/TRDTrackReaderSpec.h"
+#include "MCHWorkflow/TrackReaderSpec.h"
 
 using namespace o2::framework;
 using namespace o2::globaltracking;
@@ -60,6 +65,12 @@ int InputHelper::addInputSpecs(const ConfigContext& configcontext, WorkflowSpec&
   if (maskTracks[GID::MFT]) {
     specs.emplace_back(o2::mft::getMFTTrackReaderSpec(maskTracksMC[GID::MFT]));
   }
+  if (maskClusters[GID::MFT]) {
+    specs.emplace_back(o2::itsmft::getMFTClusterReaderSpec(maskClustersMC[GID::MFT], true));
+  }
+  if (maskTracks[GID::MCH]) {
+    specs.emplace_back(o2::mch::getTrackReaderSpec(maskTracksMC[GID::MCH]));
+  }
   if (maskTracks[GID::TPC]) {
     specs.emplace_back(o2::tpc::getTPCTrackReaderSpec(maskTracksMC[GID::TPC]));
   }
@@ -84,16 +95,28 @@ int InputHelper::addInputSpecs(const ConfigContext& configcontext, WorkflowSpec&
   if (maskTracks[GID::FT0] || maskClusters[GID::FT0]) {
     specs.emplace_back(o2::ft0::getRecPointReaderSpec(maskTracksMC[GID::FT0] || maskClustersMC[GID::FT0]));
   }
+  if (maskTracks[GID::FV0] || maskClusters[GID::FV0]) {
+    specs.emplace_back(o2::fv0::getRecPointReaderSpec(maskTracksMC[GID::FV0] || maskClustersMC[GID::FV0]));
+  }
+  if (maskTracks[GID::FDD] || maskClusters[GID::FDD]) {
+    specs.emplace_back(o2::fdd::getFDDRecPointReaderSpec(maskTracksMC[GID::FDD] || maskClustersMC[GID::FDD]));
+  }
+  if (maskTracks[GID::ZDC] || maskClusters[GID::ZDC]) {
+    specs.emplace_back(o2::zdc::getRecEventReaderSpec(maskTracksMC[GID::ZDC] || maskClustersMC[GID::ZDC]));
+  }
+
   if (maskClusters[GID::TRD]) {
     specs.emplace_back(o2::trd::getTRDTrackletReaderSpec(maskClustersMC[GID::TRD], true));
   }
   if (maskTracks[GID::ITSTPCTRD]) {
-    specs.emplace_back(o2::trd::getTRDGlobalTrackReaderSpec(false));
+    specs.emplace_back(o2::trd::getTRDGlobalTrackReaderSpec(maskTracksMC[GID::ITSTPCTRD]));
   }
   if (maskTracks[GID::TPCTRD]) {
-    specs.emplace_back(o2::trd::getTRDTPCTrackReaderSpec(false, subSpecStrict));
+    specs.emplace_back(o2::trd::getTRDTPCTrackReaderSpec(maskTracksMC[GID::TPCTRD], subSpecStrict));
   }
-
+  if (maskTracks[GID::MFTMCH]) {
+    specs.emplace_back(o2::globaltracking::getGlobalFwdTrackReaderSpec(maskTracksMC[GID::MFTMCH]));
+  }
   return 0;
 }
 

@@ -22,8 +22,6 @@
 #include "TRDSimulation/TrapConfig.h"
 #include "DataFormatsTRD/Tracklet64.h"
 #include "DataFormatsTRD/Constants.h"
-#include <SimulationDataFormat/MCCompLabel.h>
-#include <SimulationDataFormat/ConstMCTruthContainer.h>
 
 class Calibrations;
 
@@ -43,8 +41,8 @@ class TRDDPLTrapSimulatorTask : public o2::framework::Task
 
 
  private:
-  TrapConfig* mTrapConfig = nullptr;
-  unsigned long mRunNumber = 297595; //run number to anchor simulation to.
+  TrapConfig* mTrapConfig{nullptr};
+  unsigned long mRunNumber{297595}; //run number to anchor simulation to.
   bool mEnableOnlineGainCorrection{false};
   bool mUseMC{false}; // whether or not to use MC labels
   bool mEnableTrapConfigDump{false};
@@ -53,9 +51,7 @@ class TRDDPLTrapSimulatorTask : public o2::framework::Task
   std::string mOnlineGainTableName;
   std::unique_ptr<Calibrations> mCalib; // store the calibrations connection to CCDB. Used primarily for the gaintables in line above.
 
-  TrapConfig* getTrapConfig();
-  void loadTrapConfig();
-  void loadDefaultTrapConfig();
+  void initTrapConfig();
   void setOnlineGainTables();
   void processTRAPchips(int& nTracklets, std::vector<Tracklet64>& trackletsAccum, std::array<TrapSimulator, constants::NMCMHCMAX>& trapSimulators, std::vector<short>& digitCounts, std::vector<int>& digitIndices);
 };

@@ -988,7 +988,7 @@ LogProcessingState processChildrenOutput(DriverInfo& driverInfo,
         info.history[info.historyPos] = token;
         info.historyLevel[info.historyPos] = logLevel;
         info.historyPos = (info.historyPos + 1) % info.history.size();
-        std::cout << "[" << info.pid << ":" << spec.name << "]: " << token << std::endl;
+        fmt::print("[{}:{}]: {}\n", info.pid, spec.id, token);
         result.didProcessLog = true;
       }
       // We keep track of the maximum log error a
@@ -1101,6 +1101,7 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
     optsDesc.add_options()("monitoring-backend", bpo::value<std::string>()->default_value("default"), "monitoring backend info")                                                           //
       ("driver-client-backend", bpo::value<std::string>()->default_value(defaultDriverClient), "backend for device -> driver communicataon: stdout://: use stdout, ws://: use websockets") //
       ("infologger-severity", bpo::value<std::string>()->default_value(""), "minimum FairLogger severity to send to InfoLogger")                                                           //
+      ("expected-region-callbacks", bpo::value<std::string>()->default_value("0"), "how many region callbacks we are expecting")                                                           //
       ("configuration,cfg", bpo::value<std::string>()->default_value("command-line"), "configuration backend")                                                                             //
       ("infologger-mode", bpo::value<std::string>()->default_value(""), "O2_INFOLOGGER_MODE override");
     r.fConfig.AddToCmdLineOptions(optsDesc, true);
@@ -1128,7 +1129,7 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
     deviceState->loop = loop;
     serviceRegistry.registerService(ServiceRegistryHelpers::handleForService<DeviceState>(deviceState.get()));
 
-    quotaEvaluator = std::make_unique<ComputingQuotaEvaluator>(serviceRegistry);
+    quotaEvaluator = std::make_unique<ComputingQuotaEvaluator>(uv_now(loop));
     serviceRegistry.registerService(ServiceRegistryHelpers::handleForService<ComputingQuotaEvaluator>(quotaEvaluator.get()));
 
     serviceRegistry.registerService(ServiceRegistryHelpers::handleForService<DeviceSpec const>(&spec));
@@ -1494,7 +1495,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
             std::string conf = std::sregex_token_iterator(paramName.begin(), paramName.end(), name_regex, 2)->str();
             return std::pair{task, conf};
           };
-
+          bool altered = false;
           for (auto& device : altered_workflow) {
             LOGF(DEBUG, "Adjusting device %s", device.name.c_str());
             // ignore internal devices
@@ -1555,6 +1556,10 @@ int runStateMachine(DataProcessorSpecs const& workflow,
             for (auto& input : device.inputs) {
               LOGF(DEBUG, "-> %s", input.binding);
             }
+            altered = true;
+          }
+          if (altered) {
+            WorkflowHelpers::adjustServiceDevices(altered_workflow);
           }
 
           DeviceSpecHelpers::dataProcessorSpecs2DeviceSpecs(altered_workflow,
@@ -2071,6 +2076,71 @@ void overridePipeline(ConfigContext& ctx, WorkflowSpec& workflow)
     for (auto& processor : workflow) {
       if (processor.name == spec.matcher) {
         processor.maxInputTimeslices = spec.pipeline;
+      }
+    }
+  }
+}
+
+void overrideLabels(ConfigContext& ctx, WorkflowSpec& workflow)
+{
+  struct LabelsSpec {
+    std::string_view matcher;
+    std::vector<std::string> labels;
+  };
+  std::vector<LabelsSpec> specs;
+
+  auto labelsString = ctx.options().get<std::string>("labels");
+  if (labelsString.empty()) {
+    return;
+  }
+  std::string_view sv{labelsString};
+
+  size_t specStart = 0;
+  size_t specEnd = 0;
+  constexpr char specDelim = ',';
+  constexpr char labelDelim = ':';
+  do {
+    specEnd = sv.find(specDelim, specStart);
+    auto token = sv.substr(specStart, specEnd == std::string_view::npos ? std::string_view::npos : specEnd - specStart);
+    if (token.empty()) {
+      throw std::runtime_error("bad labels definition. Syntax <processor>:<label>[:<label>][,<processor>:<label>[:<label>]");
+    }
+
+    size_t labelDelimPos = token.find(labelDelim);
+    if (labelDelimPos == 0 || labelDelimPos == std::string_view::npos) {
+      throw std::runtime_error("bad labels definition. Syntax <processor>:<label>[:<label>][,<processor>:<label>[:<label>]");
+    }
+    LabelsSpec spec{token.substr(0, labelDelimPos)};
+
+    size_t labelEnd = labelDelimPos + 1;
+    do {
+      size_t labelStart = labelDelimPos + 1;
+      labelEnd = token.find(labelDelim, labelStart);
+      auto label = labelEnd == std::string_view::npos ? token.substr(labelStart) : token.substr(labelStart, labelEnd - labelStart);
+      if (label.empty()) {
+        throw std::runtime_error("bad labels definition. Syntax <processor>:<label>[:<label>][,<processor>:<label>[:<label>]");
+      }
+      spec.labels.emplace_back(label);
+      labelDelimPos = labelEnd;
+    } while (labelEnd != std::string_view::npos);
+
+    specs.push_back(spec);
+    specStart = specEnd + 1;
+  } while (specEnd != std::string_view::npos);
+
+  if (labelsString.empty() == false && specs.empty() == true) {
+    throw std::runtime_error("bad labels definition. Syntax <processor>:<label>[:<label>][,<processor>:<label>[:<label>]");
+  }
+
+  for (auto& spec : specs) {
+    for (auto& processor : workflow) {
+      if (processor.name == spec.matcher) {
+        for (const auto& label : spec.labels) {
+          if (std::find_if(processor.labels.begin(), processor.labels.end(),
+                           [label](const auto& procLabel) { return procLabel.value == label; }) == processor.labels.end()) {
+            processor.labels.push_back({label});
+          }
+        }
       }
     }
   }

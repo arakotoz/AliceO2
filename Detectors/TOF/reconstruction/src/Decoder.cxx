@@ -122,13 +122,24 @@ void Decoder::clear()
   mCratePatterns.clear();
   mCrateHeaderData.clear();
   mErrors.clear();
+  mDiagnosticFrequency.clear();
 }
 
 void Decoder::InsertDigit(int icrate, int itrm, int itdc, int ichain, int channel, uint32_t orbit, uint16_t bunchid, int time_ext, int tdc, int tot)
 {
   DigitInfo digitInfo;
 
+  if (icrate % 2 == 1 && itrm == 3 && itdc / 3 > 0) { // Signal not coming from a TOF pad but -probably- from a TOF OR signal
+    // add operation on LTM (Trigger) if needed (not used)
+    return;
+  }
+
   fromRawHit2Digit(icrate, itrm, itdc, ichain, channel, orbit, bunchid, time_ext + tdc, tot, digitInfo);
+
+  if (digitInfo.channel < 0) { // check needed for the moment. To be removed once debugged
+    return;
+  }
+
   if (mMaskNoiseRate > 0) {
     mChannelCounts[digitInfo.channel]++;
   }
@@ -176,8 +187,23 @@ void Decoder::readTRM(int icru, int icrate, uint32_t orbit, uint16_t bunchid)
   DigitInfo digitInfo;
 
   for (int i = 0; i < nhits; i++) {
+    if (icrate % 2 == 1 && itrm == 3 && mUnion[icru]->packedHit.tdcID / 3 > 0) { // Signal not coming from a TOF pad but -probably- from a TOF OR signal
+      // add operation on LTM (Trigger) if needed (not used)
+
+      mUnion[icru]++;
+      mIntegratedBytes[icru] += 4;
+      continue;
+    }
+
     fromRawHit2Digit(icrate, itrm, mUnion[icru]->packedHit.tdcID, mUnion[icru]->packedHit.chain, mUnion[icru]->packedHit.channel, orbit, bunchid,
                      time_ext + mUnion[icru]->packedHit.time, mUnion[icru]->packedHit.tot, digitInfo);
+
+    if (digitInfo.channel < 0) { // check needed for the moment. To be removed once debugged
+      mUnion[icru]++;
+      mIntegratedBytes[icru] += 4;
+      continue;
+    }
+
     if (mMaskNoiseRate > 0) {
       mChannelCounts[digitInfo.channel]++;
     }
@@ -216,6 +242,11 @@ void Decoder::fromRawHit2Digit(int icrate, int itrm, int itdc, int ichain, int c
   // tdc = packetHit.time + (frameHeader.frameID << 13)
   int echannel = Geo::getECHFromIndexes(icrate, itrm, ichain, itdc, channel);
   dinfo.channel = Geo::getCHFromECH(echannel);
+
+  if (dinfo.channel < 0) { // it should not happen!
+    LOG(ERROR) << "No valid channel for icrate = " << icrate << ", itrm = " << itrm << ", ichain = " << ichain << ", itdc = " << itdc << ", channel = " << channel;
+  }
+
   dinfo.tot = tot;
   dinfo.bcAbs = uint64_t(orbit) * o2::tof::Geo::BC_IN_ORBIT + bunchid + tdc / 1024;
   dinfo.tdc = tdc % 1024;
@@ -324,12 +355,13 @@ bool Decoder::decode() // return a vector of digits in a TOF readout window
 
   // since digits are not yet divided in tof readout window we need to do it
   // flushOutputContainer does the job
-  FillWindows();
+  fillWindows();
+  fillDiagnosticFrequency();
 
   return false;
 }
 
-void Decoder::FillWindows()
+void Decoder::fillWindows()
 {
   std::vector<Digit> digTemp;
   flushOutputContainer(digTemp);

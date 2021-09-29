@@ -11,6 +11,10 @@
 namespace o2::framework
 {
 
+inline TimesliceIndex::TimesliceIndex(size_t maxLanes)
+: mMaxLanes {maxLanes}
+{}
+
 inline bool TimesliceId::isValid(TimesliceId const& timeslice) { return timeslice.value != INVALID; }
 inline bool TimesliceSlot::isValid(TimesliceSlot const& slot) { return slot.index != INVALID; }
 
@@ -82,16 +86,17 @@ inline void TimesliceIndex::associate(TimesliceId timestamp, TimesliceSlot slot)
   mDirty[slot.index] = true;
 }
 
-inline TimesliceSlot TimesliceIndex::findOldestSlot() const
+inline TimesliceSlot TimesliceIndex::findOldestSlot(TimesliceId timestamp) const
 {
-  TimesliceSlot oldest{0};
+  size_t lane = timestamp.value % mMaxLanes;
+  TimesliceSlot oldest{lane};
   auto oldPVal = std::get_if<uint64_t>(&mVariables[oldest.index].get(0));
   if (oldPVal == nullptr) {
     return oldest;
   }
   uint64_t oldTimestamp = *oldPVal;
 
-  for (size_t i = 1; i < mVariables.size(); ++i) {
+  for (size_t i = lane + mMaxLanes; i < mVariables.size(); i += mMaxLanes) {
     auto newPVal = std::get_if<uint64_t>(&mVariables[i].get(0));
     if (newPVal == nullptr) {
       return TimesliceSlot{i};
@@ -106,39 +111,6 @@ inline TimesliceSlot TimesliceIndex::findOldestSlot() const
   return oldest;
 }
 
-inline TimesliceId TimesliceIndex::getTimesliceForSlot(TimesliceSlot slot) const
-{
-  assert(mVariables.size() > slot.index);
-  // timeslice is always at register 0
-  auto pval = std::get_if<uint64_t>(&mVariables[slot.index].get(0));
-  if (pval == nullptr) {
-    return TimesliceId{TimesliceId::INVALID};
-  }
-  return TimesliceId{*pval};
-}
-
-inline uint32_t TimesliceIndex::getFirstTFOrbitForSlot(TimesliceSlot slot) const
-{
-  assert(mVariables.size() > slot.index);
-  // firstTForbit is always at register 15
-  auto pval = std::get_if<uint32_t>(&mVariables[slot.index].get(data_matcher::FIRSTTFORBIT_POS));
-  if (pval == nullptr) {
-    return -1;
-  }
-  return *pval;
-}
-
-inline uint32_t TimesliceIndex::getFirstTFCounterForSlot(TimesliceSlot slot) const
-{
-  assert(mVariables.size() > slot.index);
-  // tfCounter is always at register 14
-  auto pval = std::get_if<uint32_t>(&mVariables[slot.index].get(14));
-  if (pval == nullptr) {
-    return -1;
-  }
-  return *pval;
-}
-
 inline data_matcher::VariableContext& TimesliceIndex::getVariablesForSlot(TimesliceSlot slot)
 {
   assert(mVariables.size() > slot.index);
@@ -151,9 +123,9 @@ inline data_matcher::VariableContext& TimesliceIndex::getPublishedVariablesForSl
   return mPublishedVariables[slot.index];
 }
 
-inline std::tuple<TimesliceIndex::ActionTaken, TimesliceSlot> TimesliceIndex::replaceLRUWith(data_matcher::VariableContext& newContext)
+inline std::tuple<TimesliceIndex::ActionTaken, TimesliceSlot> TimesliceIndex::replaceLRUWith(data_matcher::VariableContext& newContext, TimesliceId timestamp)
 {
-  auto oldestSlot = findOldestSlot();
+  auto oldestSlot = findOldestSlot(timestamp);
   if (TimesliceIndex::isValid(oldestSlot) == false) {
     mVariables[oldestSlot.index] = newContext;
     return std::make_tuple(ActionTaken::ReplaceUnused, oldestSlot);

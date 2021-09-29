@@ -10,7 +10,7 @@
 # or submit itself to any jurisdiction.
 
 # Some general CMake settings
-cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.19 FATAL_ERROR)
 project(GPUTrackingStandalone)
 include(FeatureSummary)
 set(CMAKE_INSTALL_BINDIR "${CMAKE_INSTALL_PREFIX}")
@@ -143,6 +143,7 @@ include_directories(${GPU_DIR}/Common
 if(CONFIG_O2_EXTENSIONS)
 include_directories(${GPUTRACKING_DIR}/TPCClusterFinder
                     ${GPUTRACKING_DIR}/ITS
+                    ${GPUTRACKING_DIR}/Interface
                     ${O2_DIR}/Common/Field/include
                     ${O2_DIR}/Common/Constants/include
                     ${O2_DIR}/Common/MathUtils/include

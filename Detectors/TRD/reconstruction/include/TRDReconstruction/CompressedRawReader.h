@@ -23,6 +23,7 @@
 #include <string>
 #include <cstdint>
 #include <array>
+#include <bitset>
 #include "Headers/RAWDataHeader.h"
 #include "Headers/RDHAny.h"
 #include "DetectorsRaw/RDHUtils.h"
@@ -31,6 +32,7 @@
 #include "DataFormatsTRD/Tracklet64.h"
 #include "DataFormatsTRD/TriggerRecord.h"
 #include "DataFormatsTRD/Digit.h"
+#include "DataFormatsTRD/RawDataStats.h"
 
 namespace o2
 {
@@ -68,15 +70,15 @@ class CompressedRawReader
 
   inline uint32_t getDecoderByteCounter() const { return reinterpret_cast<const char*>(mDataPointer) - mDataBuffer; };
 
-  void setVerbosity(bool v) { mVerbose = v; };
-  void setDataVerbosity(bool v) { mDataVerbose = v; };
-  void setHeaderVerbosity(bool v) { mHeaderVerbose = v; };
-  void configure(bool byteswap, bool verbose, bool headerverbose, bool dataverbose)
+  void setVerbose(bool v) { mVerbose = v; };
+  void setDataVerbose(bool v) { mDataVerbose = v; };
+  void setHeaderVerbose(bool v) { mHeaderVerbose = v; };
+  void configure(std::bitset<16> options)
   {
-    mByteSwap = byteswap;
-    mVerbose = verbose;
-    mHeaderVerbose = headerverbose;
-    mDataVerbose = dataverbose;
+    mByteSwap = options[TRDByteSwapBit];
+    mVerbose = options[TRDVerboseBit];
+    mHeaderVerbose = options[TRDHeaderVerboseBit];
+    mDataVerbose = options[TRDDataVerboseBit];
   }
   std::vector<Tracklet64>& getTracklets() { return mEventTracklets; };
   std::vector<Digit>& getDigits() { return mEventDigits; };

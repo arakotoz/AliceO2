@@ -14,19 +14,27 @@
     
     <mainDir>
       <!-- main path to the local O2 installation -->
-      <local>
+      <O2local>
         ../..
-      </local>
+      </O2local>
+
+      <O2Physicslocal>
+        ../../../O2Physics
+      </O2Physicslocal>
     
-      <!-- ALICE O2 gitHub repository -->
-      <GitHub> 
-        https://github.com/AliceO2Group/AliceO2/blob/dev
-      </GitHub>
+      <!-- ALICE O2Physics gitHub repository -->
+      <O2GitHub> 
+        https://github.com/AliceO2Group/AliceO2/tree/dev
+      </O2GitHub>
+      
+      <O2PhysicsGitHub> 
+        https://github.com/AliceO2Group/O2Physics/tree/master
+      </O2PhysicsGitHub>
       
     </mainDir>
 
     <!-- definition of the main AnalysisDataModel header file -->
-    <!-- relative to mainDir/local -->
+    <!-- relative to mainDir/O2local -->
     <DataModelHeader>
       Framework/Core/include/Framework/AnalysisDataModel.h
     </DataModelHeader>
@@ -43,7 +51,7 @@
     
     <!-- string used in CMakefiles.txt to define a task executable -->
     <CEdeclarationString>
-      o2_add_dpl_workflow
+      o2physics_add_dpl_workflow
     </CEdeclarationString>
     
     <!-- delimiters used to mark text blocks to be replaced in html files -->
@@ -65,14 +73,14 @@
   <!-- where to get the extra header files from -->
   <headerFiles>
   
-    <!-- relative to mainDir/local -->
+    <!-- relative to mainDir/O2Physicslocal -->
     <mainDir>
-      Analysis/DataModel/include/AnalysisDataModel
+      .
     </mainDir>
     
     <!-- relative to headerFiles/mainDir -->
     <subDirs>
-      ., PID
+      Common/Core/PID, Common/DataModel
     </subDirs>
     
     <!-- selection of files to consider as header files -->
@@ -86,14 +94,14 @@
   <!-- where to get the CMakeLists.txt files from -->
   <CMLfiles>
   
-    <!-- relative to mainDir/local -->
+    <!-- relative to mainDir/O2Physicslocal -->
     <mainDir>
-      Analysis/Tasks
+      .
     </mainDir>
     
     <!-- relative to CMLfiles/mainDir -->
     <subDirs>
-      ., PID, PWGLF, PWGHF
+      Common/TableProducer, Common/TableProducer/PID
     </subDirs>
     
     <!-- selection of files to consider as CMakeLists files -->
@@ -107,14 +115,14 @@
   <!-- where to get the task code files from -->
   <codeFiles>
   
-    <!-- relative to mainDir/local -->
+    <!-- relative to mainDir/O2Physicslocal -->
     <mainDir>
-      Analysis/Tasks
+      .
     </mainDir>
     
     <!-- relative to codeFiles/mainDir -->
     <subDirs>
-      ., PID, PWGLF, PWGHF
+      Common/TableProducer, Common/TableProducer/PID
     </subDirs>
     
     <!-- selection of files to consider as task code files -->

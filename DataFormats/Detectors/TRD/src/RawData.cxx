@@ -68,7 +68,7 @@ void buildTrackletMCMData(TrackletMCMData& trackletword, const uint slope, const
 {
   trackletword.slope = slope;
   trackletword.pos = pos;
-  trackletword.pid = (q0 & 0x7f) | ((q1 & 0x1f) << 7); //q2 sits with upper 2 bits of q1 in the header pid word, hence the 0x1f so 5 bits are used here.
+  trackletword.pid = (q0 & 0x7f) & ((q1 & 0x1f) << 7); //q2 sits with upper 2 bits of q1 in the header pid word, hence the 0x1f so 5 bits are used here.
   trackletword.checkbit = 1;
 }
 
@@ -124,7 +124,7 @@ uint32_t getQFromRaw(const o2::trd::TrackletMCMHeader* header, const o2::trd::Tr
       qa = header->pid2;
       break;
     default:
-      LOG(warn) << " unknown trackletindex to getQFromRaw : " << pidindex;
+      LOG(warn) << " unknown trackletindex of " << trackletindex << " to getQFromRaw : " << pidindex;
       break;
   }
   //qa is 6bits of Q2 and 2 bits of Q1
@@ -253,6 +253,10 @@ void printHalfCRUHeader(o2::trd::HalfCRUHeader& halfcru)
   for (int i = 0; i < 15; i++) {
     LOGF(INFO, "Link %d size: %ul eflag: 0x%02x", i, sizes[i], errorflags[i]);
   }
+  LOG(INFO) << "Raw: " << std::hex << halfcru.word0 << " " << halfcru.word12[0] << " " << halfcru.word12[1] << " " << halfcru.word3 << " " << halfcru.word47[0] << " " << halfcru.word47[1] << " " << halfcru.word47[2] << " " << halfcru.word47[3];
+  for (int i = 0; i < 15; i++) {
+    LOGF(INFO, "Raw: %d word: %ul x", i, sizes[i], errorflags[i]);
+  }
 }
 
 void dumpHalfCRUHeader(o2::trd::HalfCRUHeader& halfcru)
@@ -309,11 +313,11 @@ bool trackletMCMHeaderSanityCheck(o2::trd::TrackletMCMHeader& header)
     goodheader = false;
   }
   // if we have 3rd tracklet (pid2!=0) then we must have all the others as well.
-  if ((header.pid2 != 0) && (header.pid1 == 0 || header.pid0 == 0)) {
+  if ((header.pid2 != 0xff) && (header.pid1 == 0xff || header.pid0 == 0xff)) {
     goodheader = false;
   }
   // sim for 2 tracklets.
-  if ((header.pid1 != 0) && (header.pid0 == 0)) {
+  if ((header.pid1 != 0xff) && (header.pid0 == 0xff)) {
     goodheader = false;
   }
 
@@ -323,6 +327,9 @@ bool trackletMCMHeaderSanityCheck(o2::trd::TrackletMCMHeader& header)
 bool trackletHCHeaderSanityCheck(o2::trd::TrackletHCHeader& header)
 {
   bool goodheader = true;
+  //TODO something wrong TDP is different from rawdata.h
+  //figure out but for now, just approve.
+  return true;
   if (header.one != 1) {
     LOG(warn) << "Sanity check tracklethcheader.one is not 1";
     goodheader = false;
@@ -357,10 +364,105 @@ bool digitMCMHeaderSanityCheck(o2::trd::DigitMCMHeader* header)
   return goodheader;
 }
 
-void printDigitHCHeader(o2::trd::DigitHCHeader& header)
+bool digitMCMADCMaskSanityCheck(o2::trd::DigitMCMADCMask& mask, int numberofbitsset)
 {
-  LOGF(INFO, "Digit HalfChamber Header\n Raw:0x%08x 0x%08x reserve:%01x side:%01x stack:0x%02x layer:0x%02x supermod:0x%02x numberHCW:0x%02x minor:0x%03x major:0x%03x version:0x%01x reserve:0x%02x pretriggercount=0x%02x pretriggerphase=0x%02x bunchxing:0x%05x number of timebins : 0x%03x\n",
-       header.word0, header.word1, header.res0, header.side, header.stack, header.layer, header.supermodule, header.numberHCW, header.minor, header.major, header.version, header.res1, header.ptrigcount, header.ptrigphase, header.bunchcrossing, header.numtimebins);
+  bool goodadcmask = true;
+  uint32_t count = (unsigned int)mask.c;
+  count = ~count;
+  /*  if(count != numberofbitsset){
+    goodadcmask=false;
+    LOG(warn) << "***DigitMCMADCMask bad bit count maskcount:" << ~mask.c << " bitscounting:" << numberofbitsset;
+  }*/
+  if (mask.n != 0x1) {
+    goodadcmask = false;
+  }
+  if (mask.j != 0xc) {
+    goodadcmask = false;
+  }
+  return goodadcmask;
+}
+
+bool digitMCMWordSanityCheck(o2::trd::DigitMCMData* word, int adcchannel)
+{
+  bool gooddata = true;
+  // DigitMCMWord0x3 is odd 10 for odd adc channels and 11 for even, counted as the first of the 3.
+  switch (word->c) {
+    case 3: // even adc channnel
+      if (adcchannel % 2 == 0) {
+        gooddata = true;
+      } else {
+        gooddata = false;
+      }
+      break;
+    case 2: // odd adc channel
+      if (adcchannel % 2 == 1) {
+        gooddata = true;
+      } else {
+        gooddata = false;
+      }
+      break;
+    case 1: // error
+      gooddata = false;
+      break;
+    case 0: // error
+      gooddata = false;
+      break;
+      // no default all cases taken care of
+  }
+  return gooddata;
+}
+
+int getDigitHCHeaderWordType(uint32_t word)
+{
+  if ((word & 0x3f) == 0b110001) {
+    return 2;
+  }
+  if ((word & 0x3f) == 0b110101) {
+    return 3;
+  }
+  if ((word & 0x3) == 0b01) {
+    return 1;
+  }
+  return -1;
+}
+void printDigitHCHeader(o2::trd::DigitHCHeader& header, uint32_t headers[3])
+{
+  LOGF(INFO, "Digit HalfChamber Header\n Raw:0x%08x reserve:0x%01x side:0x%01x stack:0x%02x layer:0x%02x supermod:0x%02x numberHCW:0x%02x minor:0x%03x major:0x%03x version(>2007):0x%01x \n",
+       header.word, header.res, header.side, header.stack, header.layer, header.supermodule,
+       header.numberHCW, header.minor, header.major, header.version);
+  int countheaderwords = header.numberHCW;
+  //for the currently 3 implemeented other header words, they can come in any order, and are identified by their reserved portion
+  for (int countheaderwords = 0; countheaderwords < header.numberHCW; ++countheaderwords) {
+    switch (getDigitHCHeaderWordType(headers[countheaderwords])) {
+      case 1:
+        DigitHCHeader1 header1;
+        header1.word = headers[countheaderwords];
+        if (header1.res != 0x1) {
+          LOGF(INFO, "*Corrupt* Digit HalfChamber Header1 Raw:0x%08x reserve:0x%02x pretriggercount=0x%02x pretriggerphase=0x%02x bunchxing:0x%05x number of timebins : 0x%03x\n", header1.word, header1.res, header1.ptrigcount, header1.ptrigphase, header1.bunchcrossing, header1.numtimebins);
+        } else {
+          LOGF(INFO, "Digit HalfChamber Header1 Raw:0x%08x reserve:0x%02x pretriggercount=0x%02x pretriggerphase=0x%02x bunchxing:0x%05x number of timebins : 0x%03x\n", header1.word, header1.res, header1.ptrigcount, header1.ptrigphase, header1.bunchcrossing, header1.numtimebins);
+        }
+        break;
+      case 2:
+        DigitHCHeader2 header2;
+        header2.word = headers[countheaderwords];
+        if (header2.res != 0b110001) {
+          LOGF(INFO, "*Corrupt* Digit HalfChamber Header2 Raw:0x%08x reserve:0x%08x PedestalFilter:0x%01x GainFilter:0x%01x TailFilter:0x%01x CrosstalkFilter:0x%01x Non-linFilter:0x%01x RawDataBypassFilter:0x%01x DigitFilterCommonAdditive:0x%02x ", header2.word, header2.res, header2.dfilter, header2.rfilter, header2.nlfilter, header2.xtfilter, header2.tfilter, header2.gfilter, header2.pfilter);
+        } else {
+          LOGF(INFO, "Digit HalfChamber Header2 Raw:0x%08x reserve:0x%08x PedestalFilter:0x%01x GainFilter:0x%01x TailFilter:0x%01x CrosstalkFilter:0x%01x Non-linFilter:0x%01x RawDataBypassFilter:0x%01x DigitFilterCommonAdditive:0x%02x ", header2.word, header2.res, header2.dfilter, header2.rfilter, header2.nlfilter, header2.xtfilter, header2.tfilter, header2.gfilter, header2.pfilter);
+        }
+        break;
+      case 3:
+        DigitHCHeader3 header3;
+        header3.word = headers[countheaderwords];
+        if (header3.res != 0b110101) {
+          LOGF(INFO, "*Corrupt*Digit HalfChamber Header3\n Raw:0x%08x reserve:0x%08x readout program revision:0x%08x assembler program version:0x%01x \n", header3.word, header3.res, header3.svnrver, header3.svnver);
+        } else {
+          LOGF(INFO, "Digit HalfChamber Header3\n Raw:0x%08x reserve:0x%08x readout program revision:0x%08x assembler program version:0x%01x \n", header3.word, header3.res, header3.svnrver, header3.svnver);
+        }
+        break;
+    }
+  }
 }
 
 DigitMCMADCMask buildBlankADCMask()
@@ -368,7 +470,7 @@ DigitMCMADCMask buildBlankADCMask()
   //set the default values for the mask.
   DigitMCMADCMask mask;
   mask.c = 0x1f;
-  mask.n = 0x3;
+  mask.n = 0x1;
   mask.j = 0xc;
   // actual mask will beset somewhere else, the above values are *always* that.
   return mask;
@@ -378,32 +480,27 @@ int getNumberofTracklets(o2::trd::TrackletMCMHeader& header)
 {
   int headertrackletcount = 0;
   if (header.pid0 == 0xff) {
-    LOG(warn) << "! we have an MCM Tracklet Header with the first pid zero implying no tracklets! header to follow:";
-    LOG(warn) << header;
-    return 0;
+    //LOG(warn) << header;
   } else {
     if (header.pid2 != 0xff) {
       // 3 tracklets
       headertrackletcount = 3;
       if (header.pid1 == 0xff || header.pid0 == 0xff) {
-        LOG(warn) << "! we have an MCM Tracklet Header with the pid2!=0 but pid1 or pid0 is ! header to follow:";
-        LOG(warn) << header;
+        //   LOG(warn) << header;
       }
     } else {
       if (header.pid1 != 0xff) {
         // 2 tracklets
         headertrackletcount = 2;
         if (header.pid0 == 0xff) {
-          LOG(warn) << "! we have an MCM Tracklet Header with the pid1!=0 but pid0 is ! header to follow:";
-          LOG(warn) << header;
+          //    LOG(warn) << header;
         }
       } else {
         if (header.pid0 != 0xff) {
           // 1 tracklet
           headertrackletcount = 1;
         } else {
-          LOG(warn) << "! we have an MCM Tracklet Header with the pidx==0xff  we should not be here due to first if statement though! header to follow:";
-          LOG(warn) << header;
+          //   LOG(warn) << header;
         }
       }
     }
@@ -440,14 +537,20 @@ void setNumberOfTrackletsInHeader(o2::trd::TrackletMCMHeader& header, int number
 int nextmcmadc(unsigned int& bp, int channel)
 {
   //given a bitpattern (adcmask) find next channel with in the mask starting from the current channel;
-  while ((bp & (1 << channel)) == 0) {
-    channel++;
-    if (channel == 21) {
+  if (bp == 0) {
+    return 22;
+  }
+  int position = channel;
+  int m = 1 << channel;
+  while (!(bp & m)) {
+    m = m << 1;
+    position++;
+    if (position > 31) {
       break;
     }
   }
-  bp &= ~(1UL << (channel));
-  return channel; // zero based
+  bp &= ~(1UL << (position));
+  return position;
 }
 
 } // namespace trd

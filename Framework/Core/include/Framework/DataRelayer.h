@@ -24,7 +24,7 @@
 #include <mutex>
 #include <vector>
 
-class FairMQMessage;
+#include <fairmq/FwdDecls.h>
 
 namespace o2::monitoring
 {
@@ -136,6 +136,8 @@ class DataRelayer
   uint32_t getFirstTFOrbitForSlot(TimesliceSlot slot);
   /// Get the firstTFCounter associate to a given slot.
   uint32_t getFirstTFCounterForSlot(TimesliceSlot slot);
+  /// Get the runNumber associated to a given slot
+  uint32_t getRunNumberForSlot(TimesliceSlot slot);
   /// Remove all pending messages
   void clear();
 
@@ -157,6 +159,7 @@ class DataRelayer
   std::vector<data_matcher::DataDescriptorMatcher> mInputMatchers;
   std::vector<data_matcher::VariableContext> mVariableContextes;
   std::vector<CacheEntryStatus> mCachedStateMetrics;
+  size_t mMaxLanes;
 
   static std::vector<std::string> sMetricsNames;
   static std::vector<std::string> sVariablesMetricsNames;

@@ -61,10 +61,7 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
     srcTRD = GTrackID::getSourcesMask("TPC");
   }
   o2::framework::WorkflowSpec specs;
-  bool useMC = false;
-  if (!configcontext.options().get<bool>("disable-mc") && !useMC) {
-    LOG(WARNING) << "MC is not disabled, although it is not yet supported by the workflow. It is forced off.";
-  }
+  bool useMC = !configcontext.options().get<bool>("disable-mc");
 
   // processing devices
   specs.emplace_back(o2::trd::getTRDGlobalTrackingSpec(useMC, srcTRD, trigRecFilterActive, strict));
@@ -84,13 +81,17 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   }
 
   // input
-  auto maskClusters = GTrackID::getSourcesMask("TRD");
-  auto maskTracks = srcTRD;
+  auto maskClusters = GTrackID::getSourcesMask("TRD,TPC");
+  auto maskTracks = srcTRD | GTrackID::getSourcesMask("TPC"); // we always need the TPC tracks for the refit
+  if (GTrackID::includesDet(GTrackID::DetID::ITS, srcTRD)) {
+    maskClusters |= GTrackID::getSourcesMask("ITS");
+    maskTracks |= GTrackID::getSourcesMask("ITS");
+  }
   auto maskMatches = GTrackID::getSourcesMask(GTrackID::NONE);
   o2::globaltracking::InputHelper::addInputSpecs(configcontext, specs, maskClusters, maskMatches, maskTracks, useMC);
 
   // configure dpl timer to inject correct firstTFOrbit: start from the 1st orbit of TF containing 1st sampled orbit
   o2::raw::HBFUtilsInitializer hbfIni(configcontext, specs);
 
-  return std::move(specs);
+  return specs;
 }

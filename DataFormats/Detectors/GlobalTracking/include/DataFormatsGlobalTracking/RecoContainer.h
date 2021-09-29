@@ -67,6 +67,12 @@ namespace o2::mft
 class TrackMFT;
 }
 
+namespace o2::mch
+{
+class TrackMCH;
+class ROFRecord;
+} // namespace o2::mch
+
 namespace o2::itsmft
 {
 class ROFRecord;
@@ -83,7 +89,26 @@ namespace o2::ft0
 {
 class RecPoints;
 class ChannelDataFloat;
-}
+} // namespace o2::ft0
+
+namespace o2::fv0
+{
+class RecPoints;
+class ChannelDataFloat;
+} // namespace o2::fv0
+
+namespace o2::zdc
+{
+class BCRecData;
+class ZDCEnergy;
+class ZDCTDCData;
+} // namespace o2::zdc
+
+namespace o2::fdd
+{
+class RecPoint;
+class ChannelDataFloat;
+} // namespace o2::fdd
 
 namespace o2::dataformats
 {
@@ -96,6 +121,7 @@ class VtxTrackRef;
 class V0;
 class Cascade;
 class TrackCosmics;
+class GlobalFwdTrack;
 class IRFrame;
 } // namespace o2::dataformats
 
@@ -129,15 +155,20 @@ struct DataRequest {
 
   void requestITSTracks(bool mc);
   void requestMFTTracks(bool mc);
+  void requestMCHTracks(bool mc);
   void requestTPCTracks(bool mc);
   void requestITSTPCTracks(bool mc);
+  void requestGlobalFwdTracks(bool mc);
   void requestTPCTOFTracks(bool mc);
   void requestITSTPCTRDTracks(bool mc);
   void requestTPCTRDTracks(bool mc);
   void requestTOFMatches(bool mc);
   void requestFT0RecPoints(bool mc);
-
+  void requestFV0RecPoints(bool mc);
+  void requestFDDRecPoints(bool mc);
+  void requestZDCRecEvents(bool mc);
   void requestITSClusters(bool mc);
+  void requestMFTClusters(bool mc);
   void requestTPCClusters(bool mc);
   void requestTOFClusters(bool mc);
   void requestTRDTracklets(bool mc);
@@ -229,20 +260,27 @@ struct RecoContainer {
 
   void addITSTracks(o2::framework::ProcessingContext& pc, bool mc);
   void addMFTTracks(o2::framework::ProcessingContext& pc, bool mc);
+  void addMCHTracks(o2::framework::ProcessingContext& pc, bool mc);
   void addTPCTracks(o2::framework::ProcessingContext& pc, bool mc);
 
   void addITSTPCTRDTracks(o2::framework::ProcessingContext& pc, bool mc);
   void addTPCTRDTracks(o2::framework::ProcessingContext& pc, bool mc);
   void addITSTPCTracks(o2::framework::ProcessingContext& pc, bool mc);
+  void addGlobalFwdTracks(o2::framework::ProcessingContext& pc, bool mc);
   void addTPCTOFTracks(o2::framework::ProcessingContext& pc, bool mc);
   void addTOFMatches(o2::framework::ProcessingContext& pc, bool mc);
 
   void addITSClusters(o2::framework::ProcessingContext& pc, bool mc);
+  void addMFTClusters(o2::framework::ProcessingContext& pc, bool mc);
   void addTPCClusters(o2::framework::ProcessingContext& pc, bool mc, bool shmap);
   void addTOFClusters(o2::framework::ProcessingContext& pc, bool mc);
-  void addTRDTracklets(o2::framework::ProcessingContext& pc);
+  void addTRDTracklets(o2::framework::ProcessingContext& pc, bool mc);
 
   void addFT0RecPoints(o2::framework::ProcessingContext& pc, bool mc);
+  void addFV0RecPoints(o2::framework::ProcessingContext& pc, bool mc);
+  void addFDDRecPoints(o2::framework::ProcessingContext& pc, bool mc);
+
+  void addZDCRecEvents(o2::framework::ProcessingContext& pc, bool mc);
 
   void addCosmicTracks(o2::framework::ProcessingContext& pc, bool mc);
 
@@ -349,11 +387,18 @@ struct RecoContainer {
   auto getMFTTracksROFRecords() const { return getSpan<o2::itsmft::ROFRecord>(GTrackID::MFT, TRACKREFS); }
   auto getMFTTracksClusterRefs() const { return getSpan<int>(GTrackID::MFT, INDICES); }
   auto getMFTTracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::MFT, MCLABELS); }
+
   // MFT clusters
-  //auto getMFTClustersROFRecords() const { return getSpan<o2::itsmft::ROFRecord>(GTrackID::MFT, CLUSREFS); }
-  //auto getMFTClusters() const { return getSpan<o2::itsmft::CompClusterExt>(GTrackID::MFT, CLUSTERS); }
-  //auto getMFTClustersPatterns() const { return getSpan<unsigned char>(GTrackID::MFT, PATTERNS); }
-  //auto getMFTClustersMCLabels() const { return mcMFTClusters.get(); }
+  auto getMFTClustersROFRecords() const { return getSpan<o2::itsmft::ROFRecord>(GTrackID::MFT, CLUSREFS); }
+  auto getMFTClusters() const { return getSpan<o2::itsmft::CompClusterExt>(GTrackID::MFT, CLUSTERS); }
+  auto getMFTClustersPatterns() const { return getSpan<unsigned char>(GTrackID::MFT, PATTERNS); }
+
+  // MCH
+  const o2::mch::TrackMCH& getMCHTrack(GTrackID gid) const { return getTrack<o2::mch::TrackMCH>(gid); }
+  auto getMCHTracks() const { return getTracks<o2::mch::TrackMCH>(GTrackID::MCH); }
+  auto getMCHTracksROFRecords() const { return getSpan<o2::mch::ROFRecord>(GTrackID::MCH, TRACKREFS); }
+  auto getMCHTracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::MCH, MCLABELS); }
+  // FIXME: add clusters
 
   // TPC
   const o2::tpc::TrackTPC& getTPCTrack(GTrackID id) const { return getTrack<o2::tpc::TrackTPC>(id); }
@@ -370,6 +415,11 @@ struct RecoContainer {
   auto getTPCITSTracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::ITSTPC, MCLABELS); }
   auto getTPCITSTrackMCLabel(GTrackID id) const { return getObject<o2::MCCompLabel>(id, MCLABELS); }
 
+  // MFT-MCH
+  const o2::dataformats::GlobalFwdTrack& getGlobalFwdTrack(GTrackID gid) const { return getTrack<o2::dataformats::GlobalFwdTrack>(gid); }
+  auto getGlobalFwdTracks() const { return getTracks<o2::dataformats::GlobalFwdTrack>(GTrackID::MFTMCH); }
+  auto getGlobalFwdTracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::MFTMCH, MCLABELS); }
+
   // ITS-TPC-TRD, since the TrackTRD track is just an alias, forward-declaring it does not work, need to keep template
   template <class U>
   auto getITSTPCTRDTrack(GTrackID id) const
@@ -385,6 +435,10 @@ struct RecoContainer {
   {
     return getSpan<o2::trd::TrackTriggerRecord>(GTrackID::ITSTPCTRD, TRACKREFS);
   }
+  auto getITSTPCTRDTracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::ITSTPCTRD, MCLABELS); }
+  auto getITSTPCTRDTrackMCLabel(GTrackID id) const { return getObject<o2::MCCompLabel>(id, MCLABELS); }
+  auto getITSTPCTRDSATracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::ITSTPCTRD, MCLABELSEXTRA); }
+  auto getITSTPCTRDSATrackMCLabel(GTrackID id) const { return getObject<o2::MCCompLabel>(id, MCLABELSEXTRA); }
 
   // TPC-TRD
   template <class U>
@@ -401,6 +455,10 @@ struct RecoContainer {
   {
     return getSpan<o2::trd::TrackTriggerRecord>(GTrackID::TPCTRD, TRACKREFS);
   }
+  auto getTPCTRDTracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::TPCTRD, MCLABELS); }
+  auto getTPCTRDTrackMCLabel(GTrackID id) const { return getObject<o2::MCCompLabel>(id, MCLABELS); }
+  auto getTPCTRDSATracksMCLabels() const { return getSpan<o2::MCCompLabel>(GTrackID::TPCTRD, MCLABELSEXTRA); }
+  auto getTPCTRDSATrackMCLabel(GTrackID id) const { return getObject<o2::MCCompLabel>(id, MCLABELSEXTRA); }
   // TRD tracklets
   gsl::span<const o2::trd::Tracklet64> getTRDTracklets() const;
   gsl::span<const o2::trd::CalibratedTracklet> getTRDCalibratedTracklets() const;
@@ -436,6 +494,20 @@ struct RecoContainer {
   // FT0
   auto getFT0RecPoints() const { return getSpan<o2::ft0::RecPoints>(GTrackID::FT0, TRACKS); }
   auto getFT0ChannelsData() const { return getSpan<o2::ft0::ChannelDataFloat>(GTrackID::FT0, CLUSTERS); }
+
+  // FV0
+  auto getFV0RecPoints() const { return getSpan<o2::fv0::RecPoints>(GTrackID::FV0, TRACKS); }
+  auto getFV0ChannelsData() const { return getSpan<o2::fv0::ChannelDataFloat>(GTrackID::FV0, CLUSTERS); }
+
+  // FDD
+  auto getFDDRecPoints() const { return getSpan<o2::fdd::RecPoint>(GTrackID::FDD, TRACKS); }
+  auto getFDDChannelsData() const { return getSpan<o2::fdd::ChannelDataFloat>(GTrackID::FDD, CLUSTERS); }
+
+  // ZDC
+  auto getZDCBCRecData() const { return getSpan<o2::zdc::BCRecData>(GTrackID::ZDC, MATCHES); }
+  auto getZDCEnergy() const { return getSpan<o2::zdc::ZDCEnergy>(GTrackID::ZDC, TRACKS); }
+  auto getZDCTDCData() const { return getSpan<o2::zdc::ZDCTDCData>(GTrackID::ZDC, CLUSTERS); }
+  auto getZDCInfo() const { return getSpan<uint16_t>(GTrackID::ZDC, PATTERNS); }
 
   // Primary vertices
   const o2::dataformats::PrimaryVertex& getPrimaryVertex(int i) const { return pvtxPool.get_as<o2::dataformats::PrimaryVertex>(PVTX, i); }

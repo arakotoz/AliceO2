@@ -183,19 +183,37 @@ auto ConvertTCMData2Digit(DigitType& digit, const TCMDataType& tcmData) -> std::
 template <typename LookupTableType, typename ChannelDataType, typename PMDataType>
 auto ConvertEventData2ChData(std::vector<ChannelDataType>& vecChData, const PMDataType& pmData, int linkID, int ep) -> std::enable_if_t<std::is_same<decltype(std::declval<ChannelDataType>().QTCAmpl), int16_t>::value>
 {
-  vecChData.emplace_back(static_cast<uint8_t>(LookupTableType::Instance().getChannel(linkID, pmData.channelID, ep)), static_cast<int>(pmData.time), static_cast<int>(pmData.charge), static_cast<uint8_t>(pmData.getFlagWord()));
+  bool isValid{};
+  const auto globalChID = LookupTableType::Instance().getChannel(linkID, ep, pmData.channelID, isValid);
+  if (isValid) {
+    vecChData.emplace_back(static_cast<uint8_t>(globalChID), static_cast<int>(pmData.time), static_cast<int>(pmData.charge), static_cast<uint8_t>(pmData.getFlagWord()));
+  } else {
+    LOG(WARNING) << "Incorrect global channel! linkID: " << linkID << " | EndPoint: " << ep << " | LocalChID: " << pmData.channelID;
+  }
 }
 //FV0
 template <typename LookupTableType, typename ChannelDataType, typename PMDataType>
-auto ConvertEventData2ChData(std::vector<ChannelDataType>& vecChData, const PMDataType& pmData, int linkID, int) -> std::enable_if_t<std::is_same<decltype(std::declval<ChannelDataType>().chargeAdc), Short_t>::value>
+auto ConvertEventData2ChData(std::vector<ChannelDataType>& vecChData, const PMDataType& pmData, int linkID, int ep) -> std::enable_if_t<std::is_same<decltype(std::declval<ChannelDataType>().chargeAdc), Short_t>::value>
 {
-  vecChData.emplace_back(static_cast<Short_t>(LookupTableType::Instance().getChannel(linkID, pmData.channelID)), static_cast<Float_t>(pmData.time), static_cast<Short_t>(pmData.charge));
+  bool isValid{};
+  const auto globalChID = LookupTableType::Instance().getChannel(linkID, ep, pmData.channelID, isValid);
+  if (isValid) {
+    vecChData.emplace_back(static_cast<Short_t>(globalChID), static_cast<Float_t>(pmData.time), static_cast<Short_t>(pmData.charge));
+  } else {
+    LOG(WARNING) << "Incorrect global channel! linkID: " << linkID << " | EndPoint: " << ep << " | LocalChID: " << pmData.channelID;
+  }
 }
 //FDD
 template <typename LookupTableType, typename ChannelDataType, typename PMDataType>
 auto ConvertEventData2ChData(std::vector<ChannelDataType>& vecChData, const PMDataType& pmData, int linkID, int ep) -> std::enable_if_t<std::is_same<decltype(std::declval<ChannelDataType>().mChargeADC), int16_t>::value>
 {
-  vecChData.emplace_back(static_cast<uint8_t>(LookupTableType::Instance().getChannel(linkID, pmData.channelID, ep)), static_cast<int>(pmData.time), static_cast<int>(pmData.charge), static_cast<uint8_t>(pmData.getFlagWord()));
+  bool isValid{};
+  const auto globalChID = LookupTableType::Instance().getChannel(linkID, ep, pmData.channelID, isValid);
+  if (isValid) {
+    vecChData.emplace_back(static_cast<uint8_t>(globalChID), static_cast<int>(pmData.time), static_cast<int>(pmData.charge), static_cast<uint8_t>(pmData.getFlagWord()));
+  } else {
+    LOG(WARNING) << "Incorrect global channel! linkID: " << linkID << " | EndPoint: " << ep << " | LocalChID: " << pmData.channelID;
+  }
 }
 //Interface for extracting interaction record from Digit
 template <typename T>
@@ -227,7 +245,7 @@ class DigitBlockFIT : public DigitBlockBase<DigitType, ChannelDataType>
   ~DigitBlockFIT() = default;
   //Filling data from PM
   template <class DataBlockType>
-  auto processDigits(DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockPM, DataBlockType>::value>
+  auto processDigits(const DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockPM, DataBlockType>::value>
   {
     for (int iEventData = 0; iEventData < dataBlock.DataBlockWrapper<typename DataBlockType::RawDataPM>::mNelements; iEventData++) {
       const auto& pmData = dataBlock.DataBlockWrapper<typename DataBlockType::RawDataPM>::mData[iEventData];
@@ -236,7 +254,7 @@ class DigitBlockFIT : public DigitBlockBase<DigitType, ChannelDataType>
   }
   //Filling data from TCM (normal mode)
   template <class DataBlockType>
-  auto processDigits(DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockTCM, DataBlockType>::value>
+  auto processDigits(const DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockTCM, DataBlockType>::value>
   {
     auto& tcmData = dataBlock.DataBlockWrapper<typename DataBlockType::RawDataTCM>::mData[0];
     DigitBlockFIThelper::ConvertTCMData2Digit(DigitBlockBase_t::mDigit, tcmData);
@@ -314,14 +332,14 @@ class DigitBlockFIT : public DigitBlockBase<DigitType, ChannelDataType>
       digitBlockProc.processDigitBlockPerTF(DigitBlockBase_t::template makeDigitBlock<DigitBlockFIT_t>(vecDigit, vecChannelData));
     }
   }
-  //
-  template <typename DetTrigInput>
-  void getDigits(std::vector<DigitType>& vecDigits, std::vector<ChannelDataType>& vecChannelData, std::vector<DetTrigInput>& vecTriggerInput)
+  template <typename VecDigitType, typename VecChannelDataType, typename VecDetTrigInputType>
+  void getDigits(VecDigitType& vecDigits, VecChannelDataType& vecChannelData, VecDetTrigInputType& vecTriggerInput)
   {
     DigitBlockBase_t::mDigit.fillTrgInputVec(vecTriggerInput);
     DigitBlockBase_t::getSubDigits(vecDigits, vecChannelData);
   }
-  void getDigits(std::vector<DigitType>& vecDigits, std::vector<ChannelDataType>& vecChannelData)
+  template <typename VecDigitType, typename VecChannelDataType>
+  void getDigits(VecDigitType& vecDigits, VecChannelDataType& vecChannelData)
   {
     DigitBlockBase_t::getSubDigits(vecDigits, vecChannelData);
   }
@@ -359,7 +377,7 @@ class DigitBlockFIText : public DigitBlockBase<DigitType, ChannelDataType, Trigg
   ~DigitBlockFIText() = default;
   //Filling data from PM
   template <class DataBlockType>
-  auto processDigits(DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockPM, DataBlockType>::value>
+  auto processDigits(const DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockPM, DataBlockType>::value>
   {
     for (int iEventData = 0; iEventData < dataBlock.DataBlockWrapper<typename DataBlockType::RawDataPM>::mNelements; iEventData++) {
       const auto& pmData = dataBlock.DataBlockWrapper<typename DataBlockType::RawDataPM>::mData[iEventData];
@@ -368,7 +386,7 @@ class DigitBlockFIText : public DigitBlockBase<DigitType, ChannelDataType, Trigg
   }
   //Filling data from TCM (extended mode)
   template <class DataBlockType>
-  auto processDigits(DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockTCMext, DataBlockType>::value>
+  auto processDigits(const DataBlockType& dataBlock, int linkID, int ep) -> std::enable_if_t<DigitBlockHelper::IsSpecOfType<DataBlockTCMext, DataBlockType>::value>
   {
     auto& tcmData = dataBlock.DataBlockWrapper<typename DataBlockType::RawDataTCM>::mData[0];
     DigitBlockFIThelper::ConvertTCMData2Digit(DigitBlockBase_t::mDigit, tcmData);
@@ -438,14 +456,14 @@ class DigitBlockFIText : public DigitBlockBase<DigitType, ChannelDataType, Trigg
     dataBlockTCM.DataBlockWrapper<typename DataBlockType::RawDataTCMext>::mNelements = 1;
     return {LookupTable_t::Instance().getTopoTCM(), dataBlockTCM};
   }
-  template <typename DetTrigInput>
-  void getDigits(std::vector<DigitType>& vecDigits, std::vector<ChannelDataType>& vecChannelData, std::vector<TriggersExtType>& vecTriggersExt, std::vector<DetTrigInput>& vecTriggerInput)
+  template <typename VecDigitType, typename VecChannelDataType, typename VecTriggersExtType, typename VecDetTrigInputType>
+  void getDigits(VecDigitType& vecDigits, VecChannelDataType& vecChannelData, VecTriggersExtType& vecTriggersExt, VecDetTrigInputType& vecTriggerInput)
   {
     DigitBlockBase_t::mDigit.fillTrgInputVec(vecTriggerInput);
     getDigits(vecDigits, vecChannelData, vecTriggersExt);
   }
-
-  void getDigits(std::vector<DigitType>& vecDigits, std::vector<ChannelDataType>& vecChannelData, std::vector<TriggersExtType>& vecTriggersExt)
+  template <typename VecDigitType, typename VecChannelDataType, typename VecTriggersExtType>
+  void getDigits(VecDigitType& vecDigits, VecChannelDataType& vecChannelData, VecTriggersExtType& vecTriggersExt)
   {
     DigitBlockBase_t::getSubDigits(vecDigits, vecChannelData);
     DigitBlockBase_t::getSingleSubDigits(vecTriggersExt);

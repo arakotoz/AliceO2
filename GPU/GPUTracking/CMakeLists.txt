@@ -157,7 +157,7 @@ set(HDRS_INSTALL
 if(ALIGPU_BUILD_TYPE STREQUAL "O2")
   set(SRCS ${SRCS} Interface/GPUO2InterfaceConfigurableParam.cxx)
   set(HDRS_CINT_O2 ${HDRS_CINT_O2} DataTypes/TPCdEdxCalibrationSplines.h Interface/GPUO2InterfaceConfigurableParam.h)
-  set(HDRS_CINT_O2_ADDITIONAL DataTypes/GPUSettings.h Definitions/GPUSettingsList.h DataTypes/GPUDataTypes.h DataTypes/GPUTRDTrack.h DataTypes/GPUTRDO2BaseTrack.h) # Manual dependencies for ROOT dictionary generation
+  set(HDRS_CINT_O2_ADDITIONAL DataTypes/GPUSettings.h Definitions/GPUSettingsList.h DataTypes/GPUDataTypes.h DataTypes/GPUTRDTrack.h Merger/GPUTPCGMMergedTrack.h) # Manual dependencies for ROOT dictionary generation
 endif()
 
 # Sources for O2 and for Standalone if requested in config file
@@ -210,8 +210,7 @@ if(ALIGPU_BUILD_TYPE STREQUAL "O2" OR CONFIG_O2_EXTENSIONS)
                      Definitions/clusterFinderDefs.h
                      TPCClusterFinder/GPUTPCClusterFinderKernels.h
                      TPCClusterFinder/PackedCharge.h
-                     TPCClusterFinder/GPUTPCCFChainContext.h
-                     DataTypes/GPUTRDO2BaseTrack.h)
+                     TPCClusterFinder/GPUTPCCFChainContext.h)
 endif()
 
 # Sources only for AliRoot
@@ -247,6 +246,12 @@ if(GPUCA_EVENT_DISPLAY)
   set(HDRS_INSTALL ${HDRS_INSTALL}
                    display/GPUDisplayExt.h
                    display/GPUDisplayShaders.h)
+  if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
+    install(DIRECTORY display/filterMacros/ DESTINATION displayTrackFilter FILES_MATCHING PATTERN "*.C")
+    get_property(GPU_DISPLAY_INCLUDE_PATH DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
+    configure_file(display/filterMacros/setinclude.sh.in setinclude.sh @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setinclude.sh PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE DESTINATION displayTrackFilter)
+  endif()
 else()
   set(HDRS_INSTALL ${HDRS_INSTALL} display/GPUDisplay.h)
 endif()
@@ -281,7 +286,7 @@ if(ALIGPU_BUILD_TYPE STREQUAL "O2")
                  SOURCES ${SRCS_O2_DATATYPES})
 target_compile_definitions(${targetName} PRIVATE GPUCA_O2_LIB
                            GPUCA_TPC_GEOMETRY_O2 GPUCA_HAVE_O2HEADERS)
-                 
+
 
   o2_add_library(${MODULE}
                  TARGETVARNAME targetName
@@ -480,28 +485,28 @@ endif()
 if(OPENCL1_ENABLED)
   target_compile_definitions(${targetName} PRIVATE OPENCL1_ENABLED)
 endif()
-if(GPUCA_GPUCA_OPENCL2_ENABLED)
-  target_compile_definitions(${targetName} PRIVATE GPUCA_GPUCA_OPENCL2_ENABLED)
+if(OPENCL2_ENABLED)
+  target_compile_definitions(${targetName} PRIVATE OPENCL2_ENABLED)
 endif()
 if(HIP_ENABLED)
   target_compile_definitions(${targetName} PRIVATE HIP_ENABLED)
 endif()
 
 # Add CMake recipes for GPU Tracking librararies
-if(CUDA_ENABLED OR OPENCL1_ENABLED OR GPUCA_GPUCA_OPENCL2_ENABLED OR HIP_ENABLED)
+if(CUDA_ENABLED OR OPENCL1_ENABLED OR OPENCL2_ENABLED OR HIP_ENABLED)
   if(CMAKE_SYSTEM_NAME MATCHES Darwin)
     message(WARNING "GPU Tracking disabled on MacOS")
   else()
     if(CUDA_ENABLED)
       add_subdirectory(Base/cuda)
     endif()
-    if(OPENCL1_ENABLED OR GPUCA_GPUCA_OPENCL2_ENABLED)
+    if(OPENCL1_ENABLED OR OPENCL2_ENABLED)
       add_subdirectory(Base/opencl-common)
     endif()
     if(OPENCL1_ENABLED)
       add_subdirectory(Base/opencl)
     endif()
-    if(GPUCA_GPUCA_OPENCL2_ENABLED)
+    if(OPENCL2_ENABLED)
       add_subdirectory(Base/opencl2)
     endif()
     if(HIP_ENABLED)

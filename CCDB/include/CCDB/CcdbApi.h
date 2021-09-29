@@ -24,6 +24,14 @@
 #include <TObject.h>
 #include <TMessage.h>
 #include "CCDB/CcdbObjectInfo.h"
+#include <CommonUtils/ConfigurableParam.h>
+#include <type_traits>
+
+#if !defined(__CINT__) && !defined(__MAKECINT__) && !defined(__ROOTCLING__) && !defined(__CLING__)
+#include <TJAlienCredentials.h>
+#else
+class TJAlienCredentials;
+#endif
 
 class TFile;
 class TGrid;
@@ -144,9 +152,16 @@ class CcdbApi //: public DatabaseInterface
    * @return the object, or nullptr if none were found or type does not match serialized type.
    */
   template <typename T>
-  T* retrieveFromTFileAny(std::string const& path, std::map<std::string, std::string> const& metadata,
-                          long timestamp = -1, std::map<std::string, std::string>* headers = nullptr, std::string const& etag = "",
-                          const std::string& createdNotAfter = "", const std::string& createdNotBefore = "") const;
+  typename std::enable_if<!std::is_base_of<o2::conf::ConfigurableParam, T>::value, T*>::type
+    retrieveFromTFileAny(std::string const& path, std::map<std::string, std::string> const& metadata,
+                         long timestamp = -1, std::map<std::string, std::string>* headers = nullptr, std::string const& etag = "",
+                         const std::string& createdNotAfter = "", const std::string& createdNotBefore = "") const;
+
+  template <typename T>
+  typename std::enable_if<std::is_base_of<o2::conf::ConfigurableParam, T>::value, T*>::type
+    retrieveFromTFileAny(std::string const& path, std::map<std::string, std::string> const& metadata,
+                         long timestamp = -1, std::map<std::string, std::string>* headers = nullptr, std::string const& etag = "",
+                         const std::string& createdNotAfter = "", const std::string& createdNotBefore = "") const;
 
   /**
    * Delete all versions of the object at this path.
@@ -277,6 +292,19 @@ class CcdbApi //: public DatabaseInterface
   constexpr static const char* CCDBMETA_ENTRY = "ccdb_meta";
   constexpr static const char* CCDBOBJECT_ENTRY = "ccdb_object";
 
+  /**
+   * Set curl SSL options. The client still will be able to connect to non-ssl endpoints
+   * @param curl curl handler
+   * @return
+   */
+  static void curlSetSSLOptions(CURL* curl);
+
+  TObject* retrieve(std::string const& path, std::map<std::string, std::string> const& metadata, long timestamp) const;
+
+  TObject* retrieveFromTFile(std::string const& path, std::map<std::string, std::string> const& metadata, long timestamp,
+                             std::map<std::string, std::string>* headers, std::string const& etag,
+                             const std::string& createdNotAfter, const std::string& createdNotBefore) const;
+
  private:
   /**
    * Initialize in local mode; Objects will be retrieved from snapshot
@@ -382,18 +410,32 @@ class CcdbApi //: public DatabaseInterface
   std::string mUrl{};
   std::string mSnapshotTopPath{};
   bool mInSnapshotMode = false;
-  mutable TGrid* mAlienInstance = nullptr;                     // a cached connection to TGrid (needed for Alien locations)
-  bool mHaveAlienToken = false;                                // stores if an alien token is available
+  mutable TGrid* mAlienInstance = nullptr;                       // a cached connection to TGrid (needed for Alien locations)
+  bool mHaveAlienToken = false;                                  // stores if an alien token is available
+  static std::unique_ptr<TJAlienCredentials> mJAlienCredentials; // access JAliEn credentials
 
   ClassDefNV(CcdbApi, 1);
 };
 
 template <typename T>
-T* CcdbApi::retrieveFromTFileAny(std::string const& path, std::map<std::string, std::string> const& metadata,
-                                 long timestamp, std::map<std::string, std::string>* headers, std::string const& etag,
-                                 const std::string& createdNotAfter, const std::string& createdNotBefore) const
+typename std::enable_if<!std::is_base_of<o2::conf::ConfigurableParam, T>::value, T*>::type
+  CcdbApi::retrieveFromTFileAny(std::string const& path, std::map<std::string, std::string> const& metadata,
+                                long timestamp, std::map<std::string, std::string>* headers, std::string const& etag,
+                                const std::string& createdNotAfter, const std::string& createdNotBefore) const
 {
   return static_cast<T*>(retrieveFromTFile(typeid(T), path, metadata, timestamp, headers, etag, createdNotAfter, createdNotBefore));
+}
+
+template <typename T>
+typename std::enable_if<std::is_base_of<o2::conf::ConfigurableParam, T>::value, T*>::type
+  CcdbApi::retrieveFromTFileAny(std::string const& path, std::map<std::string, std::string> const& metadata,
+                                long timestamp, std::map<std::string, std::string>* headers, std::string const& etag,
+                                const std::string& createdNotAfter, const std::string& createdNotBefore) const
+{
+  auto obj = retrieveFromTFile(typeid(T), path, metadata, timestamp, headers, etag, createdNotAfter, createdNotBefore);
+  auto& param = const_cast<typename std::remove_const<T&>::type>(T::Instance());
+  param.syncCCDBandRegistry(obj);
+  return &param;
 }
 
 } // namespace ccdb

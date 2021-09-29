@@ -72,7 +72,10 @@ constexpr int TRACKLETENDMARKER = 0x10001000; // marker for the end of tracklets
 constexpr int DIGITENDMARKER = 0x0;           // marker for the end of digits in raw data, 2 of these
 constexpr int MAXDATAPERLINK32 = 13824;       // max number of 32 bit words per link ((21x12+2+4)*64) 64 mcm, 21 channels, 10 words per channel 2 header words(DigitMCMHeader DigitMCMADCmask) 4 words for tracklets.
 constexpr int MAXDATAPERLINK256 = 1728;       // max number of linkwords per cru link. (256bit words)
-
+constexpr int MAXEVENTCOUNTERSEPERATION = 200; // how far appart can subsequent mcmheader event counters be before we flag for concern, used as a sanity check in rawreader.
+constexpr int MAXMCMCOUNT = 69120;             // at most mcm count maxchamber x nrobc1 nmcmrob
+constexpr int MAXLINKERRORHISTOGRAMS = 10;     // size of the array holding the link error plots from the raw reader
+constexpr int MAXPARSEERRORHISTOGRAMS = 60;    // size of the array holding the parsing error plots from the raw reader
 } //namespace constants
 } // namespace trd
 } // namespace o2
