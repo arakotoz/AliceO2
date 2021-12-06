@@ -23,6 +23,7 @@
 #include "TPCBase/Mapper.h"
 #include "Framework/Logger.h"
 #include "DetectorsRaw/RDHUtils.h"
+#include "CommonUtils/VerbosityConfig.h"
 
 #define CHECK_BIT(var, pos) ((var) & (1 << (pos)))
 
@@ -59,7 +60,7 @@ RawReaderCRUEventSync::EventInfo& RawReaderCRUEventSync::createEvent(const uint3
     if (hbMatch) {
       mLastEvent = &ev;
       return ev;
-    } else if ((hbDiff >= 0) && (hbDiff < 256)) {
+    } else if ((hbDiff >= 0) && (hbDiff < 128)) {
       ev.HeartbeatOrbits.emplace_back(heartbeatOrbit);
       std::sort(ev.HeartbeatOrbits.begin(), ev.HeartbeatOrbits.end());
       mLastEvent = &ev;
@@ -253,6 +254,12 @@ int RawReaderCRU::scanFile()
     if (isTFfile && (!dhPayloadSize || (dhPayloadSizeSeen == dhPayloadSize))) {
       file >> dh;
       dhPayloadSize = dh.payloadSize;
+      if (dh.dataOrigin != o2::header::gDataOriginTPC) {
+        file.seekg(dhPayloadSize, file.cur);
+        currentPos = file.tellg();
+        dhPayloadSize = 0;
+        continue;
+      }
       dhPayloadSizeSeen = 0;
       currentPos = file.tellg();
     }
@@ -1219,9 +1226,9 @@ void RawReaderCRUManager::writeGBTDataPerLink(const std::string_view inputFileNa
 {
   if (!std::filesystem::exists(outputDirectory)) {
     if (!std::filesystem::create_directories(outputDirectory)) {
-      LOG(FATAL) << "could not create output directory " << outputDirectory;
+      LOG(fatal) << "could not create output directory " << outputDirectory;
     } else {
-      LOG(INFO) << "created output directory " << outputDirectory;
+      LOG(info) << "created output directory " << outputDirectory;
     }
   }
 

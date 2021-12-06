@@ -28,6 +28,8 @@
 #include <iostream>
 #include <vector>
 #include <gsl/span>
+#include "CommonUtils/VerbosityConfig.h"
+
 using namespace o2::framework;
 
 namespace o2
@@ -48,16 +50,22 @@ class FT0DataReaderDPLSpec : public Task
     // if we see requested data type input with 0xDEADBEEF subspec and 0 payload this means that the "delayed message"
     // mechanism created it in absence of real data from upstream. Processor should send empty output to not block the workflow
     {
+      static size_t contDeadBeef = 0; // number of times 0xDEADBEEF was seen continuously
       std::vector<InputSpec> dummy{InputSpec{"dummy", ConcreteDataMatcher{o2::header::gDataOriginFT0, o2::header::gDataDescriptionRawData, 0xDEADBEEF}}};
       for (const auto& ref : InputRecordWalker(pc.inputs(), dummy)) {
         const auto dh = o2::framework::DataRefUtils::getHeader<o2::header::DataHeader*>(ref);
         if (dh->payloadSize == 0) {
-          LOGP(WARNING, "Found input [{}/{}/{:#x}] TF#{} 1st_orbit:{} Payload {} : assuming no payload for all links in this TF",
-               dh->dataOrigin.str, dh->dataDescription.str, dh->subSpecification, dh->tfCounter, dh->firstTForbit, dh->payloadSize);
+          auto maxWarn = o2::conf::VerbosityConfig::Instance().maxWarnDeadBeef;
+          if (++contDeadBeef <= maxWarn) {
+            LOGP(warning, "Found input [{}/{}/{:#x}] TF#{} 1st_orbit:{} Payload {} : assuming no payload for all links in this TF{}",
+                 dh->dataOrigin.str, dh->dataDescription.str, dh->subSpecification, dh->tfCounter, dh->firstTForbit, dh->payloadSize,
+                 contDeadBeef == maxWarn ? fmt::format(". {} such inputs in row received, stopping reporting", contDeadBeef) : "");
+          }
           mRawReader.makeSnapshot(pc); // send empty output
           return;
         }
       }
+      contDeadBeef = 0; // if good data, reset the counter
     }
     std::vector<InputSpec> filter{InputSpec{"filter", ConcreteDataTypeMatcher{o2::header::gDataOriginFT0, o2::header::gDataDescriptionRawData}, Lifetime::Timeframe}};
     DPLRawParser parser(pc.inputs(), filter);
@@ -69,7 +77,7 @@ class FT0DataReaderDPLSpec : public Task
       gsl::span<const uint8_t> payload(it.data(), it.size());
       mRawReader.process(payload, rdhPtr->linkID, rdhPtr->endPointID);
     }
-    LOG(INFO) << "Pages: " << count;
+    LOG(info) << "Pages: " << count;
     mRawReader.accumulateDigits();
     mRawReader.makeSnapshot(pc);
     mRawReader.clear();
@@ -80,7 +88,7 @@ class FT0DataReaderDPLSpec : public Task
 template <typename RawReader>
 framework::DataProcessorSpec getFT0DataReaderDPLSpec(const RawReader& rawReader, bool askSTFDist)
 {
-  LOG(INFO) << "DataProcessorSpec initDataProcSpec() for RawReaderFT0";
+  LOG(info) << "DataProcessorSpec initDataProcSpec() for RawReaderFT0";
   std::vector<OutputSpec> outputSpec;
   RawReader::prepareOutputSpec(outputSpec);
   std::vector<InputSpec> inputSpec{{"STF", ConcreteDataTypeMatcher{o2::header::gDataOriginFT0, "RAWDATA"}, Lifetime::Optional}};

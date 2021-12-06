@@ -111,7 +111,7 @@ class CcdbApi //: public DatabaseInterface
      * @param path The path where the object is going to be stored.
      * @param metadata Key-values representing the metadata for this object.
      * @param startValidityTimestamp Start of validity. If omitted, current timestamp is used.
-     * @param endValidityTimestamp End of validity. If omitted, current timestamp + 1 year is used.
+     * @param endValidityTimestamp End of validity. If omitted, current timestamp + 1 day is used.
      */
   void storeAsTFile(const TObject* rootObject, std::string const& path, std::map<std::string, std::string> const& metadata,
                     long startValidityTimestamp = -1, long endValidityTimestamp = -1) const;
@@ -123,7 +123,7 @@ class CcdbApi //: public DatabaseInterface
      * @param path The path where the object is going to be stored.
      * @param metadata Key-values representing the metadata for this object.
      * @param startValidityTimestamp Start of validity. If omitted, current timestamp is used.
-     * @param endValidityTimestamp End of validity. If omitted, current timestamp + 1 year is used.
+     * @param endValidityTimestamp End of validity. If omitted, current timestamp + 1 day is used.
      */
   template <typename T>
   void storeAsTFileAny(const T* obj, std::string const& path, std::map<std::string, std::string> const& metadata,
@@ -181,6 +181,15 @@ class CcdbApi //: public DatabaseInterface
   void deleteObject(std::string const& path, long timestamp = -1) const;
 
   /**
+   * Update the metadata of the object defined by the provided timestamp, and id if provided.
+   * @param path Path to the object to update
+   * @param metadata The metadata to update
+   * @param timestamp The timestamp to select the object
+   * @param id The id, if any, to select the object
+   */
+  void updateMetadata(std::string const& path, std::map<std::string, std::string> const& metadata, long timestamp, std::string const& id = "");
+
+  /**
    * Return the listing of objects, and in some cases subfolders, matching this path.
    * The path can contain sql patterns (correctly encoded) or regexps.
    *
@@ -234,10 +243,16 @@ class CcdbApi //: public DatabaseInterface
   std::vector<std::string> getAllFolders(std::string const& top) const;
 
   /**
-  *  Simple function to retrieve the blob corresponding to some path and timestamp.
-  *  Saves the blob locally to a binary file. The final path (including filename) is given by targetdir.
-  */
-  void retrieveBlob(std::string const& path, std::string const& targetdir, std::map<std::string, std::string> const& metadata, long timestamp) const;
+   *  Simple function to retrieve the blob corresponding to some path and timestamp.
+   *  Saves the blob locally to a binary file with the following properties:
+   *  a) The base destination directory is given by "targetdir" (will be created if not present)
+   *  b) If preservePathStructure == true; Additional sub-folders corresponding to "path" will be created inside "targetdir".
+   *  c) The filename on disc will be determined by localFileName, or in case localFilename="" from the filename returned by CCDB meta data.
+   *
+   *  @return: True in case operation successful or false if there was a failure/problem.
+   */
+  bool retrieveBlob(std::string const& path, std::string const& targetdir, std::map<std::string, std::string> const& metadata, long timestamp,
+                    bool preservePathStructure = true, std::string const& localFileName = "snapshot.root") const;
 
   /**
    * Retrieve the headers of a CCDB entry, if it exists.
@@ -331,7 +346,7 @@ class CcdbApi //: public DatabaseInterface
    * @param path The path where the object is going to be stored.
    * @param metadata Key-values representing the metadata for this object.
    * @param startValidityTimestamp Start of validity. If omitted or negative, the current timestamp is used.
-   * @param endValidityTimestamp End of validity. If omitted or negative, current timestamp + 1 year is used.
+   * @param endValidityTimestamp End of validity. If omitted or negative, current timestamp + 1 day is used.
    * @return The full url to store an object (url / startValidity / endValidity / [metadata &]* )
    */
   std::string getFullUrlForStorage(CURL* curl, const std::string& path, const std::string& objtype,

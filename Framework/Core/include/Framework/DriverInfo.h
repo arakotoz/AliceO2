@@ -20,11 +20,13 @@
 
 #include "Framework/ChannelConfigurationPolicy.h"
 #include "Framework/ConfigParamSpec.h"
-#include "Framework/TerminationPolicy.h"
+#include "Framework/ProcessingPolicies.h"
+#include "Framework/CallbacksPolicy.h"
 #include "Framework/CompletionPolicy.h"
 #include "Framework/DispatchPolicy.h"
 #include "Framework/DeviceMetricsInfo.h"
 #include "Framework/LogParsingHelpers.h"
+#include "Framework/SendingPolicy.h"
 #include "DataProcessorInfo.h"
 #include "ResourcePolicy.h"
 
@@ -102,16 +104,20 @@ struct DriverInfo {
   /// These are the policies which can be applied to decide when there
   /// is enough resources to process data.
   std::vector<ResourcePolicy> resourcePolicies;
+
+  /// These are the policies which can be applied to decide how
+  /// we send data.
+  std::vector<SendingPolicy> sendingPolicies;
   /// The argc with which the driver was started.
   int argc;
   /// The argv with which the driver was started.
   char** argv;
   /// Whether the driver was started in batch mode or not.
   bool batch;
-  /// What we should do when the workflow is completed.
-  enum TerminationPolicy terminationPolicy;
-  /// What we should do when one device in the workflow has an error
-  enum TerminationPolicy errorPolicy;
+  /// User specified policies for handling errors, completion and early forwarding
+  ProcessingPolicies processingPolicies;
+  /// User specified policies for handling callbacks.
+  std::vector<CallbacksPolicy> callbacksPolicies;
   /// The offset at which the process was started.
   uint64_t startTime;
   /// The optional timeout after which the driver will request
@@ -162,6 +168,9 @@ struct DriverInfo {
   /// if the device is started standalone, the default becomes the old stdout:// so
   /// that it works as it used to in AliECS.
   std::string defaultDriverClient = "invalid";
+
+  /// The last error reported by the driver itself
+  std::string lastError;
 };
 
 struct DriverInfoHelper {

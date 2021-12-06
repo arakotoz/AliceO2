@@ -404,7 +404,6 @@ void fillElec2DetCH10R(std::map<uint32_t, uint32_t>& e2d)
   add(e2d, 1001, 204, 506, 0, 0);
   add(e2d, 1001, 203, 506, 0, 1);
   add(e2d, 1001, 1, 506, 2, 0);
-  add(e2d, 1001, 0, 506, 2, 1);
   add(e2d, 1001, 9, 506, 4, 0);
   add(e2d, 1001, 10, 506, 4, 1);
   add(e2d, 1001, 11, 506, 4, 2);
@@ -538,7 +537,6 @@ void fillElec2DetCH10R(std::map<uint32_t, uint32_t>& e2d)
   add(e2d, 1025, 204, 538, 0, 0);
   add(e2d, 1025, 203, 538, 0, 1);
   add(e2d, 1025, 1, 538, 2, 0);
-  add(e2d, 1025, 0, 538, 2, 1);
   add(e2d, 1025, 9, 538, 4, 0);
   add(e2d, 1025, 10, 538, 4, 1);
   add(e2d, 1025, 11, 538, 4, 2);
@@ -992,7 +990,7 @@ void fillSolar2FeeLinkCH10R(std::map<uint16_t, uint32_t>& s2f)
   add_cru(s2f, 61, 8, 506);
   add_cru(s2f, 61, 9, 507);
   add_cru(s2f, 61, 10, 508);
-  add_cru(s2f, 61, 11, 509);
+  add_cru(s2f, 60, 4, 509);
   add_cru(s2f, 62, 0, 536);
   add_cru(s2f, 62, 1, 537);
   add_cru(s2f, 62, 2, 538);
@@ -1004,15 +1002,15 @@ void fillSolar2FeeLinkCH10R(std::map<uint16_t, uint32_t>& s2f)
   add_cru(s2f, 62, 8, 546);
   add_cru(s2f, 62, 9, 547);
   add_cru(s2f, 62, 10, 548);
-  add_cru(s2f, 62, 11, 549);
+  add_cru(s2f, 63, 6, 549);
   add_cru(s2f, 63, 0, 520);
   add_cru(s2f, 63, 1, 521);
   add_cru(s2f, 63, 2, 522);
   add_cru(s2f, 63, 3, 523);
   add_cru(s2f, 63, 4, 524);
   add_cru(s2f, 63, 5, 525);
-  add_cru(s2f, 63, 6, 472);
-  add_cru(s2f, 63, 7, 473);
-  add_cru(s2f, 63, 8, 474);
-  add_cru(s2f, 63, 9, 475);
+  add_cru(s2f, 63, 7, 472);
+  add_cru(s2f, 63, 8, 473);
+  add_cru(s2f, 63, 9, 474);
+  add_cru(s2f, 63, 10, 475);
 }

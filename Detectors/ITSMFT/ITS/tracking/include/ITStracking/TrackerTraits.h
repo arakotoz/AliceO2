@@ -32,6 +32,8 @@
 #include "ITStracking/TimeFrame.h"
 #include "ITStracking/Road.h"
 
+// #define OPTIMISATION_OUTPUT
+
 namespace o2
 {
 namespace gpu
@@ -64,6 +66,7 @@ class TrackerTraits
 
   void UpdateTrackingParameters(const TrackingParameters& trkPar);
   TimeFrame* getTimeFrame() { return mTimeFrame; }
+  void adoptTimeFrame(TimeFrame* tf) { mTimeFrame = tf; }
 
  protected:
   TimeFrame* mTimeFrame;

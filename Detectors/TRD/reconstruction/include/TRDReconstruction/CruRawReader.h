@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <array>
 #include <vector>
+#include <chrono>
 #include "Headers/RAWDataHeader.h"
 #include "Headers/RDHAny.h"
 #include "DetectorsRaw/RDHUtils.h"
@@ -76,6 +77,15 @@ class CruRawReader
     mEnableStats = options[TRDEnableStatsBit];
     mOptions = options;
   }
+
+  void setMaxErrWarnPrinted(int nerr, int nwar)
+  {
+    mMaxErrsPrinted = nerr < 0 ? std::numeric_limits<int>::max() : nerr;
+    mMaxWarnPrinted = nwar < 0 ? std::numeric_limits<int>::max() : nwar;
+  }
+  void checkNoWarn();
+  void checkNoErr();
+
   void setBlob(bool returnblob) { mReturnBlob = returnblob; }; //set class to produce blobs and not vectors. (compress vs pass through)`
   void setDataBuffer(const char* val)
   {
@@ -102,13 +112,13 @@ class CruRawReader
   //  std::vector<o2::trd::TriggerRecord> getIR() { return mEventTriggers; }
   void getParsedObjects(std::vector<Tracklet64>& tracklets, std::vector<Digit>& cdigits, std::vector<TriggerRecord>& triggers);
   void getParsedObjectsandClear(std::vector<Tracklet64>& tracklets, std::vector<Digit>& digits, std::vector<TriggerRecord>& triggers);
-  void buildDPLOutputs(o2::framework::ProcessingContext& outputs, bool displaytracklets = false);
+  void buildDPLOutputs(o2::framework::ProcessingContext& outputs);
   int getDigitsFound() { return mTotalDigitsFound; }
   int getTrackletsFound() { return mTotalTrackletsFound; }
   int sumTrackletsFound() { return mEventRecords.sumTracklets(); }
   int sumDigitsFound() { return mEventRecords.sumDigits(); }
-  int getWordsRead() { return mTotalDigitWordsRead; }
-  int getWordsRejected() { return mTotalDigitWordsRejected; }
+  int getWordsRead() { return mTotalDigitWordsRead + mTotalTrackletWordsRead; }
+  int getWordsRejected() { return mTotalDigitWordsRejected + mTotalTrackletWordsRejected; }
 
   std::shared_ptr<EventStorage*> getEventStorage() { return std::make_shared<EventStorage*>(&mEventRecords); }
   void clearall()
@@ -155,6 +165,14 @@ class CruRawReader
   int checkDigitHCHeader();
   int checkTrackletHCHeader();
   bool skipRDH();
+  void updateLinkErrorGraphs(int currentlinkindex, int supermodule_half, int stack_layer);
+  void increment2dHist(int hist, int sectorside, int stack, int layer)
+  {
+    if (mRootOutput) {
+      mParsingErrors->Fill(hist);
+      ((TH2F*)mParsingErrors2d->At(hist))->Fill(sectorside, stack * constants::NLAYER + layer);
+    }
+  }
 
   inline void rewind()
   {
@@ -194,6 +212,9 @@ class CruRawReader
 
   uint32_t mTotalTrackletsFound{0};
   uint32_t mTotalDigitsFound{0};
+
+  int mMaxErrsPrinted = 20;
+  int mMaxWarnPrinted = 20;
 
   long mDataBufferSize;
   uint64_t mDataReadIn = 0;

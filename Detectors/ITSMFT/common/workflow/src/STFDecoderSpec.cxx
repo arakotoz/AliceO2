@@ -26,7 +26,7 @@
 #include "ITSMFTReconstruction/ClustererParam.h"
 #include "ITSMFTReconstruction/GBTLink.h"
 #include "ITSMFTWorkflow/STFDecoderSpec.h"
-#include "DetectorsCommonDataFormats/NameConf.h"
+#include "DetectorsCommonDataFormats/DetectorNameConf.h"
 #include "DataFormatsParameters/GRPObject.h"
 #include "ITSMFTBase/DPLAlpideParam.h"
 #include "DataFormatsITSMFT/CompCluster.h"
@@ -43,7 +43,7 @@ using namespace o2::framework;
 ///_______________________________________
 template <class Mapping>
 STFDecoder<Mapping>::STFDecoder(const STFDecoderInp& inp)
-  : mDoClusters(inp.doClusters), mDoPatterns(inp.doPatterns), mDoDigits(inp.doDigits), mDoCalibData(inp.doCalib), mDictName(inp.dict), mNoiseName(inp.noise)
+  : mDoClusters(inp.doClusters), mDoPatterns(inp.doPatterns), mDoDigits(inp.doDigits), mDoCalibData(inp.doCalib), mAllowReporting(inp.allowReporting), mInputSpec(inp.inputSpec)
 {
   mSelfName = o2::utils::Str::concat_string(Mapping::getName(), "STFDecoder");
   mTimer.Stop();
@@ -56,16 +56,34 @@ void STFDecoder<Mapping>::init(InitContext& ic)
 {
   try {
     mDecoder = std::make_unique<RawPixelDecoder<Mapping>>();
+    auto v0 = o2::utils::Str::tokenize(mInputSpec, ':');
+    auto v1 = o2::utils::Str::tokenize(v0[1], '/');
+    header::DataOrigin dataOrig;
+    header::DataDescription dataDesc;
+    dataOrig.runtimeInit(v1[0].c_str());
+    dataDesc.runtimeInit(v1[1].c_str());
+    mDecoder->setUserDataOrigin(dataOrig);
+    mDecoder->setUserDataDescription(dataDesc);
     mDecoder->init();
   } catch (const std::exception& e) {
-    LOG(ERROR) << "exception was thrown in decoder creation: " << e.what();
+    LOG(error) << "exception was thrown in decoder creation: " << e.what();
     throw;
   } catch (...) {
-    LOG(ERROR) << "non-std::exception was thrown in decoder creation";
+    LOG(error) << "non-std::exception was thrown in decoder creation";
     throw;
   }
 
   auto detID = Mapping::getDetID();
+  if (detID == o2::detectors::DetID::ITS) {
+    mDictName = o2::itsmft::ClustererParam<o2::detectors::DetID::ITS>::Instance().dictFilePath;
+    mNoiseName = o2::itsmft::ClustererParam<o2::detectors::DetID::ITS>::Instance().noiseFilePath;
+  } else {
+    mDictName = o2::itsmft::ClustererParam<o2::detectors::DetID::MFT>::Instance().dictFilePath;
+    mNoiseName = o2::itsmft::ClustererParam<o2::detectors::DetID::MFT>::Instance().noiseFilePath;
+  }
+  mNoiseName = o2::base::DetectorNameConf::getNoiseFileName(detID, mNoiseName, "root");
+  mDictName = o2::base::DetectorNameConf::getAlpideClusterDictionaryFileName(detID, mDictName);
+
   try {
     mNThreads = std::max(1, ic.options().get<int>("nthreads"));
     mDecoder->setNThreads(mNThreads);
@@ -73,20 +91,19 @@ void STFDecoder<Mapping>::init(InitContext& ic)
     mUnmutExtraLanes = ic.options().get<bool>("unmute-extra-lanes");
     mVerbosity = ic.options().get<int>("decoder-verbosity");
     mDecoder->setFillCalibData(mDoCalibData);
-    std::string noiseFile = o2::base::NameConf::getNoiseFileName(detID, mNoiseName, "root");
-    if (o2::utils::Str::pathExists(noiseFile)) {
-      TFile* f = TFile::Open(noiseFile.data(), "old");
+    if (o2::utils::Str::pathExists(mNoiseName)) {
+      TFile* f = TFile::Open(mNoiseName.data(), "old");
       auto pnoise = (NoiseMap*)f->Get("ccdb_object");
       AlpideCoder::setNoisyPixels(pnoise);
-      LOG(INFO) << mSelfName << " loading noise map file: " << noiseFile;
+      LOG(info) << mSelfName << " loading noise map file: " << mNoiseName;
     } else {
-      LOG(INFO) << mSelfName << " Noise file " << noiseFile << " is absent, " << Mapping::getName() << " running without noise suppression";
+      LOG(info) << mSelfName << " Noise file " << mNoiseName << " is absent, " << Mapping::getName() << " running without noise suppression";
     }
   } catch (const std::exception& e) {
-    LOG(ERROR) << "exception was thrown in decoder configuration: " << e.what();
+    LOG(error) << "exception was thrown in decoder configuration: " << e.what();
     throw;
   } catch (...) {
-    LOG(ERROR) << "non-std::exception was thrown in decoder configuration";
+    LOG(error) << "non-std::exception was thrown in decoder configuration";
     throw;
   }
 
@@ -109,19 +126,18 @@ void STFDecoder<Mapping>::init(InitContext& ic)
       mClusterer->setMaxBCSeparationToMask(nbc);
       mClusterer->setMaxRowColDiffToMask(clParams.maxRowColDiffToMask);
 
-      std::string dictFile = o2::base::NameConf::getAlpideClusterDictionaryFileName(detID, mDictName, "bin");
-      if (o2::utils::Str::pathExists(dictFile)) {
-        mClusterer->loadDictionary(dictFile);
-        LOG(INFO) << mSelfName << " clusterer running with a provided dictionary: " << dictFile;
+      if (o2::utils::Str::pathExists(mDictName)) {
+        mClusterer->loadDictionary(mDictName);
+        LOG(info) << mSelfName << " clusterer running with a provided dictionary: " << mDictName;
       } else {
-        LOG(INFO) << mSelfName << " Dictionary " << dictFile << " is absent, " << Mapping::getName() << " clusterer expects cluster patterns";
+        LOG(info) << mSelfName << " Dictionary " << mDictName << " is absent, " << Mapping::getName() << " clusterer expects cluster patterns";
       }
       mClusterer->print();
     } catch (const std::exception& e) {
-      LOG(ERROR) << "exception was thrown in clustrizer configuration: " << e.what();
+      LOG(error) << "exception was thrown in clustrizer configuration: " << e.what();
       throw;
     } catch (...) {
-      LOG(ERROR) << "non-std::exception was thrown in clusterizer configuration";
+      LOG(error) << "non-std::exception was thrown in clusterizer configuration";
       throw;
     }
   }
@@ -137,6 +153,7 @@ void STFDecoder<Mapping>::run(ProcessingContext& pc)
     mDecoder->setInstanceID(pc.services().get<const o2::framework::DeviceSpec>().inputTimesliceId);
     mDecoder->setNInstances(pc.services().get<const o2::framework::DeviceSpec>().maxInputTimeslices);
     mDecoder->setVerbosity(mDecoder->getInstanceID() == 0 ? mVerbosity : (mUnmutExtraLanes ? mVerbosity : -1));
+    mAllowReporting &= (mDecoder->getInstanceID() == 0) || mUnmutExtraLanes;
   }
   int nSlots = pc.inputs().getNofParts(0);
   double timeCPU0 = mTimer.CpuTime(), timeReal0 = mTimer.RealTime();
@@ -198,25 +215,28 @@ void STFDecoder<Mapping>::run(ProcessingContext& pc)
   }
 
   if (mDoClusters) {
-    LOG(INFO) << mSelfName << " Built " << clusCompVec.size() << " clusters in " << clusROFVec.size() << " ROFs";
+    LOG(info) << mSelfName << " Built " << clusCompVec.size() << " clusters in " << clusROFVec.size() << " ROFs";
   }
   if (mDoDigits) {
-    LOG(INFO) << mSelfName << " Decoded " << digVec.size() << " Digits in " << digROFVec.size() << " ROFs";
+    LOG(info) << mSelfName << " Decoded " << digVec.size() << " Digits in " << digROFVec.size() << " ROFs";
   }
   mTimer.Stop();
   auto tfID = DataRefUtils::getHeader<o2::header::DataHeader*>(pc.inputs().getFirstValid(true))->tfCounter;
-  LOG(INFO) << mSelfName << " Total time for TF " << tfID << '(' << mTFCounter << ") : CPU: " << mTimer.CpuTime() - timeCPU0 << " Real: " << mTimer.RealTime() - timeReal0;
+  LOG(info) << mSelfName << " Total time for TF " << tfID << '(' << mTFCounter << ") : CPU: " << mTimer.CpuTime() - timeCPU0 << " Real: " << mTimer.RealTime() - timeReal0;
   mTFCounter++;
 }
-
 ///_______________________________________
 template <class Mapping>
-void STFDecoder<Mapping>::endOfStream(EndOfStreamContext& ec)
+void STFDecoder<Mapping>::finalize()
 {
-  LOGF(INFO, "%s statistics:", mSelfName);
-  LOGF(INFO, "%s Total STF decoding%s timing (w/o disk IO): Cpu: %.3e Real: %.3e s in %d slots", mSelfName,
+  if (mFinalizeDone) {
+    return;
+  }
+  mFinalizeDone = true;
+  LOGF(info, "%s statistics:", mSelfName);
+  LOGF(info, "%s Total STF decoding%s timing (w/o disk IO): Cpu: %.3e Real: %.3e s in %d slots", mSelfName,
        mDoClusters ? "/clustering" : "", mTimer.CpuTime(), mTimer.RealTime(), mTimer.Counter() - 1);
-  if (mDecoder) {
+  if (mDecoder && mAllowReporting) {
     mDecoder->printReport();
   }
   if (mClusterer) {

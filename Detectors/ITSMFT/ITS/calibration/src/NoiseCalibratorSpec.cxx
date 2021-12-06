@@ -14,13 +14,15 @@
 #include "CCDB/CcdbApi.h"
 #include "DetectorsCalibration/Utils.h"
 #include "ITSCalibration/NoiseCalibratorSpec.h"
+#include "ITSMFTBase/DPLAlpideParam.h"
+#include "ITSMFTReconstruction/ClustererParam.h"
 #include "DataFormatsITSMFT/CompCluster.h"
 #include "DataFormatsITSMFT/ROFRecord.h"
 
 #include "FairLogger.h"
 #include "Framework/ControlService.h"
 #include "Framework/ConfigParamRegistry.h"
-#include "DetectorsCommonDataFormats/NameConf.h"
+#include "DetectorsCommonDataFormats/DetectorNameConf.h"
 
 using namespace o2::framework;
 
@@ -31,21 +33,20 @@ namespace its
 
 void NoiseCalibratorSpec::init(InitContext& ic)
 {
-  std::string dictPath = ic.options().get<std::string>("its-dictionary-path");
-  std::string dictFile = o2::base::NameConf::getAlpideClusterDictionaryFileName(
-    o2::detectors::DetID::ITS, dictPath, "bin");
+  std::string dictPath = o2::itsmft::ClustererParam<o2::detectors::DetID::ITS>::Instance().dictFilePath;
+  std::string dictFile = o2::base::DetectorNameConf::getAlpideClusterDictionaryFileName(o2::detectors::DetID::ITS, dictPath);
   if (o2::utils::Str::pathExists(dictFile)) {
     mCalibrator->loadDictionary(dictFile);
-    LOG(INFO) << "ITS NoiseCalibrator is running with a provided dictionary: " << dictFile;
+    LOG(info) << "ITS NoiseCalibrator is running with a provided dictionary: " << dictFile;
   } else {
-    LOG(INFO) << "Dictionary " << dictFile
+    LOG(info) << "Dictionary " << dictFile
               << " is absent, ITS NoiseCalibrator expects cluster patterns for all clusters";
   }
 
   auto onepix = ic.options().get<bool>("1pix-only");
-  LOG(INFO) << "Fast 1=pixel calibration: " << onepix;
+  LOG(info) << "Fast 1=pixel calibration: " << onepix;
   auto probT = ic.options().get<float>("prob-threshold");
-  LOG(INFO) << "Setting the probability threshold to " << probT;
+  LOG(info) << "Setting the probability threshold to " << probT;
 
   mCalibrator = std::make_unique<CALIBRATOR>(onepix, probT);
 }
@@ -57,7 +58,7 @@ void NoiseCalibratorSpec::run(ProcessingContext& pc)
   const auto rofs = pc.inputs().get<gsl::span<o2::itsmft::ROFRecord>>("ROframes");
 
   if (mCalibrator->processTimeFrame(compClusters, patterns, rofs)) {
-    LOG(INFO) << "Minimum number of noise counts has been reached !";
+    LOG(info) << "Minimum number of noise counts has been reached !";
     sendOutput(pc.outputs());
     pc.services().get<ControlService>().readyToQuit(QuitRequest::All);
   }
@@ -77,7 +78,7 @@ void NoiseCalibratorSpec::sendOutput(DataAllocator& output)
   o2::ccdb::CcdbObjectInfo info("ITS/Noise", "NoiseMap", "noise.root", md, tstart, tend);
 
   auto image = o2::ccdb::CcdbApi::createObjectImage(&payload, &info);
-  LOG(INFO) << "Sending object " << info.getPath() << "/" << info.getFileName()
+  LOG(info) << "Sending object " << info.getPath() << "/" << info.getFileName()
             << " of size " << image->size()
             << " bytes, valid for " << info.getStartValidityTimestamp()
             << " : " << info.getEndValidityTimestamp();
@@ -101,8 +102,8 @@ DataProcessorSpec getNoiseCalibratorSpec()
 
   using clbUtils = o2::calibration::Utils;
   std::vector<OutputSpec> outputs;
-  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBPayload, "ITS_NOISE"});
-  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBWrapper, "ITS_NOISE"});
+  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBPayload, "ITS_NOISE"}, Lifetime::Sporadic);
+  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBWrapper, "ITS_NOISE"}, Lifetime::Sporadic);
 
   return DataProcessorSpec{
     "its-noise-calibrator",
@@ -110,7 +111,6 @@ DataProcessorSpec getNoiseCalibratorSpec()
     outputs,
     AlgorithmSpec{adaptFromTask<NoiseCalibratorSpec>()},
     Options{
-      {"its-dictionary-path", VariantType::String, "", {"Path of the cluster-topology dictionary file"}},
       {"1pix-only", VariantType::Bool, false, {"Fast 1-pixel calibration only"}},
       {"prob-threshold", VariantType::Float, 3.e-6f, {"Probability threshold for noisy pixels"}}}};
 }

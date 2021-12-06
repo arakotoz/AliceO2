@@ -41,6 +41,9 @@
 #include "DataProcessingStatus.h"
 #include "DataProcessingHelpers.h"
 #include "DataRelayerHelpers.h"
+#include "ProcessingPoliciesHelpers.h"
+#include "Headers/DataHeader.h"
+#include "Headers/DataHeaderHelpers.h"
 
 #include "ScopedExit.h"
 
@@ -90,7 +93,7 @@ void on_communication_requested(uv_async_t* s)
   state->loopReason |= DeviceState::METRICS_MUST_FLUSH;
 }
 
-DataProcessingDevice::DataProcessingDevice(RunningDeviceRef ref, ServiceRegistry& registry)
+DataProcessingDevice::DataProcessingDevice(RunningDeviceRef ref, ServiceRegistry& registry, ProcessingPolicies& policies)
   : mSpec{registry.get<RunningWorkflowInfo const>().devices[ref.index]},
     mState{registry.get<DeviceState>()},
     mInit{mSpec.algorithm.onInit},
@@ -99,9 +102,10 @@ DataProcessingDevice::DataProcessingDevice(RunningDeviceRef ref, ServiceRegistry
     mError{mSpec.algorithm.onError},
     mConfigRegistry{nullptr},
     mServiceRegistry{registry},
-    mAllocator{&mTimingInfo, &registry, mSpec.outputs},
+    mAllocator{&registry, mSpec.outputs},
     mQuotaEvaluator{registry.get<ComputingQuotaEvaluator>()},
-    mAwakeHandle{nullptr}
+    mAwakeHandle{nullptr},
+    mProcessingPolicies{policies}
 {
   /// FIXME: move erro handling to a service?
   if (mError != nullptr) {
@@ -109,18 +113,18 @@ DataProcessingDevice::DataProcessingDevice(RunningDeviceRef ref, ServiceRegistry
                       &serviceRegistry = mServiceRegistry](RuntimeErrorRef e, InputRecord& record) {
       ZoneScopedN("Error handling");
       auto& err = error_from_ref(e);
-      LOGP(ERROR, "Exception caught: {} ", err.what);
+      LOGP(error, "Exception caught: {} ", err.what);
       backtrace_symbols_fd(err.backtrace, err.maxBacktrace, STDERR_FILENO);
       serviceRegistry.get<DataProcessingStats>().exceptionCount++;
       ErrorContext errorContext{record, serviceRegistry, e};
       errorCallback(errorContext);
     };
   } else {
-    mErrorHandling = [&errorPolicy = mErrorPolicy,
+    mErrorHandling = [&errorPolicy = mProcessingPolicies.error,
                       &serviceRegistry = mServiceRegistry](RuntimeErrorRef e, InputRecord& record) {
       ZoneScopedN("Error handling");
       auto& err = error_from_ref(e);
-      LOGP(ERROR, "Exception caught: {} ", err.what);
+      LOGP(error, "Exception caught: {} ", err.what);
       backtrace_symbols_fd(err.backtrace, err.maxBacktrace, STDERR_FILENO);
       serviceRegistry.get<DataProcessingStats>().exceptionCount++;
       switch (errorPolicy) {
@@ -146,14 +150,14 @@ DataProcessingDevice::DataProcessingDevice(RunningDeviceRef ref, ServiceRegistry
   int res = uv_async_init(mState.loop, mAwakeHandle, on_communication_requested);
   mAwakeHandle->data = &mState;
   if (res < 0) {
-    LOG(ERROR) << "Unable to initialise subscription";
+    LOG(error) << "Unable to initialise subscription";
   }
 
   /// This should post a message on the queue...
   SubscribeToNewTransition("dpl", [wakeHandle = mAwakeHandle, deviceContext = &mDeviceContext](fair::mq::Transition t) {
     int res = uv_async_send(wakeHandle);
     if (res < 0) {
-      LOG(ERROR) << "Unable to notify subscription";
+      LOG(error) << "Unable to notify subscription";
     }
     LOG(debug) << "State transition requested";
   });
@@ -241,7 +245,6 @@ void on_socket_polled(uv_poll_t* poller, int status, int events)
   // We do nothing, all the logic for now stays in DataProcessingDevice::doRun()
 }
 
-
 /// This  takes care  of initialising  the device  from its  specification. In
 /// particular it needs to:
 ///
@@ -285,23 +288,6 @@ void DataProcessingDevice::Init()
 
   mExpirationHandlers.clear();
 
-  auto distinct = DataRelayerHelpers::createDistinctRouteIndex(mSpec.inputs);
-  int i = 0;
-  for (auto& di : distinct) {
-    auto& route = mSpec.inputs[di];
-    if (route.configurator.has_value() == false) {
-      i++;
-      continue;
-    }
-    ExpirationHandler handler{
-      RouteIndex{i++},
-      route.matcher.lifetime,
-      route.configurator->creatorConfigurator(mState, *mConfigRegistry),
-      route.configurator->danglingConfigurator(mState, *mConfigRegistry),
-      route.configurator->expirationConfigurator(mState, *mConfigRegistry)};
-    mExpirationHandlers.emplace_back(std::move(handler));
-  }
-
   if (mInit) {
     InitContext initContext{*mConfigRegistry, mServiceRegistry};
     mStatefulProcess = mInit(initContext);
@@ -317,6 +303,12 @@ void DataProcessingDevice::Init()
     } else if (name.find(mSpec.channelPrefix + "from_internal-dpl-ccdb-backend") == 0) {
       mState.inputChannelInfos[ci].state = InputChannelState::Pull;
     }
+  }
+
+  // Invoke the callback policy for this device.
+  if (mSpec.callbacksPolicy.policy != nullptr) {
+    InitContext initContext{*mConfigRegistry, mServiceRegistry};
+    mSpec.callbacksPolicy.policy(mServiceRegistry.get<CallbackService>(), initContext);
   }
 }
 
@@ -376,6 +368,23 @@ void on_awake_main_thread(uv_async_t* handle)
 } // namespace
 void DataProcessingDevice::InitTask()
 {
+  auto distinct = DataRelayerHelpers::createDistinctRouteIndex(mSpec.inputs);
+  int i = 0;
+  for (auto& di : distinct) {
+    auto& route = mSpec.inputs[di];
+    if (route.configurator.has_value() == false) {
+      i++;
+      continue;
+    }
+    ExpirationHandler handler{
+      RouteIndex{i++},
+      route.matcher.lifetime,
+      route.configurator->creatorConfigurator(mState, mServiceRegistry, *mConfigRegistry),
+      route.configurator->danglingConfigurator(mState, *mConfigRegistry),
+      route.configurator->expirationConfigurator(mState, *mConfigRegistry)};
+    mExpirationHandlers.emplace_back(std::move(handler));
+  }
+
   if (mState.awakeMainThread == nullptr) {
     mState.awakeMainThread = (uv_async_t*)malloc(sizeof(uv_async_t));
     mState.awakeMainThread->data = &mState;
@@ -525,12 +534,23 @@ void DataProcessingDevice::fillContext(DataProcessorContext& context, DeviceCont
   deviceContext.state = &mState;
   deviceContext.quotaEvaluator = &mQuotaEvaluator;
   deviceContext.stats = &mStats;
+  context.isSink = false;
+  // If nothing is a sink, the rate limiting simply does not trigger.
+  bool enableRateLimiting = std::stoi(fConfig->GetValue<std::string>("timeframes-rate-limit"));
+  if (enableRateLimiting) {
+    for (auto& spec : mSpec.outputs) {
+      if (spec.matcher.binding.value == "dpl-summary") {
+        context.isSink = true;
+        break;
+      }
+    }
+  }
 
   context.relayer = mRelayer;
   context.registry = &mServiceRegistry;
   context.completed = &mCompleted;
   context.expirationHandlers = &mExpirationHandlers;
-  context.timingInfo = &mTimingInfo;
+  context.timingInfo = &mServiceRegistry.get<TimingInfo>();
   context.allocator = &mAllocator;
   context.statefulProcess = &mStatefulProcess;
   context.statelessProcess = &mStatelessProcess;
@@ -540,12 +560,17 @@ void DataProcessingDevice::fillContext(DataProcessorContext& context, DeviceCont
   context.errorHandling = &mErrorHandling;
   /// We must make sure there is no optional
   /// if we want to optimize the forwarding
-  for (auto& input : mSpec.inputs) {
-    if (strncmp(DataSpecUtils::asConcreteOrigin(input.matcher).str, "AOD", 3) == 0) {
+  context.canForwardEarly = (mSpec.forwards.empty() == false) && mProcessingPolicies.earlyForward != EarlyForwardPolicy::NEVER;
+  for (auto& forwarded : mSpec.forwards) {
+    if (strncmp(DataSpecUtils::asConcreteOrigin(forwarded.matcher).str, "AOD", 3) == 0) {
       context.canForwardEarly = false;
       break;
     }
-    if (input.matcher.lifetime == Lifetime::Optional) {
+    if (DataSpecUtils::partialMatch(forwarded.matcher, o2::header::DataDescription{"RAWDATA"}) && mProcessingPolicies.earlyForward == EarlyForwardPolicy::NORAW) {
+      context.canForwardEarly = false;
+      break;
+    }
+    if (forwarded.matcher.lifetime == Lifetime::Optional) {
       context.canForwardEarly = false;
       break;
     }
@@ -853,8 +878,6 @@ void DataProcessingDevice::ResetTask()
 struct WaitBackpressurePolicy {
   void backpressure(InputChannelInfo const& info)
   {
-    // FIXME: fill metrics rather than log.
-    LOGP(WARN, "Backpressure on channel {}. Waiting.", info.channel->GetName());
   }
 };
 
@@ -878,38 +901,54 @@ void DataProcessingDevice::handleData(DataProcessorContext& context, InputChanne
     SourceInfo
   };
 
+  struct InputInfo {
+    InputInfo(size_t p, size_t s, InputType t)
+      : position(p), size(s), type(t)
+    {
+    }
+    size_t position;
+    size_t size;
+    InputType type;
+  };
+
   // This is how we validate inputs. I.e. we try to enforce the O2 Data model
   // and we do a few stats. We bind parts as a lambda captured variable, rather
   // than an input, because we do not want the outer loop actually be exposed
   // to the implementation details of the messaging layer.
   auto getInputTypes = [&stats = context.registry->get<DataProcessingStats>(),
-                        &info, &context]() -> std::optional<std::vector<InputType>> {
+                        &info, &context]() -> std::optional<std::vector<InputInfo>> {
     auto& parts = info.parts;
     stats.inputParts = parts.Size();
 
     TracyPlot("messages received", (int64_t)parts.Size());
-    if (parts.Size() % 2) {
-      return std::nullopt;
-    }
-    std::vector<InputType> results(parts.Size() / 2, InputType::Invalid);
+    std::vector<InputInfo> results;
+    // we can reserve the upper limit
+    results.reserve(parts.Size() / 2);
+    size_t nTotalPayloads = 0;
 
-    for (size_t hi = 0; hi < parts.Size() / 2; ++hi) {
-      auto pi = hi * 2;
+    auto insertInputInfo = [&results, &nTotalPayloads](size_t position, size_t length, InputType type) {
+      results.emplace_back(position, length, type);
+      if (type != InputType::Invalid && length > 1) {
+        nTotalPayloads += length - 1;
+      }
+    };
+
+    for (size_t pi = 0; pi < parts.Size(); pi += 2) {
       auto sih = o2::header::get<SourceInfoHeader*>(parts.At(pi)->GetData());
       if (sih) {
         info.state = sih->state;
-        results[hi] = InputType::SourceInfo;
+        insertInputInfo(pi, 2, InputType::SourceInfo);
         *context.wasActive = true;
         continue;
       }
       auto dh = o2::header::get<DataHeader*>(parts.At(pi)->GetData());
       if (!dh) {
-        results[hi] = InputType::Invalid;
+        insertInputInfo(pi, 0, InputType::Invalid);
         LOGP(error, "Header is not a DataHeader?");
         continue;
       }
-      if (dh->payloadSize != parts.At(pi + 1)->GetSize()) {
-        results[hi] = InputType::Invalid;
+      if (dh->payloadSize > parts.At(pi + 1)->GetSize()) {
+        insertInputInfo(pi, 0, InputType::Invalid);
         LOGP(error, "DataHeader payloadSize mismatch");
         continue;
       }
@@ -917,24 +956,36 @@ void DataProcessingDevice::handleData(DataProcessorContext& context, InputChanne
       auto dph = o2::header::get<DataProcessingHeader*>(parts.At(pi)->GetData());
       TracyAlloc(parts.At(pi + 1)->GetData(), parts.At(pi + 1)->GetSize());
       if (!dph) {
-        results[hi] = InputType::Invalid;
+        insertInputInfo(pi, 2, InputType::Invalid);
         LOGP(error, "Header stack does not contain DataProcessingHeader");
         continue;
       }
-      // We can set the type for the next splitPayloadParts
-      // because we are guaranteed they are all the same.
-      // If splitPayloadParts = 0, we assume that means there is only one (header, payload)
-      // pair.
-      size_t finalSplitPayloadIndex = hi + (dh->splitPayloadParts > 0 ? dh->splitPayloadParts : 1);
-      if (finalSplitPayloadIndex > results.size()) {
-        LOGP(error, "DataHeader::splitPayloadParts invalid");
-        results[hi] = InputType::Invalid;
-        continue;
+      if (dh->splitPayloadParts > 0 && dh->splitPayloadParts == dh->splitPayloadIndex) {
+        // this is indicating a sequence of payloads following the header
+        // FIXME: we will probably also set the DataHeader version
+        insertInputInfo(pi, dh->splitPayloadParts + 1, InputType::Data);
+        pi += dh->splitPayloadParts - 1;
+      } else {
+        // We can set the type for the next splitPayloadParts
+        // because we are guaranteed they are all the same.
+        // If splitPayloadParts = 0, we assume that means there is only one (header, payload)
+        // pair.
+        size_t finalSplitPayloadIndex = pi + (dh->splitPayloadParts > 0 ? dh->splitPayloadParts : 1) * 2;
+        if (finalSplitPayloadIndex > parts.Size()) {
+          LOGP(error, "DataHeader::splitPayloadParts invalid");
+          insertInputInfo(pi, 0, InputType::Invalid);
+          continue;
+        }
+        insertInputInfo(pi, 2, InputType::Data);
+        for (; pi + 2 < finalSplitPayloadIndex; pi += 2) {
+          insertInputInfo(pi + 2, 2, InputType::Data);
+        }
       }
-      for (; hi < finalSplitPayloadIndex; ++hi) {
-        results[hi] = InputType::Data;
-      }
-      hi = finalSplitPayloadIndex - 1;
+    }
+    assert(std::accumulate(results.begin(), results.end(), 0, [](size_t const& count, auto const& element) -> size_t { return count + element.size; }));
+    if (results.size() + nTotalPayloads != parts.Size()) {
+      LOG(error) << "inconsistent number of inputs extracted";
+      return std::nullopt;
     }
     return results;
   };
@@ -943,35 +994,57 @@ void DataProcessingDevice::handleData(DataProcessorContext& context, InputChanne
     registry.get<DataProcessingStats>().errorCount++;
   };
 
-  auto handleValidMessages = [&info, &context = context, &relayer = *context.relayer, &reportError](std::vector<InputType> const& types) {
+  auto handleValidMessages = [&info, &context = context, &relayer = *context.relayer, &reportError](std::vector<InputInfo> const& inputInfos) {
     static WaitBackpressurePolicy policy;
     auto& parts = info.parts;
     // We relay execution to make sure we have a complete set of parts
     // available.
-    for (size_t pi = 0; pi < (parts.Size() / 2); ++pi) {
-      switch (types[pi]) {
+    for (auto ii = 0; ii < inputInfos.size(); ++ii) {
+      auto const& input = inputInfos[ii];
+      switch (input.type) {
         case InputType::Data: {
-          auto headerIndex = 2 * pi;
-          auto payloadIndex = 2 * pi + 1;
-          assert(payloadIndex < parts.Size());
-          auto dh = o2::header::get<DataHeader*>(parts.At(headerIndex)->GetData());
-          auto relayed = relayer.relay(parts.At(headerIndex),
-                                       &parts.At(payloadIndex), dh->splitPayloadParts > 0 ? dh->splitPayloadParts * 2 - 1 : 0);
-          pi += dh->splitPayloadParts > 0 ? dh->splitPayloadParts - 1 : 0;
+          auto headerIndex = input.position;
+          auto nMessages = 0;
+          auto nPayloadsPerHeader = 0;
+          if (input.size > 2) {
+            // header and multiple payload sequence
+            nMessages = input.size;
+            nPayloadsPerHeader = nMessages - 1;
+          } else {
+            // multiple header-payload pairs
+            auto dh = o2::header::get<DataHeader*>(parts.At(headerIndex)->GetData());
+            nMessages = dh->splitPayloadParts > 0 ? dh->splitPayloadParts * 2 : 2;
+            nPayloadsPerHeader = 1;
+            ii += (nMessages / 2) - 1;
+          }
+          auto relayed = relayer.relay(parts.At(headerIndex)->GetData(),
+                                       &parts.At(headerIndex),
+                                       nMessages,
+                                       nPayloadsPerHeader);
           switch (relayed) {
             case DataRelayer::Backpressured:
+              if (info.normalOpsNotified == true && info.backpressureNotified == false) {
+                LOGP(warn, "Backpressure on channel {}. Waiting.", info.channel->GetName());
+                info.backpressureNotified = true;
+                info.normalOpsNotified = false;
+              }
               policy.backpressure(info);
               break;
             case DataRelayer::Dropped:
             case DataRelayer::Invalid:
             case DataRelayer::WillRelay:
+              if (info.normalOpsNotified == false && info.backpressureNotified == true) {
+                LOGP(info, "Back to normal on channel {}.", info.channel->GetName());
+                info.normalOpsNotified = true;
+                info.backpressureNotified = false;
+              }
               break;
           }
         } break;
         case InputType::SourceInfo: {
           *context.wasActive = true;
-          auto headerIndex = 2 * pi;
-          auto payloadIndex = 2 * pi + 1;
+          auto headerIndex = input.position;
+          auto payloadIndex = input.position + 1;
           assert(payloadIndex < parts.Size());
           auto dh = o2::header::get<DataHeader*>(parts.At(headerIndex)->GetData());
           // FIXME: the message with the end of stream cannot contain
@@ -993,7 +1066,7 @@ void DataProcessingDevice::handleData(DataProcessorContext& context, InputChanne
     auto r = std::distance(it, parts.fParts.end());
     parts.fParts.erase(it, parts.end());
     if (parts.fParts.size()) {
-      LOG(DEBUG) << parts.fParts.size() << " messages backpressured";
+      LOG(debug) << parts.fParts.size() << " messages backpressured";
     }
   };
 
@@ -1092,18 +1165,33 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
 
   //
   auto getInputSpan = [&relayer = context.relayer,
-                       &currentSetOfInputs](TimesliceSlot slot) {
-    currentSetOfInputs = std::move(relayer->getInputsForTimeslice(slot));
+                       &currentSetOfInputs](TimesliceSlot slot, bool consume = true) {
+    if (consume) {
+      currentSetOfInputs = relayer->consumeAllInputsForTimeslice(slot);
+    } else {
+      currentSetOfInputs = relayer->consumeExistingInputsForTimeslice(slot);
+    }
     auto getter = [&currentSetOfInputs](size_t i, size_t partindex) -> DataRef {
-      if (currentSetOfInputs[i].size() > partindex) {
-        return DataRef{nullptr,
-                       static_cast<char const*>(currentSetOfInputs[i].at(partindex).header->GetData()),
-                       static_cast<char const*>(currentSetOfInputs[i].at(partindex).payload->GetData())};
+      if (currentSetOfInputs[i].getNumberOfPairs() > partindex) {
+        const char* headerptr = nullptr;
+        const char* payloadptr = nullptr;
+        size_t payloadSize = 0;
+        // - each input can have multiple parts
+        // - "part" denotes a sequence of messages belonging together, the first message of the
+        //   sequence is the header message
+        // - each part has one or more payload messages
+        // - InputRecord provides all payloads as header-payload pairs
+        auto const& headerMsg = currentSetOfInputs[i].associatedHeader(partindex);
+        auto const& payloadMsg = currentSetOfInputs[i].associatedPayload(partindex);
+        headerptr = static_cast<char const*>(headerMsg->GetData());
+        payloadptr = payloadMsg ? static_cast<char const*>(payloadMsg->GetData()) : nullptr;
+        payloadSize = payloadMsg ? payloadMsg->GetSize() : 0;
+        return DataRef{nullptr, headerptr, payloadptr, payloadSize};
       }
-      return DataRef{nullptr, nullptr, nullptr};
+      return DataRef{};
     };
     auto nofPartsGetter = [&currentSetOfInputs](size_t i) -> size_t {
-      return currentSetOfInputs[i].size();
+      return currentSetOfInputs[i].getNumberOfPairs();
     };
     return InputSpan{getter, nofPartsGetter, currentSetOfInputs.size()};
   };
@@ -1124,6 +1212,7 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
     timingInfo->tfCounter = relayer->getFirstTFCounterForSlot(i);
     timingInfo->firstTFOrbit = relayer->getFirstTFOrbitForSlot(i);
     timingInfo->runNumber = relayer->getRunNumberForSlot(i);
+    timingInfo->creation = relayer->getCreationTimeForSlot(i);
   };
 
   // When processing them, timers will have to be cleaned up
@@ -1133,6 +1222,9 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
   auto cleanTimers = [&currentSetOfInputs](TimesliceSlot slot, InputRecord& record) {
     assert(record.size() == currentSetOfInputs.size());
     for (size_t ii = 0, ie = record.size(); ii < ie; ++ii) {
+      // assuming that for timer inputs we do have exactly one PartRef object
+      // in the MessageSet, multiple PartRef Objects are only possible for either
+      // split payload messages of wildcard matchers, both for data inputs
       DataRef input = record.getByPos(ii);
       if (input.spec->lifetime != Lifetime::Timer) {
         continue;
@@ -1173,11 +1265,20 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
   // FIXME: do it in a smarter way than O(N^2)
   auto forwardInputs = [&reportError,
                         &spec = context.deviceContext->spec,
-                        &device = context.deviceContext->device, &currentSetOfInputs](TimesliceSlot slot, InputRecord& record, bool copy) {
+                        &device = context.deviceContext->device, &currentSetOfInputs](TimesliceSlot slot, InputRecord& record, bool copy, bool consume = true) {
     ZoneScopedN("forward inputs");
     assert(record.size() == currentSetOfInputs.size());
     // we collect all messages per forward in a map and send them together
-    std::unordered_map<std::string, FairMQParts> forwardedParts;
+    std::vector<FairMQParts> forwardedParts;
+    forwardedParts.resize(spec->forwards.size());
+
+    std::vector<size_t> forwardMap;
+    forwardMap.resize(spec->forwards.size());
+    std::unordered_map<std::string, size_t> tmpMap;
+    for (size_t fi = 0; fi < spec->forwards.size(); fi++) {
+      forwardMap[fi] = tmpMap.try_emplace(spec->forwards[fi].channel, fi).first->second;
+    }
+
     for (size_t ii = 0, ie = record.size(); ii < ie; ++ii) {
       DataRef input = record.getByPos(ii);
 
@@ -1204,55 +1305,83 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
         continue;
       }
 
-      for (auto& part : currentSetOfInputs[ii]) {
-        for (auto const& forward : spec->forwards) {
-          if (DataSpecUtils::match(forward.matcher, dh->dataOrigin, dh->dataDescription, dh->subSpecification) == false || (dph->startTime % forward.maxTimeslices) != forward.timeslice) {
-            continue;
-          }
-          auto& header = part.header;
-          auto& payload = part.payload;
+      int cachedForwardingChoice = -1;
 
-          if (header.get() == nullptr) {
-            // FIXME: this should not happen, however it's actually harmless and
-            //        we can simply discard it for the moment.
-            // LOG(ERROR) << "Missing header! " << dh->dataDescription;
-            continue;
-          }
-          auto fdph = o2::header::get<DataProcessingHeader*>(header.get()->GetData());
-          if (fdph == nullptr) {
-            LOG(ERROR) << "Forwarded data does not have a DataProcessingHeader";
-            continue;
-          }
-          auto fdh = o2::header::get<DataHeader*>(header.get()->GetData());
-          if (fdh == nullptr) {
-            LOG(ERROR) << "Forwarded data does not have a DataHeader";
-            continue;
-          }
+      for (size_t pi = 0; pi < currentSetOfInputs[ii].size(); ++pi) {
+        auto& messageSet = currentSetOfInputs[ii];
+        auto& header = messageSet.header(pi);
+        auto& payload = messageSet.payload(pi);
 
-          if (copy) {
-            auto&& newHeader = header->GetTransport()->CreateMessage();
-            auto&& newPayload = header->GetTransport()->CreateMessage();
-            newHeader->Copy(*header);
-            newPayload->Copy(*payload);
+        if (header.get() == nullptr) {
+          // Missing an header is not an error anymore.
+          // it simply means that we did not receive the
+          // given input, but we were asked to
+          // consume existing, so we skip it.
+          continue;
+        }
+        if (payload.get() == nullptr && consume == true) {
+          // If the payload is not there, it means we already
+          // processed it with ConsumeExisiting. Therefore we
+          // need to do something only if this is the last consume.
+          header.reset(nullptr);
+          continue;
+        }
 
-            forwardedParts[forward.channel].AddPart(std::move(newHeader));
-            forwardedParts[forward.channel].AddPart(std::move(newPayload));
+        auto fdph = o2::header::get<DataProcessingHeader*>(header->GetData());
+        if (fdph == nullptr) {
+          LOG(error) << "Data is missing DataProcessingHeader";
+          continue;
+        }
+        auto fdh = o2::header::get<DataHeader*>(header->GetData());
+        if (fdh == nullptr) {
+          LOG(error) << "Data is missing DataHeader";
+          continue;
+        }
+        // We need to find the forward route only for the first
+        // part of a split payload. All the others will use the same.
+        // but always check if we have a sequence of multiple payloads
+        if (fdh->splitPayloadIndex == 0 || fdh->splitPayloadParts <= 1 || messageSet.getNumberOfPayloads(pi) > 1) {
+          cachedForwardingChoice = -1;
+          for (size_t fi = 0; fi < spec->forwards.size(); fi++) {
+            auto& forward = spec->forwards[fi];
+            if (DataSpecUtils::match(forward.matcher, fdh->dataOrigin, fdh->dataDescription, fdh->subSpecification) == false || (fdph->startTime % forward.maxTimeslices) != forward.timeslice) {
+              continue;
+            }
+            cachedForwardingChoice = forwardMap[fi];
             break;
-          } else {
-            forwardedParts[forward.channel].AddPart(std::move(header));
-            forwardedParts[forward.channel].AddPart(std::move(payload));
+          }
+        }
+        /// We did not find a match. Skip it.
+        if (cachedForwardingChoice == -1) {
+          continue;
+        }
+
+        auto& forward = spec->forwards[cachedForwardingChoice];
+
+        if (copy) {
+          auto&& newHeader = header->GetTransport()->CreateMessage();
+          newHeader->Copy(*header);
+          forwardedParts[cachedForwardingChoice].AddPart(std::move(newHeader));
+
+          for (size_t payloadIndex = 0; payloadIndex < messageSet.getNumberOfPayloads(pi); ++payloadIndex) {
+            auto&& newPayload = header->GetTransport()->CreateMessage();
+            newPayload->Copy(*messageSet.payload(pi, payloadIndex));
+            forwardedParts[cachedForwardingChoice].AddPart(std::move(newPayload));
+          }
+        } else {
+          forwardedParts[cachedForwardingChoice].AddPart(std::move(messageSet.header(pi)));
+          for (size_t payloadIndex = 0; payloadIndex < messageSet.getNumberOfPayloads(pi); ++payloadIndex) {
+            forwardedParts[cachedForwardingChoice].AddPart(std::move(messageSet.payload(pi, payloadIndex)));
           }
         }
       }
     }
-    for (auto& [channelName, channelParts] : forwardedParts) {
-      if (channelParts.Size() == 0) {
+    for (size_t fi = 0; fi < spec->forwards.size(); fi++) {
+      if (forwardedParts[fi].Size() == 0) {
         continue;
       }
-      assert(channelParts.Size() % 2 == 0);
-      assert(o2::header::get<DataProcessingHeader*>(channelParts.At(0)->GetData()));
       // in DPL we are using subchannel 0 only
-      device->Send(channelParts, channelName, 0);
+      device->Send(forwardedParts[fi], spec->forwards[fi].channel, 0);
     }
   };
 
@@ -1300,7 +1429,9 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
     }
 
     prepareAllocatorForCurrentTimeSlice(TimesliceSlot{action.slot});
-    InputSpan span = getInputSpan(action.slot);
+    bool shouldConsume = action.op == CompletionPolicy::CompletionOp::Consume ||
+                         action.op == CompletionPolicy::CompletionOp::Discard;
+    InputSpan span = getInputSpan(action.slot, shouldConsume);
     InputRecord record{context.deviceContext->spec->inputs, span};
     ProcessingContext processContext{record, *context.registry, *context.allocator};
     {
@@ -1318,8 +1449,11 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
     // the messages to that parallel processing can happen.
     // In this case we pass true to indicate that we want to
     // copy the messages to the subsequent data processor.
-    if (context.canForwardEarly && context.deviceContext->spec->forwards.empty() == false && action.op == CompletionPolicy::CompletionOp::Consume) {
-      forwardInputs(action.slot, record, true);
+    bool hasForwards = context.deviceContext->spec->forwards.empty() == false;
+    bool consumeSomething = action.op == CompletionPolicy::CompletionOp::Consume || action.op == CompletionPolicy::CompletionOp::ConsumeExisting;
+
+    if (context.canForwardEarly && hasForwards && consumeSomething) {
+      forwardInputs(action.slot, record, true, action.op == CompletionPolicy::CompletionOp::Consume);
     }
     markInputsAsDone(action.slot);
 
@@ -1328,8 +1462,15 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
 
     static bool noCatch = getenv("O2_NO_CATCHALL_EXCEPTIONS") && strcmp(getenv("O2_NO_CATCHALL_EXCEPTIONS"), "0");
 
-    auto runNoCatch = [&context, &processContext]() {
+    auto runNoCatch = [&context, &processContext](DataRelayer::RecordAction& action) {
       if (context.deviceContext->state->quitRequested == false) {
+        {
+          ZoneScopedN("service post processing");
+          // Callbacks from services
+          context.registry->preProcessingCallbacks(processContext);
+          // Callbacks from users
+          context.registry->get<CallbackService>()(CallbackService::Id::PreProcessing, *(context.registry), (int)action.op);
+        }
         if (*context.statefulProcess) {
           ZoneScopedN("statefull process");
           (*context.statefulProcess)(processContext);
@@ -1337,6 +1478,11 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
         if (*context.statelessProcess) {
           ZoneScopedN("stateless process");
           (*context.statelessProcess)(processContext);
+        }
+
+        // Notify the sink we just consumed some timeframe data
+        if (context.isSink && action.op == CompletionPolicy::CompletionOp::Consume) {
+          context.allocator->make<int>(OutputRef{"dpl-summary", compile_time_hash(context.deviceContext->spec->name.c_str())}, 1);
         }
 
         {
@@ -1347,10 +1493,10 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
     };
 
     if (noCatch) {
-      runNoCatch();
+      runNoCatch(action);
     } else {
       try {
-        runNoCatch();
+        runNoCatch(action);
       } catch (std::exception& ex) {
         ZoneScopedN("error handling");
         /// Convert a standard exception to a RuntimeErrorRef
@@ -1369,9 +1515,12 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
     // we keep them for next message arriving.
     if (action.op == CompletionPolicy::CompletionOp::Consume) {
       context.registry->postDispatchingCallbacks(processContext);
-      if ((context.canForwardEarly == false) && context.deviceContext->spec->forwards.empty() == false) {
-        forwardInputs(action.slot, record, false);
-      }
+      context.registry->get<CallbackService>()(CallbackService::Id::DataConsumed, *(context.registry));
+    }
+    if ((context.canForwardEarly == false) && hasForwards && consumeSomething) {
+      forwardInputs(action.slot, record, false, action.op == CompletionPolicy::CompletionOp::Consume);
+    }
+    if (action.op == CompletionPolicy::CompletionOp::Consume) {
 #ifdef TRACY_ENABLE
       cleanupRecord(record);
 #endif
@@ -1392,7 +1541,7 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
 
 void DataProcessingDevice::error(const char* msg)
 {
-  LOG(ERROR) << msg;
+  LOG(error) << msg;
   mServiceRegistry.get<DataProcessingStats>().errorCount++;
 }
 

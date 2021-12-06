@@ -25,19 +25,29 @@ void customize(std::vector<ConfigParamSpec>& workflowOptions)
 {
   workflowOptions.push_back(
     ConfigParamSpec{
+      "proxy-name", VariantType::String, "readout-proxy", {"name of the proxy processor"}});
+
+  workflowOptions.push_back(
+    ConfigParamSpec{
       "dataspec", VariantType::String, "A:FLP/RAWDATA;B:FLP/DISTSUBTIMEFRAME/0", {"selection string for the data to be proxied"}});
 
   workflowOptions.push_back(
     ConfigParamSpec{
       "throwOnUnmatched", VariantType::Bool, false, {"throw if unmatched input data is found"}});
+
+  workflowOptions.push_back(
+    ConfigParamSpec{
+      "timeframes-shm-limit", VariantType::String, "0", {"Minimum amount of SHM required in order to publish data"}});
 }
 
 #include "Framework/runDataProcessing.h"
 
 WorkflowSpec defineDataProcessing(ConfigContext const& config)
 {
+  std::string processorName = config.options().get<std::string>("proxy-name");
   std::string outputconfig = config.options().get<std::string>("dataspec");
   bool throwOnUnmatched = config.options().get<bool>("throwOnUnmatched");
+  uint64_t minSHM = std::stoul(config.options().get<std::string>("timeframes-shm-limit"));
   std::vector<InputSpec> matchers = select(outputconfig.c_str());
   Outputs readoutProxyOutput;
   for (auto const& matcher : matchers) {
@@ -47,10 +57,10 @@ WorkflowSpec defineDataProcessing(ConfigContext const& config)
   // we use the same specs as filters in the dpl adaptor
   auto filterSpecs = readoutProxyOutput;
   DataProcessorSpec readoutProxy = specifyExternalFairMQDeviceProxy(
-    "readout-proxy",
+    processorName.c_str(),
     std::move(readoutProxyOutput),
     "type=pair,method=connect,address=ipc:///tmp/readout-pipe-0,rateLogging=1,transport=shmem",
-    dplModelAdaptor(filterSpecs, throwOnUnmatched));
+    dplModelAdaptor(filterSpecs, throwOnUnmatched), minSHM);
 
   WorkflowSpec workflow;
   workflow.emplace_back(readoutProxy);

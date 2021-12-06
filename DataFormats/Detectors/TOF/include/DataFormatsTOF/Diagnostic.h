@@ -33,19 +33,39 @@ class Diagnostic
   Diagnostic() = default;
   int fill(ULong64_t pattern);
   int fill(ULong64_t pattern, int frequency);
-  int getFrequency(ULong64_t pattern);                                                    // Get frequency
-  int getFrequencyROW() { return getFrequency(0); }                                       // Readout window frequency
-  int getFrequencyEmptyCrate(int crate) { return getFrequency(getEmptyCrateKey(crate)); } // empty crate frequency
+  int getFrequency(ULong64_t pattern) const;                                                    // Get frequency
+  int getFrequencyROW() const { return getFrequency(0); }                                       // Readout window frequency
+  int getFrequencyEmptyCrate(int crate) const { return getFrequency(getEmptyCrateKey(crate)); } // empty crate frequency
+  int getFrequencyEmptyTOF() const { return getFrequency(1); }                                  // empty crate frequency
   int fillNoisy(int channel, int frequency = 1) { return fill(getNoisyChannelKey(channel), frequency); }
   int fillROW() { return fill(0); }
   int fillEmptyCrate(int crate, int frequency = 1) { return fill(getEmptyCrateKey(crate), frequency); }
+  int fillEmptyTOF(int frequency = 1) { return fill(1, frequency); }
   static ULong64_t getEmptyCrateKey(int crate);
   static ULong64_t getNoisyChannelKey(int channel);
+  static ULong64_t getTRMKey(int crate, int trm);
   void print() const;
   void clear() { mVector.clear(); }
   void fill(const Diagnostic& diag);                       // for calibration
   void fill(const gsl::span<const o2::tof::Diagnostic>){}; // for calibration
   void merge(const Diagnostic* prev);
+  void getNoisyMap(Bool_t* output, int noisyThr = 1) const; // set true in output channel array
+  void getNoisyLevelMap(Char_t* output) const;              // set true in output channel array
+  unsigned long size() const { return mVector.size(); }
+  ULong64_t getPattern(int i) const
+  {
+    auto iter = mVector.begin();
+    for (; i-- > 0;) {
+      iter++;
+    }
+    return iter->first;
+  }
+  int getSlot(ULong64_t pattern) const;
+  int getCrate(ULong64_t pattern) const;
+  int getChannel(ULong64_t pattern) const;
+  int getNoisyLevel(ULong64_t pattern) const;
+
+  const std::map<ULong64_t, uint32_t>& getVector() const { return mVector; }
 
  private:
   std::map<ULong64_t, uint32_t> mVector; // diagnostic frequency vector (key/pattern , frequency)

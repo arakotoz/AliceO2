@@ -103,6 +103,7 @@ class CalibLaserTracksDevice : public o2::framework::Task
 
     md = w.getMetaData();
     md["runNumber"] = std::to_string(mRunNumber);
+    w.setMetaData(md);
 
     const auto now = std::chrono::system_clock::now();
     const long timeStart = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
@@ -126,9 +127,9 @@ DataProcessorSpec getCalibLaserTracks(const std::string inputSpec)
   using device = o2::tpc::CalibLaserTracksDevice;
 
   std::vector<OutputSpec> outputs;
-  outputs.emplace_back(ConcreteDataTypeMatcher{"TPC", "LtrCalibData"});
-  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBPayload, "TPC_CalibLtr"});
-  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBWrapper, "TPC_CalibLtr"});
+  outputs.emplace_back(ConcreteDataTypeMatcher{"TPC", "LtrCalibData"}, Lifetime::Sporadic);
+  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBPayload, "TPC_CalibLtr"}, Lifetime::Sporadic);
+  outputs.emplace_back(ConcreteDataTypeMatcher{o2::calibration::Utils::gDataOriginCDBWrapper, "TPC_CalibLtr"}, Lifetime::Sporadic);
 
   return DataProcessorSpec{
     "tpc-calib-laser-tracks",

@@ -21,8 +21,6 @@
 #include "Framework/StringHelpers.h"
 #include "Framework/Output.h"
 #include <string>
-#include "Framework/Logger.h"
-
 namespace o2::framework
 {
 class TableConsumer;
@@ -189,13 +187,13 @@ struct Spawns : TableTransform<typename aod::MetadataTrait<framework::pack_head_
     return expression_pack_t{};
   }
 
-  T* operator->()
+  typename T::table_t* operator->()
   {
     return table.get();
   }
-  T& operator*()
+  typename T::table_t const& operator*() const
   {
-    return *table.get();
+    return *table;
   }
 
   auto asArrowTable()
@@ -229,27 +227,35 @@ struct IndexExclusive {
 
     using rest_it_t = decltype(pack_from_tuple(iterators));
 
-    int32_t idx = -1;
-    auto setValue = [&](auto& x) -> bool {
+    auto setValue = [&](auto& x, int idx) -> bool {
       using type = std::decay_t<decltype(x)>;
       constexpr auto position = framework::has_type_at_v<type>(rest_it_t{});
 
-      lowerBound<Key>(idx, x);
-      if (x == soa::RowViewSentinel{static_cast<uint64_t>(x.mMaxRow)}) {
-        return false;
-      } else if (x.template getId<Key>() != idx) {
-        return false;
-      } else {
-        values[position] = x.globalIndex();
-        ++x;
+      if constexpr (std::is_same_v<framework::pack_element_t<position, framework::pack<std::decay_t<T>...>>, Key>) {
+        values[position] = idx;
         return true;
+      } else {
+        lowerBound<Key>(idx, x);
+        if (x == soa::RowViewSentinel{static_cast<uint64_t>(x.mMaxRow)}) {
+          return false;
+        } else if (x.template getId<Key>() != idx) {
+          return false;
+        } else {
+          values[position] = x.globalIndex();
+          ++x;
+          return true;
+        }
       }
     };
 
     auto first = std::get<first_t>(tables);
     for (auto& row : first) {
-      idx = row.template getId<Key>();
-
+      auto idx = -1;
+      if constexpr (std::is_same_v<first_t, Key>) {
+        idx = row.globalIndex();
+      } else {
+        idx = row.template getId<Key>();
+      }
       if (std::apply(
             [](auto&... x) {
               return ((x == soa::RowViewSentinel{static_cast<uint64_t>(x.mMaxRow)}) && ...);
@@ -260,7 +266,7 @@ struct IndexExclusive {
 
       auto result = std::apply(
         [&](auto&... x) {
-          std::array<bool, sizeof...(T)> results{setValue(x)...};
+          std::array<bool, sizeof...(T)> results{setValue(x, idx)...};
           return (results[framework::has_type_at_v<std::decay_t<decltype(x)>>(rest_it_t{})] && ...);
         },
         iterators);
@@ -341,8 +347,9 @@ struct IndexSparse {
 };
 
 /// This helper struct allows you to declare index tables to be created in a task
-template <typename T, typename IP = IndexSparse>
+template <typename T>
 struct Builds : TableTransform<typename aod::MetadataTrait<T>::metadata> {
+  using IP = std::conditional_t<aod::MetadataTrait<T>::metadata::exclusive, IndexExclusive, IndexSparse>;
   using Key = typename T::indexing_t;
   using H = typename T::first_t;
   using Ts = typename T::rest_t;
@@ -352,9 +359,9 @@ struct Builds : TableTransform<typename aod::MetadataTrait<T>::metadata> {
   {
     return table.get();
   }
-  T& operator*()
+  T const& operator*() const
   {
-    return *table.get();
+    return *table;
   }
 
   auto asArrowTable()
@@ -375,9 +382,6 @@ struct Builds : TableTransform<typename aod::MetadataTrait<T>::metadata> {
     return (this->table != nullptr);
   }
 };
-
-template <typename T>
-using BuildsExclusive = Builds<T, IndexExclusive>;
 
 /// This helper class allows you to declare things which will be created by a
 /// given analysis task. Currently wrapped objects are limited to be TNamed
@@ -448,7 +452,7 @@ struct OutputObj {
     s << std::hex << mTaskHash;
     s << std::hex << reinterpret_cast<uint64_t>(this);
     std::memcpy(desc.str, s.str().c_str(), 12);
-    return OutputSpec{OutputLabel{label}, "ATSK", desc, 0};
+    return OutputSpec{OutputLabel{label}, "ATSK", desc, 0, Lifetime::QA};
   }
 
   T* operator->()
@@ -488,21 +492,12 @@ struct Service {
 };
 
 template <typename T>
-o2::soa::Filtered<T>* getTableFromFilter(const T& table, const expressions::Filter& filter)
+o2::soa::Filtered<T>* getTableFromFilter(const T& table, gandiva::Selection& selection)
 {
-  auto schema = table.asArrowTable()->schema();
-  expressions::Operations ops = createOperations(filter);
-  gandiva::NodePtr tree = nullptr;
-  if (isSchemaCompatible(schema, ops)) {
-    tree = createExpressionTree(ops, schema);
-  } else {
-    throw std::runtime_error("Partition filter does not match declared table type");
-  }
-
   if constexpr (soa::is_soa_filtered_t<std::decay_t<T>>::value) {
-    return new o2::soa::Filtered<T>{{table}, tree};
+    return new o2::soa::Filtered<T>{{table}, selection};
   } else {
-    return new o2::soa::Filtered<T>{{table.asArrowTable()}, tree};
+    return new o2::soa::Filtered<T>{{table.asArrowTable()}, selection};
   }
 }
 
@@ -514,14 +509,37 @@ struct Partition {
 
   void bindTable(T& table)
   {
-    mFiltered.reset(getTableFromFilter(table, filter));
+    if (selection == nullptr) {
+      intializeCaches(table.asArrowTable()->schema());
+      selection = framework::expressions::createSelection(table.asArrowTable(), gfilter);
+    }
+    mFiltered.reset(getTableFromFilter(table, selection));
     bindExternalIndices(&table);
     getBoundToExternalIndices(table);
   }
 
+  void intializeCaches(std::shared_ptr<arrow::Schema> const& schema)
+  {
+    if (tree == nullptr) {
+      expressions::Operations ops = createOperations(filter);
+      if (isSchemaCompatible(schema, ops)) {
+        tree = createExpressionTree(ops, schema);
+      } else {
+        throw std::runtime_error("Partition filter does not match declared table type");
+      }
+    }
+    if (gfilter == nullptr) {
+      gfilter = framework::expressions::createFilter(schema, framework::expressions::makeCondition(tree));
+    }
+  }
+
   void setTable(const T& table)
   {
-    mFiltered.reset(getTableFromFilter(table, filter));
+    if (selection == nullptr) {
+      intializeCaches(table.asArrowTable()->schema());
+      selection = framework::expressions::createSelection(table.asArrowTable(), gfilter);
+    }
+    mFiltered.reset(getTableFromFilter(table, selection));
   }
 
   template <typename... Ts>
@@ -562,6 +580,9 @@ struct Partition {
 
   expressions::Filter filter;
   std::unique_ptr<o2::soa::Filtered<T>> mFiltered = nullptr;
+  gandiva::NodePtr tree = nullptr;
+  gandiva::FilterPtr gfilter = nullptr;
+  gandiva::Selection selection = nullptr;
 
   using iterator = typename o2::soa::Filtered<T>::iterator;
   using const_iterator = typename o2::soa::Filtered<T>::const_iterator;

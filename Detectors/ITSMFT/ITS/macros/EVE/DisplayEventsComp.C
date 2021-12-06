@@ -37,7 +37,7 @@
 #include "DataFormatsITSMFT/TopologyDictionary.h"
 #include "DataFormatsITSMFT/ROFRecord.h"
 #include "DataFormatsITS/TrackITS.h"
-#include "DetectorsCommonDataFormats/NameConf.h"
+#include "DetectorsCommonDataFormats/DetectorNameConf.h"
 #endif
 
 using namespace o2::itsmft;
@@ -171,6 +171,8 @@ void Data::loadClusters(int entry)
   int first = 0, last = mClusterBuffer->size();
   if (!mClustersROF->empty()) {
     auto rof = (*mClustersROF)[entry];
+    auto ir = rof.getBCData();
+    std::cout << "Orbit: " << ir.orbit << "  BC: " << ir.bc << '\n';
     first = rof.getFirstEntry();
     last = first + rof.getNEntries();
   }
@@ -335,8 +337,12 @@ TEveElement* Data::getEveTracks()
   for (const auto& rec : mTracks) {
     std::array<float, 3> p;
     rec.getPxPyPzGlo(p);
+    std::array<float, 3> v;
+    rec.getXYZGlo(v);
     TEveRecTrackD t;
     t.fP = {p[0], p[1], p[2]};
+    t.fV = {v[0], v[1], v[2]};
+    //t.fV = {v[0] - p[0] / p[1] * v[1], 0, v[2] - p[2] / p[1] * v[1]};
     t.fSign = (rec.getSign() < 0) ? -1 : 1;
     TEveTrack* track = new TEveTrack(&t, prop);
     track->SetLineColor(kMagenta);
@@ -421,6 +427,12 @@ void load(int entry, int chip)
   evdata.displayData(entry, chip);
 }
 
+void load(int tf, int trigger, int chip)
+{
+  evdata.loadTF(tf);
+  load(trigger, chip);
+}
+
 void init(int tf, int trigger, int chip,
           std::string digifile = "itsdigits.root",
           bool rawdata = false,
@@ -428,7 +440,7 @@ void init(int tf, int trigger, int chip,
           std::string tracfile = "o2trac_its.root",
           std::string inputGeom = "")
 {
-  dict.readBinaryFile(o2::base::NameConf::getAlpideClusterDictionaryFileName(o2::detectors::DetID::ITS, "", "bin"));
+  dict.readFromFile(o2::base::DetectorNameConf::getAlpideClusterDictionaryFileName(o2::detectors::DetID::ITS));
 
   TEveManager::Create(kTRUE, "V");
   TEveBrowser* browser = gEve->GetBrowser();

@@ -27,6 +27,7 @@ o2_add_library(
           src/WorkflowHelper.cxx
           src/CompressedClusters.cxx
           src/TrackCuts.cxx
+          src/CalibdEdxCorrection.cxx
   PUBLIC_LINK_LIBRARIES O2::GPUCommon
                         O2::SimulationDataFormat
                         O2::CommonDataFormat
@@ -52,7 +53,9 @@ o2_target_root_dictionary(
           include/DataFormatsTPC/IDC.h
           include/DataFormatsTPC/ZeroSuppression.h
           include/DataFormatsTPC/ZeroSuppressionLinkBased.h
-          include/DataFormatsTPC/TrackCuts.h)
+          include/DataFormatsTPC/TrackCuts.h
+          include/DataFormatsTPC/LtrCalibData.h
+          include/DataFormatsTPC/CalibdEdxCorrection.h)
 
 o2_add_test(
   ClusterNative

@@ -164,7 +164,7 @@ class Geo
   static constexpr Double_t READOUTWINDOW_INV = 1. / READOUTWINDOW;                           // Readout window (ns)
 
   static constexpr Int_t READOUTWINDOW_IN_BC = BC_IN_ORBIT / NWINDOW_IN_ORBIT;                             // round down in case
-  static constexpr Int_t LATENCYWINDOW_IN_BC = 1400;                                                       // Latency window  in BC (larger than 1/3 orbit 1188 BC)
+  static constexpr Int_t LATENCYWINDOW_IN_BC = 1084;                                                       // Latency window  in BC (larger than 1/3 orbit 1188 BC)
   static constexpr Int_t MATCHINGWINDOW_IN_BC = 1200;                                                      // Latency window  in BC (larger than 1/3 orbit 1188 BC)
   static constexpr Int_t OVERLAP_IN_BC = MATCHINGWINDOW_IN_BC - READOUTWINDOW_IN_BC;                       // overlap between two readout window in BC
   static constexpr Double_t LATENCYWINDOW = LATENCYWINDOW_IN_BC * o2::constants::lhc::LHCBunchSpacingNS;   // Latency window  in ns
@@ -357,7 +357,8 @@ class Geo
   static void fromGlobalToSector(Float_t* pos, Int_t isector); // change coords to Sector reference
   static Int_t fromPlateToStrip(Float_t* pos, Int_t iplate);   // change coord to Strip reference and return strip number
 
-  static Bool_t mToBeIntit;
+  static Bool_t mToBeInit;
+  static Bool_t mToBeInitIndexing;
   static Float_t mRotationMatrixSector[NSECTORS + 1][3][3]; // rotation matrixes
   static Float_t mRotationMatrixPlateStrip[NPLATES][NMAXNSTRIP][3][3];
   static Float_t mPadPosition[NSECTORS][NPLATES][NMAXNSTRIP][NPADZ][NPADX][3];
