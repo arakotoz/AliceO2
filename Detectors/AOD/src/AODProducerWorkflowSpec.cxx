@@ -55,6 +55,7 @@
 #include "SimulationDataFormat/MCEventLabel.h"
 #include "SimulationDataFormat/MCTrack.h"
 #include "SimulationDataFormat/MCTruthContainer.h"
+#include "SimulationDataFormat/MCUtils.h"
 #include "ZDCBase/Constants.h"
 #include "GPUTPCGMMergedTrackHit.h"
 #include "TOFBase/Utils.h"
@@ -464,7 +465,7 @@ void AODProducerWorkflowDPL::addToFwdTracksTable(FwdTracksCursorType& fwdTracksC
     double pz = trackParamAtVertex.pz();
 
     double pt = std::sqrt(px * px + py * py);
-    double dphi = std::asin(py / pt);
+    double dphi = std::atan2(py, px);
     double dtanl = pz / pt;
     double dinvqpt = 1.0 / (trackParamAtVertex.getCharge() * pt);
     double dpdca = trackParamAtVertex.p() * dca;
@@ -633,6 +634,14 @@ void AODProducerWorkflowDPL::fillMCParticlesTable(o2::steer::MCKinematicsReader&
       for (int particle = mcParticles.size() - 1; particle >= 0; particle--) {
         // we store all primary particles == particles put by generator
         if (mcParticles[particle].isPrimary()) {
+          mToStore[Triplet_t(source, event, particle)] = 1;
+          continue;
+        }
+        if (o2::mcutils::MCTrackNavigator::isPhysicalPrimary(mcParticles[particle], mcParticles)) {
+          mToStore[Triplet_t(source, event, particle)] = 1;
+          continue;
+        }
+        if (o2::mcutils::MCTrackNavigator::isKeepPhysics(mcParticles[particle], mcParticles)) {
           mToStore[Triplet_t(source, event, particle)] = 1;
           continue;
         }
