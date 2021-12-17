@@ -47,7 +47,6 @@
 // #include "AliMpExMap.h"
 // #include "AliMpExMapIterator.h"
 
-#include "DetectorsCommonDataFormats/AlignParam.h"
 // #include "AliMathBase.h"
 // #include "AliLog.h"
 
@@ -57,6 +56,12 @@
 #include <TMath.h>
 #include <TRandom.h>
 #include <Riostream.h>
+
+#include "DetectorsCommonDataFormats/DetID.h"
+#include "DetectorsCommonDataFormats/NameConf.h"
+#include "DetectorsCommonDataFormats/AlignParam.h"
+
+#include "CCDB/CcdbApi.h"
 
 #include "Framework/Logger.h"
 
@@ -337,6 +342,8 @@ void MisAligner::MisAlign(Bool_t verbose)
   /// Adds the new module transformer to a new geometry transformer.
   /// Returns the new geometry transformer.
 
+  o2::detectors::DetID detMCH("MCH");
+
   std::vector<std::vector<int>> DEofHC{{100, 103},
                                        {101, 102},
                                        {200, 203},
@@ -357,6 +364,8 @@ void MisAligner::MisAlign(Bool_t verbose)
                                        {907, 908, 909, 910, 911, 912, 913, 914, 915, 916, 917, 918, 919},
                                        {1000, 1001, 1002, 1003, 1004, 1005, 1006, 1020, 1021, 1022, 1023, 1024, 1025},
                                        {1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019}};
+
+  std::vector<o2::detectors::AlignParam> params;
 
   o2::detectors::AlignParam lAP;
   for (int hc = 0; hc < 20; hc++) { // module transformers
@@ -392,7 +401,7 @@ void MisAligner::MisAlign(Bool_t verbose)
     LOG(DEBUG) << fmt::format("{} : {} | X: {:+f} Y: {:+f} Z: {:+f} | pitch: {:+f} roll: {:+f} yaw: {:+f}\n", lAP.getSymName(), lAP.getAlignableID(), lAP.getX(),
                               lAP.getY(), lAP.getZ(), lAP.getPsi(), lAP.getTheta(), lAP.getPhi());
     // lAP.Print();
-
+    params.emplace_back(lAP);
     for (int de = 0; de < DEofHC[hc].size(); de++) {
       LOG(INFO) << "  Will MisAlignDetElem " << DEofHC[hc][de];
       localDeltaTransform = MisAlignDetElem();
@@ -412,6 +421,30 @@ void MisAligner::MisAlign(Bool_t verbose)
       LOG(DEBUG) << "  global delta params";
       LOG(DEBUG) << fmt::format("  {} : {} | X: {:+f} Y: {:+f} Z: {:+f} | pitch: {:+f} roll: {:+f} yaw: {:+f}\n", lAP.getSymName(), lAP.getAlignableID(), lAP.getX(),
                                 lAP.getY(), lAP.getZ(), lAP.getPsi(), lAP.getTheta(), lAP.getPhi());
+      params.emplace_back(lAP);
+    }
+
+    const std::string& ccdbHost = "http://localhost:8080";
+    long tmin = 0;
+    long tmax = -1;
+    const std::string& objectPath = "";
+    const std::string& fileName = "MCHMisAlignment.root";
+
+    if (!ccdbHost.empty()) {
+      std::string path = objectPath.empty() ? o2::base::NameConf::getAlignmentPath(detMCH) : objectPath;
+      LOGP(info, "Storing alignment object on {}/{}", ccdbHost, path);
+      o2::ccdb::CcdbApi api;
+      map<string, string> metadata; // can be empty
+      api.init(ccdbHost.c_str());   // or http://localhost:8080 for a local installation
+      // store abitrary user object in strongly typed manner
+      api.storeAsTFileAny(&params, path, metadata, tmin, tmax);
+    }
+
+    if (!fileName.empty()) {
+      LOGP(info, "Storing ITS alignment in local file {}", fileName);
+      TFile algFile(fileName.c_str(), "recreate");
+      algFile.WriteObjectAny(&params, "std::vector<o2::detectors::AlignParam>", "alignment");
+      algFile.Close();
     }
     // Get delta transformation:
     // Tdelta = Tnew * Told.inverse
