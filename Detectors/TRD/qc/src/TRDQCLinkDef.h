@@ -9,6 +9,14 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-// DUMMY FILE AS TEMPORAL COMPATIBILITY LAYER FOR QC, TO BE REMOVED ONCE QC IS BUMPED
+#ifdef __CLING__
 
-#include "CommonUtils/NameConf.h"
+#pragma link off all globals;
+#pragma link off all classes;
+#pragma link off all functions;
+
+#pragma link C++ class o2::trd::Tracking + ;
+#pragma link C++ class o2::trd::TrackQC + ;
+#pragma link C++ class std::vector < o2::trd::TrackQC> + ;
+
+#endif

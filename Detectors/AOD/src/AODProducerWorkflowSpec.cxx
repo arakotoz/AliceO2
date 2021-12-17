@@ -1094,7 +1094,6 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   auto& fddBuilder = pc.outputs().make<TableBuilder>(Output{"AOD", "FDD"});
   auto& ft0Builder = pc.outputs().make<TableBuilder>(Output{"AOD", "FT0"});
   auto& fv0aBuilder = pc.outputs().make<TableBuilder>(Output{"AOD", "FV0A"});
-  auto& fv0cBuilder = pc.outputs().make<TableBuilder>(Output{"AOD", "FV0C"});
   auto& fwdTracksBuilder = pc.outputs().make<TableBuilder>(Output{"AOD", "FWDTRACK"});
   auto& fwdTracksCovBuilder = pc.outputs().make<TableBuilder>(Output{"AOD", "FWDTRACKCOV"});
   auto& mcColLabelsBuilder = pc.outputs().make<TableBuilder>(Output{"AOD", "MCCOLLISIONLABEL"});
@@ -1118,7 +1117,6 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   auto fddCursor = fddBuilder.cursor<o2::aod::FDDs>();
   auto ft0Cursor = ft0Builder.cursor<o2::aod::FT0s>();
   auto fv0aCursor = fv0aBuilder.cursor<o2::aod::FV0As>();
-  auto fv0cCursor = fv0cBuilder.cursor<o2::aod::FV0Cs>();
   auto fwdTracksCursor = fwdTracksBuilder.cursor<o2::aodproducer::FwdTracksTable>();
   auto fwdTracksCovCursor = fwdTracksCovBuilder.cursor<o2::aodproducer::FwdTracksCovTable>();
   auto mcColLabelsCursor = mcColLabelsBuilder.cursor<o2::aod::McCollisionLabels>();
@@ -1162,20 +1160,17 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     tfNumber = mTFNumber;
   }
 
-  uint64_t dummyBC = 0;
-  float dummyTime = 0.f;
-  uint8_t dummyTriggerMask = 0;
-
-  int nFV0ChannelsAside = o2::fv0::Geometry::getNumberOfReadoutChannels();
-  std::vector<float> vFV0Amplitudes(nFV0ChannelsAside, 0.);
+  std::vector<float> aAmplitudes;
+  std::vector<uint8_t> aChannels;
   for (auto& fv0RecPoint : fv0RecPoints) {
+    aAmplitudes.clear();
+    aChannels.clear();
     const auto channelData = fv0RecPoint.getBunchChannelData(fv0ChData);
     for (auto& channel : channelData) {
-      vFV0Amplitudes[channel.channel] = channel.charge; // amplitude, mV
-    }
-    float aAmplitudesA[nFV0ChannelsAside];
-    for (int i = 0; i < nFV0ChannelsAside; i++) {
-      aAmplitudesA[i] = truncateFloatFraction(vFV0Amplitudes[i], mV0Amplitude);
+      if (channel.charge > 0) {
+        aAmplitudes.push_back(truncateFloatFraction(channel.charge, mV0Amplitude));
+        aChannels.push_back(channel.channel);
+      }
     }
     uint64_t bc = fv0RecPoint.getInteractionRecord().toLong();
     auto item = bcsMap.find(bc);
@@ -1187,16 +1182,11 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     }
     fv0aCursor(0,
                bcID,
-               aAmplitudesA,
+               aAmplitudes,
+               aChannels,
                truncateFloatFraction(fv0RecPoint.getCollisionGlobalMeanTime() * 1E-3, mV0Time), // ps to ns
                fv0RecPoint.getTrigger().triggerSignals);
   }
-
-  float dummyFV0AmplC[32] = {0.};
-  fv0cCursor(0,
-             dummyBC,
-             dummyFV0AmplC,
-             dummyTime);
 
   for (auto zdcRecData : zdcBCRecData) {
     uint64_t bc = zdcRecData.ir.toLong();
@@ -1205,7 +1195,7 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     if (item != bcsMap.end()) {
       bcID = item->second;
     } else {
-      LOG(FATAL) << "Error: could not find a corresponding BC ID for a ZDC rec. point; BC = " << bc;
+      LOG(fatal) << "Error: could not find a corresponding BC ID for a ZDC rec. point; BC = " << bc;
     }
     float energyZEM1 = 0;
     float energyZEM2 = 0;
@@ -1316,9 +1306,9 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
 
   // vector of FDD amplitudes
   int nFDDChannels = o2::fdd::Nchannels;
-  std::vector<float> vFDDAmplitudes(nFDDChannels, 0.);
   // filling FDD table
   for (const auto& fddRecPoint : fddRecPoints) {
+    std::vector<float> vFDDAmplitudes(nFDDChannels, 0.);
     const auto channelData = fddRecPoint.getBunchChannelData(fddChData);
     // TODO: switch to calibrated amplitude
     for (const auto& channel : channelData) {
@@ -1350,24 +1340,26 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
               fddRecPoint.getTrigger().triggersignals);
   }
 
-  // vector of FT0 amplitudes
-  int nFT0Channels = o2::ft0::Geometry::Nsensors;
-  int nFT0ChannelsAside = o2::ft0::Geometry::NCellsA * 4;
-  std::vector<float> vAmplitudes(nFT0Channels, 0.);
   // filling FT0 table
+  std::vector<float> aAmplitudesA, aAmplitudesC;
+  std::vector<uint8_t> aChannelsA, aChannelsC;
   for (auto& ft0RecPoint : ft0RecPoints) {
+    aAmplitudesA.clear();
+    aAmplitudesC.clear();
+    aChannelsA.clear();
+    aChannelsC.clear();
     const auto channelData = ft0RecPoint.getBunchChannelData(ft0ChData);
-    // TODO: switch to calibrated amplitude
     for (auto& channel : channelData) {
-      vAmplitudes[channel.ChId] = channel.QTCAmpl; // amplitude, mV
-    }
-    float aAmplitudesA[nFT0ChannelsAside];
-    float aAmplitudesC[nFT0Channels - nFT0ChannelsAside];
-    for (int i = 0; i < nFT0Channels; i++) {
-      if (i < nFT0ChannelsAside) {
-        aAmplitudesA[i] = truncateFloatFraction(vAmplitudes[i], mT0Amplitude);
-      } else {
-        aAmplitudesC[i - nFT0ChannelsAside] = truncateFloatFraction(vAmplitudes[i], mT0Amplitude);
+      // TODO: switch to calibrated amplitude
+      if (channel.QTCAmpl > 0) {
+        constexpr int nFT0ChannelsAside = o2::ft0::Geometry::NCellsA * 4;
+        if (channel.ChId < nFT0ChannelsAside) {
+          aChannelsA.push_back(channel.ChId);
+          aAmplitudesA.push_back(truncateFloatFraction(channel.QTCAmpl, mT0Amplitude));
+        } else {
+          aChannelsC.push_back(channel.ChId - nFT0ChannelsAside);
+          aAmplitudesC.push_back(truncateFloatFraction(channel.QTCAmpl, mT0Amplitude));
+        }
       }
     }
     uint64_t globalBC = ft0RecPoint.getInteractionRecord().toLong();
@@ -1382,7 +1374,9 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     ft0Cursor(0,
               bcID,
               aAmplitudesA,
+              aChannelsA,
               aAmplitudesC,
+              aChannelsC,
               truncateFloatFraction(ft0RecPoint.getCollisionTimeA() * 1E-3, mT0Time), // ps to ns
               truncateFloatFraction(ft0RecPoint.getCollisionTimeC() * 1E-3, mT0Time), // ps to ns
               ft0RecPoint.getTrigger().triggersignals);
@@ -1582,7 +1576,6 @@ DataProcessorSpec getAODProducerWorkflowSpec(GID::mask_t src, bool enableSV, boo
   outputs.emplace_back(OutputLabel{"O2fdd"}, "AOD", "FDD", 0, Lifetime::Timeframe);
   outputs.emplace_back(OutputLabel{"O2ft0"}, "AOD", "FT0", 0, Lifetime::Timeframe);
   outputs.emplace_back(OutputLabel{"O2fv0a"}, "AOD", "FV0A", 0, Lifetime::Timeframe);
-  outputs.emplace_back(OutputLabel{"O2fv0c"}, "AOD", "FV0C", 0, Lifetime::Timeframe);
   outputs.emplace_back(OutputLabel{"O2fwdtrack"}, "AOD", "FWDTRACK", 0, Lifetime::Timeframe);
   outputs.emplace_back(OutputLabel{"O2fwdtrackcov"}, "AOD", "FWDTRACKCOV", 0, Lifetime::Timeframe);
   outputs.emplace_back(OutputLabel{"O2mccollision"}, "AOD", "MCCOLLISION", 0, Lifetime::Timeframe);

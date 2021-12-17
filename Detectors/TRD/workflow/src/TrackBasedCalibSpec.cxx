@@ -84,7 +84,7 @@ DataProcessorSpec getTRDTrackBasedCalibSpec(o2::dataformats::GlobalTrackID::mask
     LOGF(info, "Found ITS-TPC tracks as input, loading ITS-TPC-TRD");
     srcTrk |= GTrackID::getSourcesMask("ITS-TPC-TRD");
   }
-  if (GTrackID::includesSource(GTrackID::Source::ITSTPC, src)) {
+  if (GTrackID::includesSource(GTrackID::Source::TPC, src)) {
     LOGF(info, "Found TPC tracks as input, loading TPC-TRD");
     srcTrk |= GTrackID::getSourcesMask("TPC-TRD");
   }
