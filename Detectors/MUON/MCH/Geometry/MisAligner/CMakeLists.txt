@@ -12,6 +12,7 @@
 o2_add_library(MCHGeometryMisAligner  
                SOURCES src/MisAligner.cxx 
                PUBLIC_LINK_LIBRARIES O2::FrameworkLogger
+               O2::CCDB
                                      O2::DetectorsCommonDataFormats)
 
 o2_target_root_dictionary(
