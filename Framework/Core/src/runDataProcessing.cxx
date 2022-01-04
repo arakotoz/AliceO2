@@ -962,7 +962,7 @@ void doDPLException(RuntimeErrorRef& e, char const* processName)
          "\n Reason: "
          "\n Backtrace follow: \n",
          processName, err.what);
-    backtrace_symbols_fd(err.backtrace, err.maxBacktrace, STDERR_FILENO);
+    demangled_backtrace_symbols(err.backtrace, err.maxBacktrace, STDERR_FILENO);
   } else {
     LOGP(fatal,
          "Unhandled o2::framework::runtime_error reached the top of main of {}, device shutting down."
@@ -1581,7 +1581,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
         } catch (o2::framework::RuntimeErrorRef ref) {
           auto& err = o2::framework::error_from_ref(ref);
 #ifdef DPL_ENABLE_BACKTRACE
-          backtrace_symbols_fd(err.backtrace, err.maxBacktrace, STDERR_FILENO);
+          demangled_backtrace_symbols(err.backtrace, err.maxBacktrace, STDERR_FILENO);
 #endif
           LOGP(error, "invalid workflow in {}: {}", driverInfo.argv[0], err.what);
           return 1;
@@ -1678,7 +1678,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
           LOGP(error, "unable to merge configurations in {}: {}", driverInfo.argv[0], err.what);
 #ifdef DPL_ENABLE_BACKTRACE
           std::cerr << "\nStacktrace follows:\n\n";
-          backtrace_symbols_fd(err.backtrace, err.maxBacktrace, STDERR_FILENO);
+          demangled_backtrace_symbols(err.backtrace, err.maxBacktrace, STDERR_FILENO);
 #endif
           return 1;
         }
@@ -1849,7 +1849,9 @@ int runStateMachine(DataProcessorSpecs const& workflow,
         } else if (hasError && driverInfo.processingPolicies.error == TerminationPolicy::QUIT && !supposedToQuit) {
           graceful_exit = 1;
           force_exit_timer.data = &infos;
-          if (uv_timer_get_due_in(&force_exit_timer) == 0) {
+          static bool forceful_timer_started = false;
+          if (forceful_timer_started == false) {
+            forceful_timer_started = true;
             uv_timer_start(&force_exit_timer, force_exit_callback, 15000, 3000);
           }
           driverInfo.states.push_back(DriverState::QUIT_REQUESTED);

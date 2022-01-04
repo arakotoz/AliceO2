@@ -8,25 +8,17 @@
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
+#ifndef O2_FRAMEWORK_CCDBHELPERS_H_
+#define O2_FRAMEWORK_CCDBHELPERS_H_
 
-/// \file TrackFinderSpec.h
-/// \brief Definition of a data processor to read clusters, reconstruct tracks and send them
-///
-/// \author Philippe Pillot, Subatech
+#include "Framework/AlgorithmSpec.h"
 
-#ifndef ALICEO2_MCH_TRACKFINDERSPEC_H_
-#define ALICEO2_MCH_TRACKFINDERSPEC_H_
-
-#include "Framework/DataProcessorSpec.h"
-
-namespace o2
+namespace o2::framework
 {
-namespace mch
-{
+struct CCDBHelpers {
+  static AlgorithmSpec fetchFromCCDB();
+};
 
-o2::framework::DataProcessorSpec getTrackFinderSpec(const char* specName = "mch-track-finder", bool digits = false);
+} // namespace o2::framework
 
-} // end namespace mch
-} // end namespace o2
-
-#endif // ALICEO2_MCH_TRACKFINDERSPEC_H_
+#endif // O2_FRAMEWORK_CCDBHELPERS_H_
