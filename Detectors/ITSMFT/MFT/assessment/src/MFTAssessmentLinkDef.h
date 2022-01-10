@@ -9,23 +9,12 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifndef O2_MFT_RECOWORKFLOW_H_
-#define O2_MFT_RECOWORKFLOW_H_
+#ifdef __CLING__
 
-/// @file   RecoWorkflow.h
+#pragma link off all globals;
+#pragma link off all classes;
+#pragma link off all functions;
 
-#include "Framework/WorkflowSpec.h"
+#pragma link C++ class o2::mft::MFTAssessment + ;
 
-namespace o2
-{
-namespace mft
-{
-
-namespace reco_workflow
-{
-framework::WorkflowSpec getWorkflow(bool useMC, bool upstreamDigits, bool upstreamClusters, bool disableRootOutput, bool runAssessment, bool processGen);
-}
-
-} // namespace mft
-} // namespace o2
 #endif
