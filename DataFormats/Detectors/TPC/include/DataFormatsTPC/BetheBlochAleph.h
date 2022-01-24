@@ -8,25 +8,30 @@
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
-#ifndef O2_FRAMEWORK_CCDBHELPERS_H_
-#define O2_FRAMEWORK_CCDBHELPERS_H_
 
-#include "Framework/AlgorithmSpec.h"
-#include <unordered_map>
-#include <string>
+#ifndef AliceO2_TPC_BETHEBLOCH_H_
+#define AliceO2_TPC_BETHEBLOCH_H_
 
-namespace o2::framework
+#include <cmath>
+
+namespace o2
+{
+namespace tpc
 {
 
-struct CCDBHelpers {
-  struct ParserResult {
-    std::unordered_map<std::string, std::string> remappings;
-    std::string error;
-  };
-  static AlgorithmSpec fetchFromCCDB();
-  static ParserResult parseRemappings(char const*);
-};
+template <typename T>
+inline T BetheBlochAleph(T bg, T kp1, T kp2, T kp3, T kp4, T kp5)
+{
+  T beta = bg / std::sqrt(static_cast<T>(1.) + bg * bg);
 
-} // namespace o2::framework
+  T aa = std::pow(beta, kp4);
+  T bb = std::pow(static_cast<T>(1.) / bg, kp5);
+  bb = std::log(kp3 + bb);
 
-#endif // O2_FRAMEWORK_CCDBHELPERS_H_
+  return (kp2 - aa - bb) * kp1 / aa;
+}
+
+} // namespace tpc
+} // namespace o2
+
+#endif
