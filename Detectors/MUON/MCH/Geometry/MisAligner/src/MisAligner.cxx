@@ -58,7 +58,7 @@
 #include <Riostream.h>
 
 #include "DetectorsCommonDataFormats/DetID.h"
-#include "DetectorsCommonDataFormats/NameConf.h"
+#include "DetectorsCommonDataFormats/DetectorNameConf.h"
 #include "DetectorsCommonDataFormats/AlignParam.h"
 
 #include "CCDB/CcdbApi.h"
@@ -431,7 +431,7 @@ void MisAligner::MisAlign(Bool_t verbose)
     const std::string& fileName = "MCHMisAlignment.root";
 
     if (!ccdbHost.empty()) {
-      std::string path = objectPath.empty() ? o2::base::NameConf::getAlignmentPath(detMCH) : objectPath;
+      std::string path = objectPath.empty() ? o2::base::DetectorNameConf::getAlignmentPath(detMCH) : objectPath;
       LOGP(info, "Storing alignment object on {}/{}", ccdbHost, path);
       o2::ccdb::CcdbApi api;
       map<string, string> metadata; // can be empty
