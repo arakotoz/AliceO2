@@ -12,6 +12,7 @@
 #include "DetectorsBase/GeometryManager.h"
 #include "DetectorsBase/MaterialManager.h"
 #include "MCHGeometryCreator/Geometry.h"
+#include "MCHGeometryMisAligner/MisAligner.h"
 #include "MCHGeometryTest/Helpers.h"
 #include "MCHGeometryTransformer/Transformations.h"
 #include "Math/GenVector/Cartesian3D.h"
@@ -112,6 +113,44 @@ void createStandaloneGeometry()
   TGeoVolume* top = createAirVacuumCave("cave");
   g->SetTopVolume(top);
   o2::mch::geo::createGeometry(*g, *top);
+}
+
+void addAlignableVolumes()
+{
+  if (!gGeoManager) {
+    std::cerr << "gGeoManager == nullptr, must create a geometry first\n";
+    return;
+  }
+  // If not closed, we need to close it
+  if (!gGeoManager->IsClosed()) {
+    gGeoManager->CloseGeometry();
+  }
+  // Then add the alignable volumes
+  o2::mch::geo::addAlignableVolumes(*gGeoManager);
+}
+
+void misAlignGeometry()
+{
+  // create a regular geometry
+  createStandaloneGeometry();
+  if (!gGeoManager) {
+    std::cerr << "gGeoManager == nullptr, must create a geometry first\n";
+    return;
+  }
+  // If not closed, we need to close it
+  if (!gGeoManager->IsClosed()) {
+    gGeoManager->CloseGeometry();
+  }
+  // Then add the alignable volumes
+  addAlignableVolumes();
+
+  // The misaligner
+  o2::mch::geo::MisAligner aGMA;
+  aGMA.SetModuleCartMisAlig(0.1, 0., 0.2, 0., 0.3, 0.);
+  // aGMA.SetModuleAngMisAlig(0.1, 0., 0.2, 0., 0.3, 0.);
+  aGMA.SetCartMisAlig(0.1, 0., 0.1, 0., 0.1, 0.);
+  aGMA.SetAngMisAlig(0.1, 0.0);
+  aGMA.MisAlign();
 }
 
 void setVolumeVisibility(const char* pattern, bool visible, bool visibleDaughters)
