@@ -127,7 +127,7 @@ void TrackerDPL::run(ProcessingContext& pc)
   std::vector<o2::MCCompLabel> allTrackLabels;
   std::vector<o2::mft::TrackLTF> tracks;
   std::vector<o2::mft::TrackLTFL> tracksL;
-  auto& allTracksMFT = pc.outputs().make<std::vector<o2::mft::TrackMFT>>(Output{"MFT", "TRACKS", 0, Lifetime::Timeframe});
+  auto& allTracksMFT = pc.outputs().make<std::vector<o2::mft::TrackLTF>>(Output{"MFT", "TRACKS", 0, Lifetime::Timeframe});
 
   std::uint32_t roFrame = 0;
 
