@@ -19,7 +19,7 @@
 #include "GPUChainTracking.h"
 #include "GPUTPCDef.h"
 #include "GPUQA.h"
-#include "GPUDisplayBackend.h"
+#include "GPUDisplayFrontend.h"
 #include "genEvents.h"
 
 #include <iostream>
@@ -59,16 +59,6 @@
 #include "GPUChainITS.h"
 #endif
 
-#ifdef GPUCA_BUILD_EVENT_DISPLAY
-#ifdef _WIN32
-#include "GPUDisplayBackendWindows.h"
-#else
-#include "GPUDisplayBackendX11.h"
-#include "GPUDisplayBackendGlfw.h"
-#endif
-#include "GPUDisplayBackendGlut.h"
-#endif
-
 using namespace GPUCA_NAMESPACE::gpu;
 
 //#define BROKEN_EVENTS
@@ -88,7 +78,7 @@ void unique_ptr_aligned_delete(char* v)
   operator delete(v GPUCA_OPERATOR_NEW_ALIGNMENT);
 }
 std::unique_ptr<char, void (*)(char*)> outputmemory(nullptr, unique_ptr_aligned_delete), outputmemoryPipeline(nullptr, unique_ptr_aligned_delete), inputmemory(nullptr, unique_ptr_aligned_delete);
-std::unique_ptr<GPUDisplayBackend> eventDisplay;
+std::unique_ptr<GPUDisplayFrontend> eventDisplay;
 std::unique_ptr<GPUReconstructionTimeframe> tf;
 int nEventsInDirectory = 0;
 std::atomic<unsigned int> nIteration, nIterationEnd;
@@ -342,29 +332,28 @@ int SetupReconstruction()
 
   configStandalone.proc.forceMemoryPoolSize = (configStandalone.proc.forceMemoryPoolSize == 1 && configStandalone.eventDisplay) ? 2 : configStandalone.proc.forceMemoryPoolSize;
   if (configStandalone.eventDisplay) {
-#ifdef GPUCA_BUILD_EVENT_DISPLAY
 #ifdef _WIN32
     if (configStandalone.eventDisplay == 1) {
+      eventDisplay.reset(GPUDisplayFrontend::getFrontend("windows"));
       printf("Enabling event display (windows backend)\n");
-      eventDisplay.reset(new GPUDisplayBackendWindows);
     }
-
 #else
+#ifdef GPUCA_STANDALONE
     if (configStandalone.eventDisplay == 1) {
-      eventDisplay.reset(new GPUDisplayBackendX11);
+      eventDisplay.reset(GPUDisplayFrontend::getFrontend("x11"));
       printf("Enabling event display (X11 backend)\n");
     }
+#endif
     if (configStandalone.eventDisplay == 3) {
-      eventDisplay.reset(new GPUDisplayBackendGlfw);
+      eventDisplay.reset(GPUDisplayFrontend::getFrontend("glfw"));
       printf("Enabling event display (GLFW backend)\n");
     }
-
 #endif
-    else if (configStandalone.eventDisplay == 2) {
-      eventDisplay.reset(new GPUDisplayBackendGlut);
+#ifdef GPUCA_STANDALONE
+    if (configStandalone.eventDisplay == 2) {
+      eventDisplay.reset(GPUDisplayFrontend::getFrontend("glut"));
       printf("Enabling event display (GLUT backend)\n");
     }
-
 #endif
     devProc.eventDisplay = eventDisplay.get();
   }

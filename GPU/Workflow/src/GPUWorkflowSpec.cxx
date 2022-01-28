@@ -49,10 +49,7 @@
 #include "GPUO2InterfaceQA.h"
 #include "GPUO2Interface.h"
 #include "TPCPadGainCalib.h"
-#include "GPUDisplayBackend.h"
-#ifdef GPUCA_BUILD_EVENT_DISPLAY
-#include "GPUDisplayBackendGlfw.h"
-#endif
+#include "GPUDisplayFrontend.h"
 #include "DataFormatsParameters/GRPObject.h"
 #include "TPCBase/Sector.h"
 #include "TPCBase/Utils.h"
@@ -104,7 +101,7 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
   struct ProcessAttributes {
     std::unique_ptr<ClusterGroupParser> parser;
     std::unique_ptr<GPUO2Interface> tracker;
-    std::unique_ptr<GPUDisplayBackend> displayBackend;
+    std::unique_ptr<GPUDisplayFrontend> displayBackend;
     std::unique_ptr<TPCFastTransform> fastTransform;
     std::unique_ptr<TPCPadGainCalib> tpcPadGainCalib;
     std::unique_ptr<o2::tpc::CalibdEdxContainer> dEdxCalibContainer;
@@ -161,9 +158,12 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
       config.configInterface.dumpEvents = confParam.dump;
       if (confParam.display) {
 #ifdef GPUCA_BUILD_EVENT_DISPLAY
-        processAttributes->displayBackend.reset(new GPUDisplayBackendGlfw);
         config.configProcessing.eventDisplay = processAttributes->displayBackend.get();
-        LOG(info) << "Event display enabled";
+        if (config.configProcessing.eventDisplay != nullptr) {
+          LOG(info) << "Event display enabled";
+        } else {
+          throw std::runtime_error("Standalone Event Display frontend could not be created!");
+        }
 #else
         throw std::runtime_error("Standalone Event Display not enabled at build time!");
 #endif
