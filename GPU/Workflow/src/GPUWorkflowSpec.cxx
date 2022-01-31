@@ -101,7 +101,7 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
   struct ProcessAttributes {
     std::unique_ptr<ClusterGroupParser> parser;
     std::unique_ptr<GPUO2Interface> tracker;
-    std::unique_ptr<GPUDisplayFrontend> displayBackend;
+    std::unique_ptr<GPUDisplayFrontend> displayFrontend;
     std::unique_ptr<TPCFastTransform> fastTransform;
     std::unique_ptr<TPCPadGainCalib> tpcPadGainCalib;
     std::unique_ptr<o2::tpc::CalibdEdxContainer> dEdxCalibContainer;
@@ -158,14 +158,15 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
       config.configInterface.dumpEvents = confParam.dump;
       if (confParam.display) {
 #ifdef GPUCA_BUILD_EVENT_DISPLAY
-        config.configProcessing.eventDisplay = processAttributes->displayBackend.get();
+        processAttributes->displayFrontend.reset(GPUDisplayFrontend::getFrontend("glfw"));
+        config.configProcessing.eventDisplay = processAttributes->displayFrontend.get();
         if (config.configProcessing.eventDisplay != nullptr) {
           LOG(info) << "Event display enabled";
         } else {
-          throw std::runtime_error("Standalone Event Display frontend could not be created!");
+          throw std::runtime_error("GPU Event Display frontend could not be created!");
         }
 #else
-        throw std::runtime_error("Standalone Event Display not enabled at build time!");
+        throw std::runtime_error("GPU Event Display not enabled at build time!");
 #endif
       }
 
@@ -229,6 +230,10 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
         if (processAttributes->tpcSectorMask != 0xFFFFFFFFF) {
           throw std::invalid_argument("Cannot run TPC decompression with a sector mask");
         }
+      }
+      if (specconfig.runTRDTracking) {
+        config.configWorkflow.inputs.setBits(GPUDataTypes::InOutType::TRDTracklets, true);
+        config.configWorkflow.steps.setBits(GPUDataTypes::RecoStep::TRDTracking, true);
       }
       if (specconfig.outputSharedClusterMap) {
         config.configProcessing.outputSharedClusterMap = true;
@@ -812,6 +817,7 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
       inputs.emplace_back("trdctracklets", o2::header::gDataOriginTRD, "CTRACKLETS", 0, Lifetime::Timeframe);
       inputs.emplace_back("trdtracklets", o2::header::gDataOriginTRD, "TRACKLETS", 0, Lifetime::Timeframe);
       inputs.emplace_back("trdtriggerrec", o2::header::gDataOriginTRD, "TRKTRGRD", 0, Lifetime::Timeframe);
+      inputs.emplace_back("trdtrigrecmask", o2::header::gDataOriginTRD, "TRIGRECMASK", 0, Lifetime::Timeframe);
     }
     return inputs;
   };
