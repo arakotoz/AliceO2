@@ -37,11 +37,11 @@ class TrackLTF : public TrackMFTExt
   TrackLTF(const TrackLTF& t) = default;
   ~TrackLTF() = default;
 
-  const std::array<Float_t, constants::mft::LayersNumber>& getXCoordinates() const { return mX; }
-  const std::array<Float_t, constants::mft::LayersNumber>& getYCoordinates() const { return mY; }
-  const std::array<Float_t, constants::mft::LayersNumber>& getZCoordinates() const { return mZ; }
-  const std::array<Float_t, constants::mft::LayersNumber>& getSigmasX2() const { return mSigmaX2; }
-  const std::array<Float_t, constants::mft::LayersNumber>& getSigmasY2() const { return mSigmaY2; }
+  const std::array<double, constants::mft::LayersNumber>& getXCoordinates() const { return mX; }
+  const std::array<double, constants::mft::LayersNumber>& getYCoordinates() const { return mY; }
+  const std::array<double, constants::mft::LayersNumber>& getZCoordinates() const { return mZ; }
+  const std::array<double, constants::mft::LayersNumber>& getSigmasX2() const { return mSigmaX2; }
+  const std::array<double, constants::mft::LayersNumber>& getSigmasY2() const { return mSigmaY2; }
   const std::array<Int_t, constants::mft::LayersNumber>& getLayers() const { return mLayer; }
   const std::array<Int_t, constants::mft::LayersNumber>& getClustersId() const { return mClusterId; }
   const std::array<MCCompLabel, constants::mft::LayersNumber>& getMCCompLabels() const { return mMCCompLabels; }
@@ -50,11 +50,11 @@ class TrackLTF : public TrackMFTExt
   void sort();
 
  private:
-  std::array<Float_t, constants::mft::LayersNumber> mX = {-25., -25., -25., -25., -25., -25., -25., -25., -25., -25.};
-  std::array<Float_t, constants::mft::LayersNumber> mY = {-25., -25., -25., -25., -25., -25., -25., -25., -25., -25.};
-  std::array<Float_t, constants::mft::LayersNumber> mZ = {-120., -120., -120., -120., -120., -120., -120., -120., -120., -120.};
-  std::array<Float_t, constants::mft::LayersNumber> mSigmaX2 = {0};
-  std::array<Float_t, constants::mft::LayersNumber> mSigmaY2 = {0};
+  std::array<double, constants::mft::LayersNumber> mX = {-25., -25., -25., -25., -25., -25., -25., -25., -25., -25.};
+  std::array<double, constants::mft::LayersNumber> mY = {-25., -25., -25., -25., -25., -25., -25., -25., -25., -25.};
+  std::array<double, constants::mft::LayersNumber> mZ = {-120., -120., -120., -120., -120., -120., -120., -120., -120., -120.};
+  std::array<double, constants::mft::LayersNumber> mSigmaX2 = {0};
+  std::array<double, constants::mft::LayersNumber> mSigmaY2 = {0};
   std::array<Int_t, constants::mft::LayersNumber> mLayer;
   std::array<Int_t, constants::mft::LayersNumber> mClusterId;
   std::array<MCCompLabel, constants::mft::LayersNumber> mMCCompLabels;
@@ -74,7 +74,7 @@ class TrackLTFL : public TrackLTF // A track model for B=0
   ~TrackLTFL() = default;
 
   // Kalman filter/fitting update for linear tracks
-  bool update(const std::array<float, 2>& p, const std::array<float, 2>& cov)
+  bool update(const std::array<double, 2>& p, const std::array<double, 2>& cov)
   {
     // TODO
     return true;
@@ -121,11 +121,11 @@ inline void TrackLTF::sort()
 {
   // Orders elements along z position
   struct ClusterData {
-    Float_t x;
-    Float_t y;
-    Float_t z;
-    Float_t sigmaX2;
-    Float_t sigmaY2;
+    double x;
+    double y;
+    double z;
+    double sigmaX2;
+    double sigmaY2;
     Int_t layer;
     Int_t clusterId;
     MCCompLabel label;

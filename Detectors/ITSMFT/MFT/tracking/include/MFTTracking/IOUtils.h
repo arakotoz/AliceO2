@@ -51,10 +51,10 @@ namespace mft
 
 namespace ioutils
 {
-constexpr float DefClusErrorRow = o2::itsmft::SegmentationAlpide::PitchRow * 0.5;
-constexpr float DefClusErrorCol = o2::itsmft::SegmentationAlpide::PitchCol * 0.5;
-constexpr float DefClusError2Row = DefClusErrorRow * DefClusErrorRow;
-constexpr float DefClusError2Col = DefClusErrorCol * DefClusErrorCol;
+constexpr double DefClusErrorRow = o2::itsmft::SegmentationAlpide::PitchRow * 0.5;
+constexpr double DefClusErrorCol = o2::itsmft::SegmentationAlpide::PitchCol * 0.5;
+constexpr double DefClusError2Row = DefClusErrorRow * DefClusErrorRow;
+constexpr double DefClusError2Col = DefClusErrorCol * DefClusErrorCol;
 
 template <typename T>
 int loadROFrameData(const o2::itsmft::ROFRecord& rof, ROframe<T>& events, gsl::span<const itsmft::CompClusterExt> clusters,
@@ -63,7 +63,7 @@ int loadROFrameData(const o2::itsmft::ROFRecord& rof, ROframe<T>& events, gsl::s
 
 void convertCompactClusters(gsl::span<const itsmft::CompClusterExt> clusters,
                             gsl::span<const unsigned char>::iterator& pattIt,
-                            std::vector<o2::BaseCluster<float>>& output,
+                            std::vector<o2::BaseCluster<double>>& output,
                             const itsmft::TopologyDictionary& dict);
 } // namespace ioutils
 } // namespace mft

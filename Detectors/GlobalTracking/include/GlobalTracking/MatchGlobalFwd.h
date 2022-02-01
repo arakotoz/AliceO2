@@ -84,7 +84,7 @@ using o2::track::TrackParCovFwd;
 typedef std::function<double(const GlobalFwdTrack& mchtrack, const TrackParCovFwd& mfttrack)> MatchingFunc_t;
 typedef std::function<bool(const GlobalFwdTrack& mchtrack, const TrackParCovFwd& mfttrack)> CutFunc_t;
 
-using MFTCluster = o2::BaseCluster<float>;
+using MFTCluster = o2::BaseCluster<double>;
 using BracketF = o2::math_utils::Bracket<float>;
 using SMatrix55Std = ROOT::Math::SMatrix<double, 5>;
 using SMatrix55Sym = ROOT::Math::SMatrix<double, 5, 5, ROOT::Math::MatRepSym<double, 5>>;

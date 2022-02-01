@@ -608,8 +608,8 @@ bool MatchGlobalFwd::computeCluster(o2::dataformats::GlobalFwdTrack& track, cons
              << track.getCovariances() << std::endl;
 
   // recompute parameters
-  const std::array<float, 2>& pos = {clx, cly};
-  const std::array<float, 2>& cov = {sigmaX2, sigmaY2};
+  const std::array<double, 2>& pos = {clx, cly};
+  const std::array<double, 2>& cov = {sigmaX2, sigmaY2};
 
   if (track.update(pos, cov)) {
     LOG(debug) << "   New Cluster: X = " << clx << " Y = " << cly << " Z = " << clz;

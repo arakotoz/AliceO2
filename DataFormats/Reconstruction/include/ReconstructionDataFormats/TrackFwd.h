@@ -167,7 +167,7 @@ class TrackParCovFwd : public TrackParFwd
   void addMCSEffect(double x2X0);
 
   // Kalman filter/fitting
-  bool update(const std::array<float, 2>& p, const std::array<float, 2>& cov);
+  bool update(const std::array<double, 2>& p, const std::array<double, 2>& cov);
 
  private:
   /// Covariance matrix of track parameters, ordered as follows:    <pre>
