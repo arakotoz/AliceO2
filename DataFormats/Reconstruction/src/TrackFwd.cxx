@@ -291,7 +291,7 @@ void TrackParCovFwd::propagateToZ(double zEnd, double zField)
 }
 
 //__________________________________________________________________________
-bool TrackParCovFwd::update(const std::array<float, 2>& p, const std::array<float, 2>& cov)
+bool TrackParCovFwd::update(const std::array<double, 2>& p, const std::array<double, 2>& cov)
 {
   /// Kalman update step: computes new track parameters with a new cluster position and uncertainties
   /// The current track is expected to have been propagated to the cluster z position
