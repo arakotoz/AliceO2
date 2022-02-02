@@ -155,8 +155,8 @@ bool TrackFitter<T>::initTrack(T& track, bool outward)
     }
 
     SMatrix55Sym lastParamCov;
-    float qptsigma = TMath::Max(std::abs(track.getInvQPt()), .5);
-    float tanlsigma = TMath::Max(std::abs(track.getTanl()), .5);
+    double qptsigma = TMath::Max(std::abs(track.getInvQPt()), .5);
+    double tanlsigma = TMath::Max(std::abs(track.getTanl()), .5);
 
     lastParamCov(0, 0) = 1;                              // <X,X>
     lastParamCov(1, 1) = 1;                              // <Y,X>
@@ -225,8 +225,8 @@ bool TrackFitter<T>::initTrack(T& track, bool outward)
     }
 
     SMatrix55Sym lastParamCov;
-    float qptsigma = TMath::Max(std::abs(track.getInvQPt()), .5);
-    float tanlsigma = TMath::Max(std::abs(track.getTanl()), .5);
+    double qptsigma = TMath::Max(std::abs(track.getInvQPt()), .5);
+    double tanlsigma = TMath::Max(std::abs(track.getTanl()), .5);
 
     lastParamCov(0, 0) = 1;                              // <X,X>
     lastParamCov(1, 1) = 1;                              // <Y,X>
@@ -387,8 +387,8 @@ bool TrackFitter<T>::computeCluster(T& track, int cluster, int& startingLayerID)
   }
 
   // recompute parameters
-  const std::array<float, 2>& pos = {clx, cly};
-  const std::array<float, 2>& cov = {sigmaX2, sigmaY2};
+  const std::array<double, 2>& pos = {clx, cly};
+  const std::array<double, 2>& cov = {sigmaX2, sigmaY2};
 
   if (track.update(pos, cov)) {
     if (mVerbose) {
@@ -409,11 +409,11 @@ template <typename T>
 Double_t invQPtFromFCF(const T& track, Double_t bFieldZ, Double_t& sigmainvqptsq)
 {
 
-  const std::array<Float_t, constants::mft::LayersNumber>& xPositions = track.getXCoordinates();
-  const std::array<Float_t, constants::mft::LayersNumber>& yPositions = track.getYCoordinates();
-  const std::array<Float_t, constants::mft::LayersNumber>& zPositions = track.getZCoordinates();
-  const std::array<Float_t, constants::mft::LayersNumber>& SigmasX2 = track.getSigmasX2();
-  const std::array<Float_t, constants::mft::LayersNumber>& SigmasY2 = track.getSigmasY2();
+  const std::array<double, constants::mft::LayersNumber>& xPositions = track.getXCoordinates();
+  const std::array<double, constants::mft::LayersNumber>& yPositions = track.getYCoordinates();
+  const std::array<double, constants::mft::LayersNumber>& zPositions = track.getZCoordinates();
+  const std::array<double, constants::mft::LayersNumber>& SigmasX2 = track.getSigmasX2();
+  const std::array<double, constants::mft::LayersNumber>& SigmasY2 = track.getSigmasY2();
 
   // Fast Circle Fit (Hansroul, Jeremie, Savard, 1987)
   auto nPoints = track.getNumberOfPoints();
