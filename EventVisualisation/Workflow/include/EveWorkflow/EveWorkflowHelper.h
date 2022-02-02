@@ -150,7 +150,7 @@ class EveWorkflowHelper
   TracksSet mTrackSet;
   o2::event_visualisation::VisualisationEvent mEvent;
   std::vector<o2::BaseCluster<float>> mITSClustersArray;
-  std::vector<o2::BaseCluster<float>> mMFTClustersArray;
+  std::vector<o2::BaseCluster<double>> mMFTClustersArray;
   o2::mft::GeometryTGeo* mMFTGeom;
   o2::its::GeometryTGeo* mITSGeom;
   float mMUS2TPCTimeBins = 5.0098627;

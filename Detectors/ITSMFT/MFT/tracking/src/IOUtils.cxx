@@ -49,8 +49,8 @@ int ioutils::loadROFrameData(const o2::itsmft::ROFRecord& rof, ROframe<T>& event
     auto sensorID = c.getSensorID();
     int layer = geom->getLayer(sensorID);
     auto pattID = c.getPatternID();
-    o2::math_utils::Point3D<float> locXYZ;
-    float sigmaX2 = ioutils::DefClusError2Row, sigmaY2 = ioutils::DefClusError2Col; //Dummy COG errors (about half pixel size)
+    o2::math_utils::Point3D<double> locXYZ;
+    double sigmaX2 = ioutils::DefClusError2Row, sigmaY2 = ioutils::DefClusError2Col; // Dummy COG errors (about half pixel size)
     if (pattID != itsmft::CompCluster::InvalidPatternID) {
       sigmaX2 = dict.getErr2X(pattID); // ALPIDE local X coordinate => MFT global X coordinate (ALPIDE rows)
       sigmaY2 = dict.getErr2Z(pattID); // ALPIDE local Z coordinate => MFT global Y coordinate (ALPIDE columns)
@@ -67,14 +67,15 @@ int ioutils::loadROFrameData(const o2::itsmft::ROFRecord& rof, ROframe<T>& event
     // Transformation to the local --> global
     auto gloXYZ = geom->getMatrixL2G(sensorID) * locXYZ;
 
-    auto clsPoint2D = math_utils::Point2D<Float_t>(gloXYZ.x(), gloXYZ.y());
-    Float_t rCoord = clsPoint2D.R();
-    Float_t phiCoord = clsPoint2D.Phi();
-    o2::math_utils::bringTo02PiGen(phiCoord);
+    auto clsPoint2D = math_utils::Point2D<double>(gloXYZ.x(), gloXYZ.y());
+    double rCoord = clsPoint2D.R();
+    double phiCoord = clsPoint2D.Phi();
+    o2::math_utils::bringTo02PiGend(phiCoord);
     int rBinIndex = tracker->getRBinIndex(rCoord);
     int phiBinIndex = tracker->getPhiBinIndex(phiCoord);
     int binIndex = tracker->getBinIndex(rBinIndex, phiBinIndex);
-    event.addClusterToLayer(layer, gloXYZ.x(), gloXYZ.y(), gloXYZ.z(), phiCoord, rCoord, event.getClustersInLayer(layer).size(), binIndex, sigmaX2, sigmaY2, sensorID);
+    double cook = 1.0; // WARNING!! COOKED
+    event.addClusterToLayer(layer, gloXYZ.x(), gloXYZ.y(), gloXYZ.z(), phiCoord, rCoord, event.getClustersInLayer(layer).size(), binIndex, cook * sigmaX2, cook * sigmaY2, sensorID);
     if (mcLabels) {
       event.addClusterLabelToLayer(layer, *(mcLabels->getLabels(first + clusterId).begin()));
     }
@@ -88,7 +89,7 @@ int ioutils::loadROFrameData(const o2::itsmft::ROFRecord& rof, ROframe<T>& event
 /// convert compact clusters to 3D spacepoints into std::vector<o2::BaseCluster<float>>
 void ioutils::convertCompactClusters(gsl::span<const itsmft::CompClusterExt> clusters,
                                      gsl::span<const unsigned char>::iterator& pattIt,
-                                     std::vector<o2::BaseCluster<float>>& output,
+                                     std::vector<o2::BaseCluster<double>>& output,
                                      const itsmft::TopologyDictionary& dict)
 {
   GeometryTGeo* geom = GeometryTGeo::Instance();
@@ -97,8 +98,8 @@ void ioutils::convertCompactClusters(gsl::span<const itsmft::CompClusterExt> clu
   for (auto& c : clusters) {
     auto chipID = c.getChipID();
     auto pattID = c.getPatternID();
-    o2::math_utils::Point3D<float> locXYZ;
-    float sigmaX2 = DefClusError2Row, sigmaY2 = DefClusError2Col;
+    o2::math_utils::Point3D<double> locXYZ;
+    double sigmaX2 = DefClusError2Row, sigmaY2 = DefClusError2Col;
     if (pattID != itsmft::CompCluster::InvalidPatternID) {
       sigmaX2 = dict.getErr2X(pattID); // ALPIDE local Y coordinate => MFT global X coordinate (ALPIDE rows)
       sigmaY2 = dict.getErr2Z(pattID); // ALPIDE local Z coordinate => MFT global Y coordinate (ALPIDE columns)
@@ -117,7 +118,9 @@ void ioutils::convertCompactClusters(gsl::span<const itsmft::CompClusterExt> clu
     auto gloXYZ = geom->getMatrixL2G(chipID) * locXYZ;
 
     auto& cl3d = output.emplace_back(c.getSensorID(), gloXYZ); // local --> global
-    cl3d.setErrors(sigmaX2, sigmaY2, 0);
+
+    double cook = 1.0; // WARNING!! COOKED
+    cl3d.setErrors(cook * sigmaX2, cook * sigmaY2, 0);
   }
 }
 template int o2::mft::ioutils::loadROFrameData<o2::mft::TrackLTF>(const o2::itsmft::ROFRecord&, ROframe<o2::mft::TrackLTF>&, gsl::span<const itsmft::CompClusterExt>,
