@@ -627,6 +627,12 @@ void DataProcessingDevice::fillContext(DataProcessorContext& context, DeviceCont
 
 void DataProcessingDevice::PreRun()
 {
+  mDeviceContext.state->streaming = StreamingState::Streaming;
+  for (auto& info : mDeviceContext.state->inputChannelInfos) {
+    if (info.state != InputChannelState::Pull) {
+      info.state = InputChannelState::Running;
+    }
+  }
   mServiceRegistry.preStartCallbacks();
   mServiceRegistry.get<CallbackService>()(CallbackService::Id::Start);
   startPollers();
@@ -681,10 +687,18 @@ void DataProcessingDevice::Run()
           uv_timer_init(mState.loop, timer);
           mState.transitionHandling = TransitionHandlingState::Requested;
           uv_timer_start(timer, on_transition_requested_expired, timeout * 1000, 0);
-          LOGP(info, "New state requested. Waiting for {} seconds before quitting.", timeout);
+          if (mProcessingPolicies.termination == TerminationPolicy::QUIT) {
+            LOGP(info, "New state requested. Waiting for {} seconds before quitting.");
+          } else {
+            LOGP(info, "New state requested. Waiting for {} seconds before switching to READY state.", timeout);
+          }
         } else {
           mState.transitionHandling = TransitionHandlingState::Expired;
-          LOGP(info, "New state requested. No timeout set, therefore exiting immediately");
+          if (mProcessingPolicies.termination == TerminationPolicy::QUIT) {
+            LOGP(info, "New state requested. No timeout set, quitting immediately as per --completion-policy");
+          } else {
+            LOGP(info, "New state requested. No timeout set, switching to READY state immediately");
+          }
         }
       }
       TracyPlot("shouldNotWait", (int)shouldNotWait);
@@ -934,7 +948,6 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
     for (auto& poller : context.deviceContext->state->activeOutputPollers) {
       uv_poll_stop(poller);
     }
-    context.deviceContext->state->activeOutputPollers.clear();
     return;
   }
 
@@ -943,7 +956,6 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
     for (auto& poller : context.deviceContext->state->activeOutputPollers) {
       uv_poll_stop(poller);
     }
-    context.deviceContext->state->activeOutputPollers.clear();
   }
 
   return;
