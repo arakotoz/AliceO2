@@ -9,27 +9,24 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// \file   MIDSimulation/ColumnDataMC.h
-/// \brief  Strip pattern (aka digits) for simulations
-/// \author Diego Stocco <Diego.Stocco at cern.ch>
-/// \date   05 March 2019
+/// \file ClusterFinderGEMSpec.h
+/// \brief Definition of a data processor to run the GEM MLEM cluster finder
+///
+/// \author Philippe Pillot, Subatech
 
-#ifndef O2_MID_COLUMNDATAMC_H
-#define O2_MID_COLUMNDATAMC_H
+#ifndef O2_MCH_CLUSTERFINDERGEMSPEC_H_
+#define O2_MCH_CLUSTERFINDERGEMSPEC_H_
 
-#include "DataFormatsMID/ColumnData.h"
+#include "Framework/DataProcessorSpec.h"
 
 namespace o2
 {
-namespace mid
+namespace mch
 {
-/// Column data structure for MID simulations
-class ColumnDataMC : public ColumnData
-{
-  ClassDefNV(ColumnDataMC, 1);
-};
 
-} // namespace mid
-} // namespace o2
+o2::framework::DataProcessorSpec getClusterFinderGEMSpec(const char* specName = "mch-cluster-finder-GEM");
 
-#endif /* O2_MID_COLUMNDATAMC_H */
+} // end namespace mch
+} // end namespace o2
+
+#endif // O2_MCH_CLUSTERFINDERGEMSPEC_H_
