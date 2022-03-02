@@ -68,9 +68,11 @@ fi
 # ---------------------------------------------------------------------------------------------------------------------
 # Set general arguments
 ARGS_ALL="--session ${OVERRIDE_SESSION:-default} --severity $SEVERITY --shm-segment-id $NUMAID --shm-segment-size $SHMSIZE $ARGS_ALL_EXTRA --early-forward-policy noraw"
+ARGS_ALL_CONFIG="NameConf.mDirGeom=$FILEWORKDIR;NameConf.mDirMatLUT=$FILEWORKDIR;NameConf.mDirCollContext=$FILEWORKDIRRUN;NameConf.mDirGRP=$FILEWORKDIRRUN;keyval.input_dir=$FILEWORKDIR;keyval.output_dir=/dev/null;$ALL_EXTRA_CONFIG"
 if [[ $EPNSYNCMODE == 1 ]]; then
   ARGS_ALL+=" --infologger-severity $INFOLOGGER_SEVERITY"
   ARGS_ALL+=" --monitoring-backend influxdb-unix:///tmp/telegraf.sock --resources-monitoring 15"
+  ARGS_ALL_CONFIG+="NameConf.mCCDBServer=http://o2-ccdb.internal;"
 elif [[ "0$ENABLE_METRICS" != "01" ]]; then
   ARGS_ALL+=" --monitoring-backend no-op://"
 fi
@@ -82,7 +84,6 @@ fi
 [[ $NUMAGPUIDS != 0 ]] && ARGS_ALL+=" --child-driver 'numactl --membind $NUMAID --cpunodebind $NUMAID'"
 [[ ! -z $TIMEFRAME_RATE_LIMIT ]] && [[ $TIMEFRAME_RATE_LIMIT != 0 ]] && ARGS_ALL+=" --timeframes-rate-limit $TIMEFRAME_RATE_LIMIT --timeframes-rate-limit-ipcid $NUMAID"
 
-ARGS_ALL_CONFIG="NameConf.mDirGeom=$FILEWORKDIR;NameConf.mDirMatLUT=$FILEWORKDIR;NameConf.mDirCollContext=$FILEWORKDIRRUN;NameConf.mDirGRP=$FILEWORKDIRRUN;keyval.input_dir=$FILEWORKDIR;keyval.output_dir=/dev/null;$ALL_EXTRA_CONFIG"
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Set some individual workflow arguments depending on configuration
@@ -101,6 +102,11 @@ CPV_INPUT=raw
 EVE_CONFIG=" --jsons-folder $EDJSONS_DIR"
 MIDDEC_CONFIG=
 EMCRAW2C_CONFIG=
+
+if [[ -z $ALPIDE_ERR_DUMPS ]]; then
+  [[ $EPNSYNCMODE == 1 ]] && ALPIDE_ERR_DUMPS="1" || ALPIDE_ERR_DUMPS="0"
+fi
+
 
 if [[ $SYNCMODE == 1 ]]; then
   if [[ $BEAMTYPE == "PbPb" ]]; then
@@ -376,8 +382,8 @@ if [[ $CTFINPUT == 0 && $DIGITINPUT == 0 ]]; then
     add_W o2-tpc-raw-to-digits-workflow "--input-spec \"A:TPC/RAWDATA;dd:FLP/DISTSUBTIMEFRAME/0\" --remove-duplicates --pipeline $(get_N tpc-raw-to-digits-0 TPC RAW TPCRAWDEC)"
     add_W o2-tpc-reco-workflow "--input-type digitizer --output-type zsraw,disable-writer --pipeline $(get_N tpc-zsEncoder TPC RAW TPCRAWDEC)"
   fi
-  has_detector ITS && add_W o2-itsmft-stf-decoder-workflow "--nthreads ${NITSDECTHREADS} --pipeline $(get_N its-stf-decoder ITS RAW ITSRAWDEC)" "$ITSMFT_FILES"
-  has_detector MFT && add_W o2-itsmft-stf-decoder-workflow "--nthreads ${NMFTDECTHREADS} --pipeline $(get_N mft-stf-decoder MFT RAW MFTRAWDEC) --runmft true" "$ITSMFT_FILES"
+  has_detector ITS && add_W o2-itsmft-stf-decoder-workflow "--nthreads ${NITSDECTHREADS} --raw-data-dumps $ALPIDE_ERR_DUMPS --pipeline $(get_N its-stf-decoder ITS RAW ITSRAWDEC)" "$ITSMFT_FILES"
+  has_detector MFT && add_W o2-itsmft-stf-decoder-workflow "--nthreads ${NMFTDECTHREADS} --raw-data-dumps $ALPIDE_ERR_DUMPS --pipeline $(get_N mft-stf-decoder MFT RAW MFTRAWDEC) --runmft true" "$ITSMFT_FILES"
   has_detector FT0 && ! has_detector_flp_processing FT0 && add_W o2-ft0-flp-dpl-workflow "$DISABLE_ROOT_OUTPUT --pipeline $(get_N ft0-datareader-dpl FT0 RAW)"
   has_detector FV0 && ! has_detector_flp_processing FV0 && add_W o2-fv0-flp-dpl-workflow "$DISABLE_ROOT_OUTPUT --pipeline $(get_N fv0-datareader-dpl FV0 RAW)"
   has_detector MID && add_W o2-mid-raw-to-digits-workflow "$MIDDEC_CONFIG --pipeline $(get_N MIDRawDecoder MID RAW),$(get_N MIDDecodedDataAggregator MID RAW)"
@@ -414,6 +420,10 @@ has_detector FDD && has_processing_step FDD_RECO && add_W o2-fdd-reco-workflow "
 has_detector FV0 && has_processing_step FV0_RECO && add_W o2-fv0-reco-workflow "$DISABLE_DIGIT_ROOT_INPUT $DISABLE_ROOT_OUTPUT $DISABLE_MC"
 has_detector ZDC && has_processing_step ZDC_RECO && add_W o2-zdc-digits-reco "$DISABLE_DIGIT_ROOT_INPUT $DISABLE_ROOT_OUTPUT $DISABLE_MC"
 has_detectors_reco MFT MCH && has_detector_matching MFTMCH && add_W o2-globalfwd-matcher-workflow "--disable-root-input $DISABLE_ROOT_OUTPUT $DISABLE_MC --pipeline $(get_N globalfwd-track-matcher MATCH REST)"
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Reconstruction workflows needed only in case QC was requested
+has_detector_qc PHS && workflow_has_parameter QC && add_W o2-phos-reco-workflow "--input-type cells --output-type clusters --disable-root-input $DISABLE_ROOT_OUTPUT $DISABLE_MC" --pipeline $(get_N PHOSClusterizerSpec PHS REST)
 
 if [[ $BEAMTYPE != "cosmic" ]]; then
   has_detectors_reco ITS && has_detector_matching PRIMVTX && [[ ! -z "$VERTEXING_SOURCES" ]] && add_W o2-primary-vertexing-workflow "$DISABLE_MC --disable-root-input $DISABLE_ROOT_OUTPUT $PVERTEX_CONFIG --pipeline $(get_N primary-vertexing MATCH REST)"
