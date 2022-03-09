@@ -8,23 +8,17 @@
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
+#ifndef O2_FRAMEWORK_CHANNELPARAMSPEC_H_
+#define O2_FRAMEWORK_CHANNELPARAMSPEC_H_
+#include "Framework/ConfigParamSpec.h"
 
-/// \file   MIDWorkflow/ClusterizerMCSpec.h
-/// \brief  Data processor specs for MID MC clustering device
-/// \author Diego Stocco <Diego.Stocco at cern.ch>
-/// \date   27 September 2019
+#include <vector>
+#include <string>
 
-#ifndef O2_MID_CLUSTERIZERMCSPEC_H
-#define O2_MID_CLUSTERIZERMCSPEC_H
-
-#include "Framework/DataProcessorSpec.h"
-
-namespace o2
+namespace o2::framework
 {
-namespace mid
-{
-framework::DataProcessorSpec getClusterizerMCSpec();
-}
-} // namespace o2
 
-#endif //O2_MID_CLUSTERIZERMCSPEC_H
+std::vector<ConfigParamSpec> channelParamSpec(std::string const& name);
+
+} // namespace o2::framework
+#endif
