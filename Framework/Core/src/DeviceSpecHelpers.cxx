@@ -309,7 +309,7 @@ struct ExpirationHandlerHelpers {
     return [](DeviceState&, ConfigParamRegistry const&) { return LifetimeHelpers::expireNever(); };
   }
 
-  static RouteConfigurator::ExpirationConfigurator expiringTransientConfigurator(InputSpec const& matcher)
+  static RouteConfigurator::ExpirationConfigurator expiringTransientConfigurator(InputSpec const&)
   {
     return [](DeviceState&, ConfigParamRegistry const&) { return LifetimeHelpers::fetchFromObjectRegistry(); };
   }
@@ -321,9 +321,9 @@ struct ExpirationHandlerHelpers {
   }
 
   /// This will always exipire an optional record when no data is received.
-  static RouteConfigurator::DanglingConfigurator danglingOptionalConfigurator()
+  static RouteConfigurator::DanglingConfigurator danglingOptionalConfigurator(std::vector<InputRoute> const& routes)
   {
-    return [](DeviceState&, ConfigParamRegistry const&) { return LifetimeHelpers::expireAlways(); };
+    return [routes](DeviceState&, ConfigParamRegistry const&) { return LifetimeHelpers::expireIfPresent(routes, ConcreteDataMatcher{"FLP", "DISTSUBTIMEFRAME", 0}); };
   }
 
   /// When the record expires, simply create a dummy entry.
@@ -331,13 +331,13 @@ struct ExpirationHandlerHelpers {
   {
     try {
       ConcreteDataMatcher concrete = DataSpecUtils::asConcreteDataMatcher(spec);
-      return [concrete, sourceChannel](DeviceState&, ConfigParamRegistry const& config) {
+      return [concrete, sourceChannel](DeviceState&, ConfigParamRegistry const&) {
         return LifetimeHelpers::dummy(concrete, sourceChannel);
       };
     } catch (...) {
       ConcreteDataTypeMatcher dataType = DataSpecUtils::asConcreteDataTypeMatcher(spec);
       ConcreteDataMatcher concrete{dataType.origin, dataType.description, 0xdeadbeef};
-      return [concrete, sourceChannel](DeviceState&, ConfigParamRegistry const& config) {
+      return [concrete, sourceChannel](DeviceState&, ConfigParamRegistry const&) {
         return LifetimeHelpers::dummy(concrete, sourceChannel);
       };
       // We copy the matcher to avoid lifetime issues.
@@ -849,7 +849,7 @@ void DeviceSpecHelpers::processInEdgeActions(std::vector<DeviceSpec>& devices,
         route.configurator = {
           .name = "optional",
           .creatorConfigurator = ExpirationHandlerHelpers::createOptionalConfigurator(),
-          .danglingConfigurator = ExpirationHandlerHelpers::danglingOptionalConfigurator(),
+          .danglingConfigurator = ExpirationHandlerHelpers::danglingOptionalConfigurator(consumerDevice.inputs),
           .expirationConfigurator = ExpirationHandlerHelpers::expiringOptionalConfigurator(inputSpec, sourceChannel)};
         break;
       default:
@@ -1272,7 +1272,7 @@ void DeviceSpecHelpers::prepareArguments(bool defaultQuiet, bool defaultStopped,
       }
 
       /// Add libSegFault to the stack if provided.
-      if (varmap.count("stacktrace-on-signal") && varmap["stacktrace-on-signal"].as<std::string>() != "none") {
+      if (varmap.count("stacktrace-on-signal") && varmap["stacktrace-on-signal"].as<std::string>() != "none" && varmap["stacktrace-on-signal"].as<std::string>() != "simple") {
         char const* preload = getenv("LD_PRELOAD");
         if (preload == nullptr || strcmp(preload, "libSegFault.so") == 0) {
           tmpEnv.push_back("LD_PRELOAD=libSegFault.so");
@@ -1472,8 +1472,9 @@ boost::program_options::options_description DeviceSpecHelpers::getForwardedDevic
     ("shm-no-cleanup", bpo::value<std::string>()->default_value("false"), "no shm cleanup")                                                                          //
     ("shmid", bpo::value<std::string>(), "shmid")                                                                                                                    //
     ("environment", bpo::value<std::string>(), "comma separated list of environment variables to set for the device")                                                //
-    ("stacktrace-on-signal", bpo::value<std::string>()->default_value("all"),                                                                                        //
-     "dump stacktrace on specified signal(s) (any of `all`, `segv`, `bus`, `ill`, `abrt`, `fpe`, `sys`.)")                                                           //
+    ("stacktrace-on-signal", bpo::value<std::string>()->default_value("simple"),                                                                                     //
+     "dump stacktrace on specified signal(s) (any of `all`, `segv`, `bus`, `ill`, `abrt`, `fpe`, `sys`.)"                                                            //
+     "Use `simple` to dump only the main thread in a reliable way")                                                                                                  //
     ("post-fork-command", bpo::value<std::string>(), "post fork command to execute (e.g. numactl {pid}")                                                             //
     ("session", bpo::value<std::string>(), "unique label for the shared memory session")                                                                             //
     ("network-interface", bpo::value<std::string>(), "network interface to which to bind tpc fmq ports without specified address")                                   //
