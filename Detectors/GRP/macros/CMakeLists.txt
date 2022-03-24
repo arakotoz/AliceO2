@@ -9,11 +9,20 @@
 # granted to it by virtue of its status as an Intergovernmental Organization
 # or submit itself to any jurisdiction.
 
-o2_add_library(FITSimulation
-               SOURCES src/Digitizer.cxx
-               PUBLIC_LINK_LIBRARIES O2::CommonDataFormat O2::DataFormatsFT0
-                                     O2::FT0Simulation)
+o2_add_test_root_macro(
+  makeGRPCCDBEntryForDCS.C
+  PUBLIC_LINK_LIBRARIES O2::DetectorsDCS O2::CCDB)
 
-o2_target_root_dictionary(
-  FITSimulation
-  HEADERS   include/FITSimulation/DigitizationParameters.h)
+o2_add_test_root_macro(
+  readGRPDCSConfigEntry.C
+  PUBLIC_LINK_LIBRARIES O2::DetectorsDCS)
+
+o2_add_test_root_macro(
+  readGRPCCDB.C
+  PUBLIC_LINK_LIBRARIES O2::DetectorsDCS O2::CCDB O2::GRPCalibration O2::DataFormatsParameters)
+
+install(
+  FILES makeGRPCCDBEntryForDCS.C
+  readGRPDCSConfigEntry.C
+  DESTINATION share/macro/)
+
