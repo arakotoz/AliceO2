@@ -19,7 +19,7 @@
 #include "GPUChainTracking.h"
 #include "GPUTPCDef.h"
 #include "GPUQA.h"
-#include "GPUDisplayFrontend.h"
+#include "display/GPUDisplayInterface.h"
 #include "genEvents.h"
 
 #include <iostream>
@@ -78,7 +78,7 @@ void unique_ptr_aligned_delete(char* v)
   operator delete(v GPUCA_OPERATOR_NEW_ALIGNMENT);
 }
 std::unique_ptr<char, void (*)(char*)> outputmemory(nullptr, unique_ptr_aligned_delete), outputmemoryPipeline(nullptr, unique_ptr_aligned_delete), inputmemory(nullptr, unique_ptr_aligned_delete);
-std::unique_ptr<GPUDisplayFrontend> eventDisplay;
+std::unique_ptr<GPUDisplayFrontendInterface> eventDisplay;
 std::unique_ptr<GPUReconstructionTimeframe> tf;
 int nEventsInDirectory = 0;
 std::atomic<unsigned int> nIteration, nIterationEnd;
@@ -186,12 +186,6 @@ int ReadConfiguration(int argc, char** argv)
       return 1;
     }
   }
-#ifndef GPUCA_BUILD_EVENT_DISPLAY
-  if (configStandalone.eventDisplay) {
-    printf("EventDisplay not enabled in build\n");
-    return 1;
-  }
-#endif
   if (configStandalone.proc.doublePipeline && configStandalone.testSyncAsync) {
     printf("Cannot run asynchronous processing with double pipeline\n");
     return 1;
@@ -253,16 +247,21 @@ int ReadConfiguration(int argc, char** argv)
     inputmemory.reset((char*)operator new(configStandalone.inputcontrolmem GPUCA_OPERATOR_NEW_ALIGNMENT));
   }
 
-#if !(defined(CUDA_ENABLED) || defined(OPENCL1_ENABLED) || defined(HIP_ENABLED))
-  if (configStandalone.runGPU) {
-    printf("GPU disables at build time!\n");
-    printf("Press a key to exit!\n");
-    getchar();
-    return 1;
-  }
-#endif
-
   configStandalone.proc.showOutputStat = true;
+
+  if (configStandalone.runGPU && configStandalone.gpuType == "AUTO") {
+    if (GPUReconstruction::CheckInstanceAvailable(GPUReconstruction::DeviceType::CUDA)) {
+      configStandalone.gpuType = "CUDA";
+    } else if (GPUReconstruction::CheckInstanceAvailable(GPUReconstruction::DeviceType::HIP)) {
+      configStandalone.gpuType = "HIP";
+    } else if (GPUReconstruction::CheckInstanceAvailable(GPUReconstruction::DeviceType::OCL2)) {
+      configStandalone.gpuType = "OCL2";
+    } else if (GPUReconstruction::CheckInstanceAvailable(GPUReconstruction::DeviceType::OCL)) {
+      configStandalone.gpuType = "OCL";
+    } else {
+      configStandalone.runGPU = false;
+    }
+  }
 
   if (configStandalone.printSettings) {
     qConfigPrint();
@@ -332,29 +331,30 @@ int SetupReconstruction()
 
   configStandalone.proc.forceMemoryPoolSize = (configStandalone.proc.forceMemoryPoolSize == 1 && configStandalone.eventDisplay) ? 2 : configStandalone.proc.forceMemoryPoolSize;
   if (configStandalone.eventDisplay) {
+    if (configStandalone.eventDisplay == 1) {
 #ifdef _WIN32
-    if (configStandalone.eventDisplay == 1) {
-      eventDisplay.reset(GPUDisplayFrontend::getFrontend("windows"));
+      eventDisplay.reset(GPUDisplayFrontendInterface::getFrontend("windows"));
       printf("Enabling event display (windows backend)\n");
-    }
 #else
-#ifdef GPUCA_STANDALONE
-    if (configStandalone.eventDisplay == 1) {
-      eventDisplay.reset(GPUDisplayFrontend::getFrontend("x11"));
+      eventDisplay.reset(GPUDisplayFrontendInterface::getFrontend("x11"));
       printf("Enabling event display (X11 backend)\n");
-    }
 #endif
-    if (configStandalone.eventDisplay == 3) {
-      eventDisplay.reset(GPUDisplayFrontend::getFrontend("glfw"));
-      printf("Enabling event display (GLFW backend)\n");
     }
-#endif
-#ifdef GPUCA_STANDALONE
     if (configStandalone.eventDisplay == 2) {
-      eventDisplay.reset(GPUDisplayFrontend::getFrontend("glut"));
+      eventDisplay.reset(GPUDisplayFrontendInterface::getFrontend("glut"));
       printf("Enabling event display (GLUT backend)\n");
     }
-#endif
+    if (configStandalone.eventDisplay == 3) {
+      eventDisplay.reset(GPUDisplayFrontendInterface::getFrontend("glfw"));
+      printf("Enabling event display (GLFW backend)\n");
+    }
+    if (configStandalone.eventDisplay == 4) {
+      eventDisplay.reset(GPUDisplayFrontendInterface::getFrontend("wayland"));
+      printf("Enabling event display (Wayland backend)\n");
+    }
+    if (eventDisplay.get() == nullptr) {
+      throw std::runtime_error("Requested display not available");
+    }
     procSet.eventDisplay = eventDisplay.get();
     procSet.eventDisplayRenderer = configStandalone.displayRenderer.c_str();
   }

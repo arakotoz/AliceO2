@@ -9,25 +9,23 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file   ThresholdCalibrationWorkflow.h
+/// @file   IRFramesReaderSpec.h
 
-#ifndef O2_ITS_THRESHOLD_CALIBRATION_WORKFLOW_H
-#define O2_ITS_THRESHOLD_CALIBRATION_WORKFLOW_H
+#ifndef O2_IRFRAMES_READER
+#define O2_IRFRAMES_READER
 
-#include "Framework/WorkflowSpec.h"
+#include "Framework/DataProcessorSpec.h"
 
 namespace o2
 {
-namespace its
+namespace globaltracking
 {
 
-namespace threshold_calib_workflow
-{
+/// create a processor spec
+/// read IRFrames data from a root file
+framework::DataProcessorSpec getIRFrameReaderSpec(o2::header::DataOrigin origin, uint32_t subSpec, const std::string& devName, const std::string& defFileName);
 
-framework::WorkflowSpec getWorkflow();
-
-}
-
-} // namespace its
+} // namespace globaltracking
 } // namespace o2
+
 #endif

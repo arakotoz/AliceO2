@@ -19,9 +19,7 @@
 
 #include <vector>
 
-namespace GPUCA_NAMESPACE
-{
-namespace gpu
+namespace GPUCA_NAMESPACE::gpu
 {
 struct GLfb {
   unsigned int fb_id = 0, fbCol_id = 0, fbDepth_id = 0;
@@ -32,6 +30,7 @@ struct GLfb {
 };
 class GPUDisplayBackendOpenGL : public GPUDisplayBackend
 {
+  ~GPUDisplayBackendOpenGL() override = default;
   int ExtInit() override;
   bool CoreProfile() override;
   unsigned int DepthBits() override;
@@ -103,7 +102,6 @@ class GPUDisplayBackendOpenGL : public GPUDisplayBackend
   GLfb mMixBuffer;
   GLfb mOffscreenBufferMSAA, mOffscreenBuffer;
 };
-} // namespace gpu
-} // namespace GPUCA_NAMESPACE
+} // namespace GPUCA_NAMESPACE::gpu
 
 #endif

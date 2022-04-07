@@ -9,23 +9,27 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file   IRFrameWriterSpec.h
+/// \file GPUDisplayGUI.cxx
+/// \author David Rohr
 
-#ifndef O2_ITS_IRFRAMEWRITER
-#define O2_ITS_IRFRAMEWRITER
+#include "GPUDisplayGUI.h"
+#include "GPUDisplayGUIWrapper.h"
+#include "./ui_GPUDisplayGUI.h"
 
-#include "Framework/DataProcessorSpec.h"
+using namespace o2::gpu;
 
-namespace o2
+GPUDisplayGUI::GPUDisplayGUI(QWidget* parent)
+  : QMainWindow(parent), ui(new Ui::GPUDisplayGUI)
 {
-namespace its
+  ui->setupUi(this);
+}
+
+GPUDisplayGUI::~GPUDisplayGUI()
 {
+  delete ui;
+}
 
-/// create a processor spec
-/// write IRFrames for which ITS was reconstructed and tracks found
-o2::framework::DataProcessorSpec getIRFrameWriterSpec();
-
-} // namespace its
-} // namespace o2
-
-#endif
+void GPUDisplayGUI::UpdateTimer()
+{
+  mWrapper->UpdateTimer();
+}
