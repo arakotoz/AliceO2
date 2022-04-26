@@ -25,7 +25,7 @@ using namespace o2::tpc;
 GPUO2InterfaceDisplay::GPUO2InterfaceDisplay(const GPUO2InterfaceConfiguration* config)
 {
   mConfig.reset(new GPUO2InterfaceConfiguration(*config));
-  mFrontend.reset(GPUDisplayFrontendInterface::getFrontend("glfw"));
+  mFrontend.reset(GPUDisplayFrontendInterface::getFrontend(mConfig->configDisplay.displayFrontend.c_str()));
   mConfig->configProcessing.eventDisplay = mFrontend.get();
   mConfig->configDisplay.showTPCTracksFromO2Format = true;
   mParam.reset(new GPUParam);
@@ -35,7 +35,7 @@ GPUO2InterfaceDisplay::GPUO2InterfaceDisplay(const GPUO2InterfaceConfiguration* 
     mQA.reset(new GPUQA(nullptr, &config->configQA, mParam.get()));
     mQA->InitO2MCData();
   }
-  mDisplay.reset(GPUDisplayInterface::getDisplay(mFrontend.get(), nullptr, nullptr, "opengl", mParam.get(), &mConfig->configCalib, &mConfig->configDisplay));
+  mDisplay.reset(GPUDisplayInterface::getDisplay(mFrontend.get(), nullptr, nullptr, mParam.get(), &mConfig->configCalib, &mConfig->configDisplay));
 }
 
 GPUO2InterfaceDisplay::~GPUO2InterfaceDisplay() = default;

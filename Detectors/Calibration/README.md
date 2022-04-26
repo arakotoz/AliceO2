@@ -41,6 +41,9 @@ The TimeSlot is a templated class which takes as input type the Container that w
 The Container class needs to implement the following methods:
 
 `void fill(const gsl::span<const Input> data)`  : method to decide how to use the calibration data within the container (e.g. fill a vector);
+or
+`void fill(o2::dataformats::TFIDInfo& ti, const gsl::span<const Input> data)`  : method to decide how to use the calibration data within the container (e.g. fill a vector) and having access to the TFIDInfo struct providing relevant info for current TF (tfCounter, runNumber, creationTime etc.)
+If provided, this latter method will be used.
 
 `void merge(const Container* prev)` : method to allow merging of the content of a TimeSlot to the content of the following one, when stastics is limited.
 
@@ -93,6 +96,7 @@ o2-calibration-ccdb-populator-workflow --sspec-min 0 --sspec-max 1  -b
 then the `ObjA` will be uploaded only to the default server (`http://alice-ccdb.cern.ch`), `ObjB` will be uploaded to both default and `local` server and
 `ObjC` will be uploaded to the `local` server only.
 
+But default the ccdb-populator-workflow will produce `fatal` on failed upload. To avoid this a switch `--no-fatal-on-failure` can be used.
 <!-- doxy
 * \subpage refDetectorsCalibrationtestMacros
 /doxy -->

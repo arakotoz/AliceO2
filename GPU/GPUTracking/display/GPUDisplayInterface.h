@@ -34,7 +34,7 @@ class GPUDisplayInterface
   virtual void ShowNextEvent(const GPUTrackingInOutPointers* ptrs = nullptr) = 0;
   virtual void WaitForNextEvent() = 0;
   virtual void SetCollisionFirstCluster(unsigned int collision, int slice, int cluster) = 0;
-  static GPUDisplayInterface* getDisplay(GPUDisplayFrontendInterface* frontend, GPUChainTracking* chain, GPUQA* qa, const char* backend = "opengl", const GPUParam* param = nullptr, const GPUCalibObjectsConst* calib = nullptr, const GPUSettingsDisplay* config = nullptr);
+  static GPUDisplayInterface* getDisplay(GPUDisplayFrontendInterface* frontend, GPUChainTracking* chain, GPUQA* qa, const GPUParam* param = nullptr, const GPUCalibObjectsConst* calib = nullptr, const GPUSettingsDisplay* config = nullptr);
 
  protected:
   GPUDisplayInterface();
@@ -53,6 +53,7 @@ class GPUDisplayFrontendInterface
   virtual void setDisplayControl(int v) = 0;
   virtual void setSendKey(int v) = 0;
   virtual void setNeedUpdate(int v) = 0;
+  virtual const char* frontendName() const = 0;
 
  protected:
   GPUDisplayFrontendInterface();

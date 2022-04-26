@@ -8,7 +8,7 @@
 # Note that this might require a production server to run.
 #
 # This script can use additional binary objects which can be optionally provided:
-# - matbud.root + ITSdictionary.bin
+# - matbud.root
 #
 # authors: D. Rohr / S. Wenzel
 
@@ -45,6 +45,7 @@ SPLITTRDDIGI=${SPLITTRDDIGI:-1}
 NHBPERTF=${NHBPERTF:-128}
 RUNFIRSTORBIT=${RUNFIRSTORBIT:-0}
 FIRSTSAMPLEDORBIT=${FIRSTSAMPLEDORBIT:-0}
+OBLIGATORYSOR=${OBLIGATORYSOR:-false}
 if [ $BEAMTYPE == "PbPb" ]; then
   FST_GENERATOR=${FST_GENERATOR:-pythia8hi}
   FST_COLRATE=${FST_COLRATE:-50000}
@@ -73,8 +74,8 @@ echo "versions,${TAG} alidist=\"${ALIDISTCOMMIT}\",O2=\"${O2COMMIT}\" " > ${METR
 
 GLOBALDPLOPT="-b" # --monitoring-backend no-op:// is currently removed due to https://alice.its.cern.ch/jira/browse/O2-1887
 
-HBFUTILPARAMS="HBFUtils.nHBFPerTF=${NHBPERTF};HBFUtils.orbitFirst=${RUNFIRSTORBIT};HBFUtils.orbitFirstSampled=${FIRSTSAMPLEDORBIT}"
-[ "0$ALLOW_MULTIPLE_TF" != "01" ] && HBFUTILPARAMS+=";HBFUtils.maxNOrbits=${NHBPERTF};"
+HBFUTILPARAMS="HBFUtils.nHBFPerTF=${NHBPERTF};HBFUtils.orbitFirst=${RUNFIRSTORBIT};HBFUtils.orbitFirstSampled=${FIRSTSAMPLEDORBIT};HBFUtils.obligatorySOR=${OBLIGATORYSOR}"
+[ "0$ALLOW_MULTIPLE_TF" != "01" ] && HBFUTILPARAMS+=";HBFUtils.maxNOrbits=$((${FIRSTSAMPLEDORBIT} + ${NHBPERTF}));"
 
 ulimit -n 4096 # Make sure we can open sufficiently many files
 [ $? == 0 ] || (echo Failed setting ulimit && exit 1)
@@ -185,7 +186,7 @@ for STAGE in $STAGES; do
     export SYNCMODE=1
     export HOSTMEMSIZE=$TPCTRACKERSCRATCHMEMORY
     export CTFINPUT=0
-    export WORKFLOW_PARAMETERS="${WORKFLOW_PARAMETERS},CALIB,CTF"
+    export WORKFLOW_PARAMETERS="${WORKFLOW_PARAMETERS},CALIB,CTF,EVENT_DISPLAY,${FST_SYNC_EXTRA_WORKFLOW_PARAMETERS}"
     unset JOBUTILS_JOB_SKIPCREATEDONE
   fi
   export SHMSIZE
