@@ -50,6 +50,7 @@
 #include "GPUO2Interface.h"
 #include "CalibdEdxContainer.h"
 #include "TPCPadGainCalib.h"
+#include "TPCZSLinkMapping.h"
 #include "display/GPUDisplayInterface.h"
 #include "DataFormatsParameters/GRPObject.h"
 #include "TPCBase/Sector.h"
@@ -62,6 +63,7 @@
 #include "DataFormatsTRD/RecoInputContainer.h"
 #include "TRDBase/Geometry.h"
 #include "TRDBase/GeometryFlat.h"
+#include "CommonUtils/VerbosityConfig.h"
 #include <filesystem>
 #include <memory> // for make_shared
 #include <vector>
@@ -98,6 +100,7 @@ struct ProcessAttributes {
   std::unique_ptr<TPCFastTransform> fastTransform;
   std::unique_ptr<TPCPadGainCalib> tpcPadGainCalib;
   std::unique_ptr<TPCPadGainCalib> tpcPadGainCalibBufferNew;
+  std::unique_ptr<TPCZSLinkMapping> tpcZSLinkMapping;
   std::unique_ptr<o2::tpc::CalibdEdxContainer> dEdxCalibContainer;
   std::unique_ptr<o2::tpc::CalibdEdxContainer> dEdxCalibContainerBufferNew;
   std::unique_ptr<o2::trd::GeometryFlat> trdGeometry;
@@ -443,13 +446,23 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
       if (specconfig.zsDecoder) {
         std::vector<InputSpec> filter = {{"check", ConcreteDataTypeMatcher{gDataOriginTPC, "RAWDATA"}, Lifetime::Timeframe}};
         auto isSameRdh = [](const char* left, const char* right) -> bool {
-          return o2::raw::RDHUtils::getFEEID(left) == o2::raw::RDHUtils::getFEEID(right);
+          return o2::raw::RDHUtils::getFEEID(left) == o2::raw::RDHUtils::getFEEID(right) && o2::raw::RDHUtils::getDetectorField(left) == o2::raw::RDHUtils::getDetectorField(right);
         };
-        auto insertPages = [&tpcZSmetaPointers, &tpcZSmetaSizes](const char* ptr, size_t count) -> void {
+        auto insertPages = [&tpcZSmetaPointers, &tpcZSmetaSizes](const char* ptr, size_t count, uint32_t subSpec) -> void {
+          if (subSpec == 0xdeadbeef) {
+            auto maxWarn = o2::conf::VerbosityConfig::Instance().maxWarnDeadBeef;
+            static int contDeadBeef = 0;
+            if (++contDeadBeef <= maxWarn) {
+              LOGP(alarm, "Found input [TPC/RAWDATA/0xdeadbeef] assuming no payload for all links in this TF{}", contDeadBeef == maxWarn ? fmt::format(". {} such inputs in row received, stopping reporting", contDeadBeef) : "");
+            }
+            return;
+          }
           int rawcru = rdh_utils::getCRU(ptr);
           int rawendpoint = rdh_utils::getEndPoint(ptr);
-          tpcZSmetaPointers[rawcru / 10][(rawcru % 10) * 2 + rawendpoint].emplace_back(ptr);
-          tpcZSmetaSizes[rawcru / 10][(rawcru % 10) * 2 + rawendpoint].emplace_back(count);
+          if (o2::raw::RDHUtils::getDetectorField(ptr) == 2) {
+            tpcZSmetaPointers[rawcru / 10][(rawcru % 10) * 2 + rawendpoint].emplace_back(ptr);
+            tpcZSmetaSizes[rawcru / 10][(rawcru % 10) * 2 + rawendpoint].emplace_back(count);
+          }
         };
         // the sequencer processes all inputs matching the filter and finds sequences of consecutive
         // raw pages based on the matcher predicate, and calls the inserter for each sequence
@@ -655,7 +668,11 @@ DataProcessorSpec getGPURecoWorkflowSpec(gpuworkflow::CompletionPolicyData* poli
       bool createEmptyOutput = false;
       if (retVal != 0) {
         if (retVal == 3 && processAttributes->config->configProcessing.ignoreNonFatalGPUErrors) {
-          LOG(error) << "GPU Reconstruction aborted with non fatal error code, ignoring";
+          if (processAttributes->config->configProcessing.throttleAlarms) {
+            LOG(warning) << "GPU Reconstruction aborted with non fatal error code, ignoring";
+          } else {
+            LOG(alarm) << "GPU Reconstruction aborted with non fatal error code, ignoring";
+          }
           createEmptyOutput = true;
         } else {
           throw std::runtime_error("tracker returned error code " + std::to_string(retVal));
@@ -996,6 +1013,9 @@ void initFunctionTPC(ProcessAttributes* processAttributes, const GPUSettingsO2& 
     processAttributes->tpcPadGainCalib->getGainCorrection(30, 5, 5);
   }
   config.configCalib.tpcPadGain = processAttributes->tpcPadGainCalib.get();
+
+  processAttributes->tpcZSLinkMapping.reset(new TPCZSLinkMapping{tpc::Mapper::instance()});
+  config.configCalib.tpcZSLinkMapping = processAttributes->tpcZSLinkMapping.get();
 }
 
 void finaliseCCDBTPC(ProcessAttributes* processAttributes, gpuworkflow::Config const& specconfig, ConcreteDataMatcher& matcher, void* obj)

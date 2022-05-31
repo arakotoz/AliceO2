@@ -79,7 +79,6 @@ class DataDecoderTask
     RdhHandler rdhHandler;
 
     auto ds2manu = ic.options().get<bool>("ds2manu");
-    auto sampaBcOffset = CoDecParam::Instance().sampaBcOffset;
     mDebug = ic.options().get<bool>("mch-debug");
     mCheckROFs = ic.options().get<bool>("check-rofs");
     mDummyROFs = ic.options().get<bool>("dummy-rofs");
@@ -96,7 +95,7 @@ class DataDecoderTask
       timeRecoMode = DataDecoder::TimeRecoMode::BCReset;
     }
 
-    mDecoder = new DataDecoder(channelHandler, rdhHandler, sampaBcOffset, mapCRUfile, mapFECfile, ds2manu, mDebug,
+    mDecoder = new DataDecoder(channelHandler, rdhHandler, mapCRUfile, mapFECfile, ds2manu, mDebug,
                                useDummyElecMap, timeRecoMode);
 
     auto stop = [this]() {
@@ -122,7 +121,8 @@ class DataDecoderTask
     // get the input buffer
     auto& inputs = pc.inputs();
     DPLRawParser parser(inputs, o2::framework::select(mInputSpec.c_str()));
-    for (auto it = parser.begin(), end = parser.end(); it != end; ++it) {
+    bool abort{false};
+    for (auto it = parser.begin(), end = parser.end(); it != end && abort == false; ++it) {
       auto const* raw = it.raw();
       if (!raw) {
         continue;
@@ -130,7 +130,11 @@ class DataDecoderTask
       size_t payloadSize = it.size();
 
       gsl::span<const std::byte> buffer(reinterpret_cast<const std::byte*>(raw), sizeof(RDH) + payloadSize);
-      mDecoder->decodeBuffer(buffer);
+      bool ok = mDecoder->decodeBuffer(buffer);
+      if (!ok) {
+        LOG(alarm) << "critical decoding error : aborting this TF decoding\n";
+        abort = true;
+      }
     }
   }
 
@@ -192,7 +196,7 @@ class DataDecoderTask
       if (payloadSize == 0) {
         auto maxWarn = o2::conf::VerbosityConfig::Instance().maxWarnDeadBeef;
         if (++contDeadBeef <= maxWarn) {
-          LOGP(warning, "Found input [{}/{}/{:#x}] TF#{} 1st_orbit:{} Payload {} : assuming no payload for all links in this TF{}",
+          LOGP(alarm, "Found input [{}/{}/{:#x}] TF#{} 1st_orbit:{} Payload {} : assuming no payload for all links in this TF{}",
                dh->dataOrigin.str, dh->dataDescription.str, dh->subSpecification, dh->tfCounter, dh->firstTForbit, payloadSize,
                contDeadBeef == maxWarn ? fmt::format(". {} such inputs in row received, stopping reporting", contDeadBeef) : "");
         }

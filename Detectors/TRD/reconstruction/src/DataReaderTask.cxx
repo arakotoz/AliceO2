@@ -237,7 +237,7 @@ bool DataReaderTask::isTimeFrameEmpty(ProcessingContext& pc)
     if (payloadSize == 0) {
       auto maxWarn = o2::conf::VerbosityConfig::Instance().maxWarnDeadBeef;
       if (++contDeadBeef <= maxWarn) {
-        LOGP(warning, "Found input [{}/{}/{:#x}] TF#{} 1st_orbit:{} Payload {} : assuming no payload for all links in this TF{}",
+        LOGP(alarm, "Found input [{}/{}/{:#x}] TF#{} 1st_orbit:{} Payload {} : assuming no payload for all links in this TF{}",
              dh->dataOrigin.str, dh->dataDescription.str, dh->subSpecification, dh->tfCounter, dh->firstTForbit, payloadSize,
              contDeadBeef == maxWarn ? fmt::format(". {} such inputs in row received, stopping reporting", contDeadBeef) : "");
       }
@@ -262,11 +262,11 @@ void DataReaderTask::run(ProcessingContext& pc)
 
   std::vector<InputSpec> sel{InputSpec{"filter", ConcreteDataTypeMatcher{"TRD", "RAWDATA"}}};
   uint64_t tfCount = 0;
-  for (const auto& ref : InputRecordWalker(pc.inputs(), sel)) {
+  for (auto& ref : InputRecordWalker(pc.inputs(), sel)) {
     auto inputprocessingstart = std::chrono::high_resolution_clock::now(); // measure total processing time
     const auto* dh = DataRefUtils::getHeader<o2::header::DataHeader*>(ref);
     tfCount = dh->tfCounter;
-    auto payloadIn = ref.payload;
+    const char* payloadIn = ref.payload;
     auto payloadInSize = DataRefUtils::getPayloadSize(ref);
     if (mHeaderVerbose) {
       LOGP(info, "Found input [{}/{}/{:#x}] TF#{} 1st_orbit:{} Payload {} : ",

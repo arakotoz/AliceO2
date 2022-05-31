@@ -27,10 +27,26 @@
 #include "TPCFastTransform.h"
 #include "TPCReconstruction/TPCFastTransformHelperO2.h"
 #include "Framework/AnalysisDataModel.h"
+#include "DetectorsVertexing/PVertexerParams.h"
 
 namespace o2::itsmft
 {
 class TopologyDictionary;
+}
+
+namespace o2::mft
+{
+class GeometryTGeo;
+}
+
+namespace o2::its
+{
+class GeometryTGeo;
+}
+
+namespace o2::phos
+{
+class Geometry;
 }
 
 namespace o2::event_visualisation
@@ -107,12 +123,24 @@ class EveWorkflowHelper
   using AODMFTTracks = aod::MFTTracks;
   using AODMFTTrack = AODMFTTracks::iterator;
 
-  EveWorkflowHelper();
+  enum Filter : uint8_t {
+    ITSROF,
+    TimeBracket,
+    EtaBracket,
+    TotalNTracks,
+    NFilters
+  };
+
+  using FilterSet = std::bitset<Filter::NFilters>;
+
+  using Bracket = o2::math_utils::Bracketf_t;
+
+  EveWorkflowHelper(const FilterSet& enabledFilters = {}, std::size_t maxNTracks = -1, const Bracket& timeBracket = {}, const Bracket& etaBracket = {});
   static std::vector<PNT> getTrackPoints(const o2::track::TrackPar& trc, float minR, float maxR, float maxStep, float minZ = -25000, float maxZ = 25000);
   void selectTracks(const CalibObjectsConst* calib, GID::mask_t maskCl,
-                    GID::mask_t maskTrk, GID::mask_t maskMatch);
-  void addTrackToEvent(const o2::track::TrackParCov& tr, GID gid, float trackTime, float dz, GID::Source source = GID::NSources);
-  void draw(int numberOfTracks);
+                    GID::mask_t maskTrk, GID::mask_t maskMatch, bool trackSorting);
+  void addTrackToEvent(const o2::track::TrackParCov& tr, GID gid, float trackTime, float dz, GID::Source source = GID::NSources, float maxStep = 4.f);
+  void draw();
   void drawTPC(GID gid, float trackTime);
   void drawITS(GID gid, float trackTime);
   void drawMFT(GID gid, float trackTime);
@@ -125,6 +153,7 @@ class EveWorkflowHelper
   void drawTPCTRDTOF(GID gid, float trackTime);
   void drawTPCTRD(GID gid, float trackTime);
   void drawTPCTOF(GID gid, float trackTime);
+  void drawPHOS();
   void drawAODBarrel(AODBarrelTrack const& track, float trackTime);
   void drawAODMFT(AODMFTTrack const& track, float trackTime);
   void drawITSClusters(GID gid, float trackTime);
@@ -138,7 +167,8 @@ class EveWorkflowHelper
   void prepareITSClusters(const o2::itsmft::TopologyDictionary* dict); // fills mITSClustersArray
   void prepareMFTClusters(const o2::itsmft::TopologyDictionary* dict); // fills mMFTClustersArray
   void clear() { mEvent.clear(); }
-  bool isEmpty() { return mEvent.isEmpty(); }
+  int getTrackCount() { return mEvent.getTrackCount(); }
+  int getITSTrackCount() { return mEvent.getITSTrackCount(); }
 
   GID::Source detectorMapToGIDSource(uint8_t dm);
 
@@ -146,10 +176,13 @@ class EveWorkflowHelper
             int numberOfFiles,
             o2::dataformats::GlobalTrackID::mask_t trkMask,
             o2::dataformats::GlobalTrackID::mask_t clMask,
-            float workflowVersion,
             o2::header::DataHeader::RunNumberType runNumber,
             o2::framework::DataProcessingHeader::CreationTime creationTime);
 
+  FilterSet mEnabledFilters;
+  std::size_t mMaxNTracks;
+  Bracket mTimeBracket;
+  Bracket mEtaBracket;
   o2::globaltracking::RecoContainer mRecoCont;
   o2::globaltracking::RecoContainer& getRecoContainer() { return mRecoCont; }
   TracksSet mTrackSet;
@@ -158,7 +191,13 @@ class EveWorkflowHelper
   std::vector<o2::BaseCluster<float>> mMFTClustersArray;
   o2::mft::GeometryTGeo* mMFTGeom;
   o2::its::GeometryTGeo* mITSGeom;
+  o2::phos::Geometry* mPHOSGeom;
+
   float mMUS2TPCTimeBins = 5.0098627;
+  float mITSROFrameLengthMUS = 0; ///< ITS RO frame in mus
+  float mMFTROFrameLengthMUS = 0; ///< MFT RO frame in mus
+  float mTPCBin2MUS = 0;
+  const o2::vertexing::PVertexerParams* mPVParams = nullptr;
 };
 } // namespace o2::event_visualisation
 

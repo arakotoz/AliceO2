@@ -117,6 +117,7 @@ o2_add_library(Framework
                        src/TableTreeHelpers.cxx
                        src/TopologyPolicy.cxx
                        src/TextDriverClient.cxx
+                       src/TimesliceIndex.cxx
                        src/DataInputDirector.cxx
                        src/DataOutputDirector.cxx
                        src/Task.cxx
@@ -183,6 +184,7 @@ foreach(t
         ConfigParamStore
         ConfigParamRegistry
         DataDescriptorMatcher
+        DataDescriptorQueryBuilder
         DataProcessorSpec
         DataRefUtils
         DataRelayer
@@ -283,6 +285,7 @@ foreach(b
         WorkflowHelpers
         ASoA
         ASoAHelpers
+        EventMixing
         HistogramRegistry
         TableToTree
         TreeToTable
@@ -320,6 +323,7 @@ foreach(w
         Task
         ExternalFairMQDeviceWorkflow
         VariablePayloadSequenceWorkflow
+        DataDescriptorMatcherWorkflow
         )
   o2_add_test(${w} NAME test_Framework_test_${w}
               SOURCES test/test_${w}.cxx

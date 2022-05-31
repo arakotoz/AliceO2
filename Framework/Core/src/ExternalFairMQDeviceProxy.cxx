@@ -99,9 +99,7 @@ void sendOnChannel(FairMQDevice& device, FairMQParts& messages, std::string cons
       break;
     }
   }
-  if (timeSlice != (size_t)-1) {
-    o2::framework::DataProcessingHelpers::sendOldestPossibleTimeframe(device.GetChannel(channel, 0), timeSlice);
-  }
+  
   // FIXME: we need a better logic for avoiding message spam
   if (timeout > 1 && timeout <= maxTimeout) {
     LOG(warning) << "dispatching on channel " << channel << " was delayed by " << timeout << " ms";
