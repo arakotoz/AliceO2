@@ -30,11 +30,6 @@
 #include <fcntl.h>
 #include <fstream>
 
-#include "MFTCalibration/MatrixSq.h"
-#include "MFTCalibration/SymMatrix.h"
-#include "MFTCalibration/RectMatrix.h"
-#include "MFTCalibration/MatrixSparse.h"
-
 //#define _DUMP_EQ_BEFORE_
 //#define _DUMP_EQ_AFTER_
 
