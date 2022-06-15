@@ -10,19 +10,42 @@
 # or submit itself to any jurisdiction.
 
 o2_add_library(MFTCalibration
-               SOURCES src/NoiseCalibrator.cxx
-         SOURCES src/NoiseCalibratorSpec.cxx
-         PUBLIC_LINK_LIBRARIES O2::DataFormatsMFT O2::MFTBase
-                                     O2::DetectorsCalibration
-                                     O2::CCDB)
+        SOURCES src/NoiseCalibrator.cxx
+                src/NoiseCalibratorSpec.cxx
+                src/AlignConfig.cxx
+                src/Alignment.cxx
+                src/MatrixSparse.cxx
+                src/MatrixSq.cxx
+                src/MillePede2.cxx
+                src/MillePedeRecord.cxx
+                src/MinResSolve.cxx
+                src/RectMatrix.cxx
+                src/SymBDMatrix.cxx
+                src/SymMatrix.cxx
+                src/VectorSparse.cxx
+        PUBLIC_LINK_LIBRARIES O2::MFTBase
+                O2::DataFormatsMFT
+                O2::MFTTracking
+                O2::DetectorsCalibration
+                O2::CCDB)
 
 o2_target_root_dictionary(MFTCalibration
         HEADERS include/MFTCalibration/NoiseCalibrator.h
+                include/MFTCalibration/AlignConfig.h
+                include/MFTCalibration/Alignment.h
+                include/MFTCalibration/MatrixSparse.h
+                include/MFTCalibration/MatrixSq.h
+                include/MFTCalibration/MillePede2.h
+                include/MFTCalibration/MillePedeRecord.h
+                include/MFTCalibration/MinResSolve.h
+                include/MFTCalibration/RectMatrix.h
+                include/MFTCalibration/SymBDMatrix.h
+                include/MFTCalibration/SymMatrix.h
+                include/MFTCalibration/VectorSparse.h
         LINKDEF src/MFTCalibrationLinkDef.h)
 
 o2_add_executable(mft-calib-workflow
-                  COMPONENT_NAME calibration
-                  SOURCES testWorkflow/mft-calib-workflow.cxx
-                  PUBLIC_LINK_LIBRARIES O2::Framework
-      O2::MFTCalibration)
-
+        COMPONENT_NAME calibration
+        SOURCES testWorkflow/mft-calib-workflow.cxx
+        PUBLIC_LINK_LIBRARIES O2::Framework
+        O2::MFTCalibration)

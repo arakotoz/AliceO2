@@ -16,5 +16,15 @@
 #pragma link off all functions;
 
 #pragma link C++ class o2::mft::NoiseCalibrator + ;
+#pragma link C++ class o2::mft::Alignment + ;
+#pragma link C++ class o2::mft::MatrixSparse + ;
+#pragma link C++ class o2::mft::MatrixSq + ;
+#pragma link C++ class o2::mft::MillePede2 + ;
+#pragma link C++ class o2::mft::MillePedeRecord + ;
+#pragma link C++ class o2::mft::MinResSolve + ;
+#pragma link C++ class o2::mft::RectMatrix + ;
+#pragma link C++ class o2::mft::SymBDMatrix + ;
+#pragma link C++ class o2::mft::SymMatrix + ;
+#pragma link C++ class o2::mft::VectorSparse + ;
 
 #endif
