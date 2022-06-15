@@ -588,6 +588,9 @@ void GPURecoWorkflowSpec::run(ProcessingContext& pc)
   const auto* dh = o2::header::get<o2::header::DataHeader*>(pc.inputs().getFirstValid(true).header);
   mTFSettings->tfStartOrbit = dh->firstTForbit;
   mTFSettings->hasTfStartOrbit = 1;
+  if (mVerbosity) {
+    LOG(info) << "TF firstTFOrbit " << mTFSettings->tfStartOrbit << " nHBF " << mTFSettings->nHBFPerTF << " runStartOrbit " << mTFSettings->runStartOrbit << " simStartOrbit " << mTFSettings->simStartOrbit;
+  }
   ptrs.settingsTF = mTFSettings.get();
 
   if (mTPCSectorMask != 0xFFFFFFFFF) {
@@ -689,7 +692,9 @@ void GPURecoWorkflowSpec::run(ProcessingContext& pc)
     }
   }
 
-  LOG(info) << "found " << ptrs.nOutputTracksTPCO2 << " track(s)";
+  if (mConfig->configWorkflow.outputs.isSet(GPUDataTypes::InOutType::TPCMergedTracks)) {
+    LOG(info) << "found " << ptrs.nOutputTracksTPCO2 << " track(s)";
+  }
 
   if (mSpecConfig.outputCompClusters) {
     CompressedClustersROOT compressedClusters = *ptrs.tpcCompressedClusters;

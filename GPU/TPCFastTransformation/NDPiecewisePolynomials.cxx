@@ -9,28 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifndef O2_TRD_KRCLUSTERERSPEC_H
-#define O2_TRD_KRCLUSTERERSPEC_H
+/// \file  NDPiecewisePolynomials.cxx
+/// \author Matthias Kleiner <mkleiner@ikf.uni-frankfurt.de>
 
-/// \file   KrClustererSpec.h
-/// \brief Steers the TRD Krypton cluster finder
-/// \author Ole Schmidt
-
-// input TRD digits, TRD trigger records
-// output Kr clusters
-
-#include "Framework/DataProcessorSpec.h"
-
-using namespace o2::framework;
-
-namespace o2
-{
-namespace trd
-{
-/// create a processor spec
-framework::DataProcessorSpec getKrClustererSpec();
-
-} // namespace trd
-} // namespace o2
-
-#endif // O2_TRD_KRCLUSTERERSPEC_H
+#include "NDPiecewisePolynomials.h"
