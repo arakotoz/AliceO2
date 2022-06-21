@@ -59,7 +59,7 @@ struct Preslice {
   expressions::BindingNode index;
   bool newDataframe = false;
 
-  arrow::Status getSliceFor(int value, std::shared_ptr<arrow::Table>& input, std::shared_ptr<arrow::Table>& output, uint64_t& offset) const
+  arrow::Status getSliceFor(int value, std::shared_ptr<arrow::Table> const& input, std::shared_ptr<arrow::Table>& output, uint64_t& offset) const
   {
     arrow::Status status;
     for (auto slice = 0; slice < mValues->length(); ++slice) {
@@ -1305,13 +1305,13 @@ class Table
   }
 
   template <typename T1>
-  auto sliceBy(o2::framework::Preslice<T1> const& container, int value)
+  auto sliceBy(o2::framework::Preslice<T1> const& container, int value) const
   {
-    if constexpr (o2::soa::is_binding_compatible_v<T1, table_t>()) {
+    if constexpr (o2::soa::is_binding_compatible_v<T1, std::decay_t<decltype(*this)>>()) {
       std::shared_ptr<arrow::Table> out;
       uint64_t offset = 0;
       auto status = container.getSliceFor(value, mTable, out, offset);
-      auto t = T1({out}, offset);
+      auto t = table_t({out}, offset);
       copyIndexBindings(t);
       t.bindInternalIndicesTo(this);
       return t;
@@ -2318,6 +2318,24 @@ struct Join : JoinBase<Ts...> {
     this->copyIndexBindings(t);
     return t;
   }
+
+  using table_t::sliceBy;
+
+  template <typename T1>
+  auto sliceBy(o2::framework::Preslice<T1> const& container, int value) const
+  {
+    if constexpr (o2::soa::is_binding_compatible_v<T1, std::decay_t<decltype(*this)>>()) {
+      std::shared_ptr<arrow::Table> out;
+      uint64_t offset = 0;
+      auto status = container.getSliceFor(value, this->asArrowTable(), out, offset);
+      auto t = table_t({out}, offset);
+      this->copyIndexBindings(t);
+      t.bindInternalIndicesTo(this);
+      return t;
+    } else {
+      static_assert(o2::framework::always_static_assert_v<T1>, "Wrong Preslice<> entry used: incompatible type");
+    }
+  }
 };
 
 template <typename... Ts>
@@ -2530,6 +2548,35 @@ class FilteredBase : public T
     self_t fresult{{result}, std::move(slicedSelection), start};
     copyIndexBindings(fresult);
     return fresult;
+  }
+
+  template <typename T1>
+  auto sliceBy(o2::framework::Preslice<T1> const& container, int value) const
+  {
+    if constexpr (o2::soa::is_binding_compatible_v<T1, std::decay_t<decltype(*this)>>()) {
+      uint64_t offset = 0;
+      std::shared_ptr<arrow::Table> result = nullptr;
+      auto status = container.getSliceFor(value, this->asArrowTable(), result, offset);
+      if (offset >= this->tableSize()) {
+        self_t fresult{{result}, SelectionVector{}, 0}; // empty slice
+        this->copyIndexBindings(fresult);
+        return fresult;
+      }
+      auto start = offset;
+      auto end = start + result->num_rows();
+      auto start_iterator = std::lower_bound(mSelectedRows.begin(), mSelectedRows.end(), start);
+      auto stop_iterator = std::lower_bound(start_iterator, mSelectedRows.end(), end);
+      SelectionVector slicedSelection{start_iterator, stop_iterator};
+      std::transform(slicedSelection.begin(), slicedSelection.end(), slicedSelection.begin(),
+                     [&start](int64_t idx) {
+                       return idx - static_cast<int64_t>(start);
+                     });
+      self_t fresult{{result}, std::move(slicedSelection), start};
+      copyIndexBindings(fresult);
+      return fresult;
+    } else {
+      static_assert(o2::framework::always_static_assert_v<T1>, "Wrong Preslice<> entry used: incompatible type");
+    }
   }
 
   auto sliceBy(framework::expressions::BindingNode const& node, int value) const
