@@ -489,16 +489,42 @@ TGeoHMatrix& GeometryTGeo::createT2LMatrix(Int_t index)
   Float_t x = 0.f, alpha = 0.f;
   extractSensorXAlpha(index, x, alpha);
   t2l.Clear();
-  /*
   t2l.RotateZ(alpha * RadToDeg()); // rotate in direction of normal to the sensor plane
-  const TGeoHMatrix* matL2G = extractMatrixSensor(isn);
+  const TGeoHMatrix* matL2G = extractMatrixSensor(index);
   t2l.MultiplyLeft(&matL2G->Inverse());
-  */
   return t2l;
 }
 
 //__________________________________________________________________________
-void GeometryTGeo::extractSensorXAlpha(int index, float& x, float& alpha) {}
+void GeometryTGeo::extractSensorXAlpha(int index, float& x, float& alpha)
+{
+  // initialisation
+  o2::math_utils::Point3D<double> locA(0., 0., 0.);
+  o2::math_utils::Point3D<double> gloA(0., 0., 0.);
+  o2::math_utils::Point3D<double> locB(0., 0., 0.);
+  o2::math_utils::Point3D<double> gloB(0., 0., 0.);
+
+  // Position of the first row of the chip (row 0, col 0)
+  o2::itsmft::SegmentationAlpide::detectorToLocal(0, 0, locA);
+
+  // Position of the last row of the chip (row 511, col 0)
+  o2::itsmft::SegmentationAlpide::detectorToLocal(511, 0, locB);
+
+  // transform from local to master
+  const TGeoHMatrix* matL2G = extractMatrixSensor(index);
+  auto transformL2G = o2::math_utils::Transform3D(*matL2G);
+  transformL2G.LocalToMaster(locA, gloA);
+  transformL2G.LocalToMaster(locB, gloB);
+
+  // calculate r and phi of the impact of the normal on the sensor
+  // (i.e. phi of the tracking frame alpha and X of the sensor in this frame)
+  double dx = gloB.X() - gloA.X(), dy = gloB.Y() - gloA.Y();
+  double t = (gloB.X() * dx + gloB.Y() * dy) / (dx * dx + dy * dy);
+  double xp = gloB.X() - dx * t, yp = gloB.Y() - dy * t;
+  x = Sqrt(xp * xp + yp * yp);
+  alpha = ATan2(yp, xp);
+  o2::math_utils::bringTo02Pi(alpha);
+}
 
 //__________________________________________________________________________
 Bool_t GeometryTGeo::getSensorID(Int_t index, Int_t& half, Int_t& disk, Int_t& ladder, Int_t& sensor) const
