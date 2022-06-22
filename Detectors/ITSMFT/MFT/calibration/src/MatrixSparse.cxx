@@ -91,7 +91,10 @@ void MatrixSparse::Clear(Option_t*)
 //___________________________________________________________
 void MatrixSparse::Print(Option_t* opt) const
 {
-  LOG(info) << "Sparse Matrix of size " << fNrows << " x " << fNcols << IsSymmetric() ? " (Symmetric)" : "";
+  LOG(info) << "Sparse Matrix of size " << fNrows << " x " << fNcols;
+  if (IsSymmetric()) {
+    LOG(info) << " (Symmetric)\n";
+  }
   for (int i = 0; i < fNrows; i++) {
     VectorSparse* row = GetRow(i);
     if (!row->GetNElems())
@@ -146,7 +149,7 @@ void MatrixSparse::SortIndices(Bool_t valuesToo)
     GetRow(i)->SortIndices(valuesToo);
   sw.Stop();
   sw.Print();
-  LOG(info) << "MatrixSparse:SortIndices <<"
+  LOG(info) << "MatrixSparse:SortIndices <<";
 }
 
 //___________________________________________________________
