@@ -29,7 +29,7 @@ struct AlignConfig : public o2::conf::ConfigurableParamHelper<AlignConfig> {
                    Cosmic,
                    NTrackTypes };
 
-  int minPoints[NTrackTypes] = {5, 5}; ///< mininum number of clusters in a track used for alignment
+  int minPoints[NTrackTypes] = {6, 4}; ///< mininum number of clusters in a track used for alignment
 
   O2ParamDef(AlignConfig, "alignConf");
 };
