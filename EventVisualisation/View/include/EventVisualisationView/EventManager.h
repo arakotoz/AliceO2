@@ -76,6 +76,10 @@ class EventManager final : public TEveEventManager, public TQObject
 
   void DropEvent();
 
+  bool mShowDate = true;
+  bool getShowDate() const { return mShowDate; }
+  void setShowDate(bool value) { this->mShowDate = value; }
+
  private:
   struct Settings {
     bool firstEvent;
@@ -92,7 +96,8 @@ class EventManager final : public TEveEventManager, public TQObject
 
   static EventManager* instance;
   o2::ccdb::CcdbApi ccdbApi;
-  TEveElementList* dataTypeLists[EVisualisationDataType::NdataTypes];
+  TEveElementList* dataTypeLists[EVisualisationDataType::NdataTypes];    // 3D
+  TEveElementList* dataTypeListsPhi[EVisualisationDataType::NdataTypes]; // Phi
   DataSource* dataSource = nullptr;
   TString dataPath = "";
   Settings vizSettings;
@@ -107,7 +112,7 @@ class EventManager final : public TEveEventManager, public TQObject
   void operator=(EventManager const&) = delete;
 
   void displayVisualisationEvent(VisualisationEvent& event, const std::string& detectorName);
-  void displayCalorimeters(VisualisationEvent& event);
+  void displayCalorimeters(VisualisationEvent& event, const std::string& detectorName);
   void saveVisualisationSettings();
   void restoreVisualisationSettings();
 };

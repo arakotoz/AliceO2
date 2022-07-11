@@ -23,6 +23,7 @@ o2_add_library(TPCWorkflow
                        src/CalDetMergerPublisherSpec.cxx
                        src/KryptonClustererSpec.cxx
                        src/KryptonRawFilterSpec.cxx
+                       src/SACProcessorSpec.cxx
                        src/IDCToVectorSpec.cxx
                        src/CalibdEdxSpec.cxx
                        src/CalibratordEdxSpec.cxx
@@ -33,6 +34,7 @@ o2_add_library(TPCWorkflow
                        src/ProcessingHelpers.cxx
                        src/TrackAndClusterFilterSpec.cxx
                        src/FileWriterSpec.cxx
+                       src/TPCVDriftTglCalibSpec.cxx
                TARGETVARNAME targetName
                PUBLIC_LINK_LIBRARIES O2::Framework O2::DataFormatsTPC
                                      O2::DPLUtils O2::TPCReconstruction
@@ -91,6 +93,11 @@ o2_add_executable(laser-track-filter
 o2_add_executable(apply-ccdb-calib
                   COMPONENT_NAME tpc
                   SOURCES src/tpc-apply-ccdb-calib.cxx
+                  PUBLIC_LINK_LIBRARIES O2::TPCWorkflow)
+
+o2_add_executable(sac-processing
+                  COMPONENT_NAME tpc
+                  SOURCES src/tpc-sac-processing.cxx
                   PUBLIC_LINK_LIBRARIES O2::TPCWorkflow)
 
 o2_add_executable(idc-integrate
@@ -204,5 +211,15 @@ o2_add_executable(entropy-encoder-workflow
                   SOURCES src/entropy-encoder-workflow.cxx
                   COMPONENT_NAME tpc
                   PUBLIC_LINK_LIBRARIES O2::TPCWorkflow)
+
+o2_add_executable(calibration-workflow
+                  COMPONENT_NAME tpc-vdrift-tgl
+                  SOURCES src/tpc-vdrift-tgl-calibration-workflow.cxx
+                  PUBLIC_LINK_LIBRARIES O2::Framework
+                                        O2::TPCWorkflow
+                                        O2::DetectorsCalibration
+                                        O2::DetectorsCalibrationWorkflow
+                                        O2::DataFormatsCalibration
+                                        O2::CCDB)
 
 add_subdirectory(readers)

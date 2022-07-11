@@ -34,6 +34,8 @@ if [[ "0$GEN_TOPO_VERBOSE" == "01" ]]; then
   echo "CALIB_TRD_VDRIFTEXB = $CALIB_TRD_VDRIFTEXB" 1>&2
   echo "CALIB_TPC_TIMEGAIN = $CALIB_TPC_TIMEGAIN" 1>&2
   echo "CALIB_TPC_RESPADGAIN = $CALIB_TPC_RESPADGAIN" 1>&2
+  echo "CALIB_TPC_SCDCALIB = $CALIB_TPC_SCDCALIB" 1>&2
+  echo "CALIB_CPV_GAIN = $CALIB_CPV_GAIN" 1>&2
 fi
 
 # beamtype dependent settings
@@ -46,6 +48,9 @@ if [[ $BEAMTYPE == "PbPb" ]]; then
   TOF_CHANNELOFFSETS_UPDATE=3000
   TOF_CHANNELOFFSETS_DELTA_UPDATE=500
 fi
+
+# special settings for aggregator workflows
+if [[ "0$CALIB_TPC_SCDCALIB_SENDTRKDATA" == "01" ]]; then ENABLE_TRACK_INPUT="--enable-track-input"; fi
 
 # Calibration workflows
 if ! workflow_has_parameter CALIB_LOCAL_INTEGRATED_AGGREGATOR; then
@@ -118,6 +123,11 @@ if [[ $AGGREGATOR_TASKS == BARREL_TF ]] || [[ $AGGREGATOR_TASKS == ALL ]]; then
   if [[ $CALIB_TPC_TIMEGAIN == 1 ]]; then
     add_W o2-tpc-calibrator-dedx "--min-entries-sector 3000 --min-entries-1d 200 --min-entries-2d 10000"
   fi
+  if [[ $CALIB_TPC_SCDCALIB == 1 ]]; then
+    # TODO: the residual aggregator should have --output-dir and --meta-output-dir defined
+    # without that the residuals will be stored in the local working directory (and deleted after a week)
+    add_W o2-calibration-residual-aggregator "$ENABLE_TRACK_INPUT --output-type trackParams,unbinnedResid,binnedResid"
+  fi
   # TRD
   if [[ $CALIB_TRD_VDRIFTEXB == 1 ]]; then
     add_W o2-calibration-trd-vdrift-exb ""
@@ -153,6 +163,11 @@ if [[ $AGGREGATOR_TASKS == CALO_TF ]] || [[ $AGGREGATOR_TASKS == ALL ]]; then
   if [[ $CALIB_PHS_RUNBYRUNCALIB == 1 ]]; then
     add_W o2-phos-calib-workflow "--runbyrun"
   fi
+
+  # CPV
+  if [[ $CALIB_CPV_GAIN == 1 ]]; then
+    add_W o2-calibration-cpv-calib-workflow "--gains"
+  fi
 fi
 
 if [[ "0$GEN_TOPO_VERBOSE" == "01" ]]; then
@@ -176,7 +191,7 @@ if [[ $CCDB_POPULATOR_UPLOAD_PATH != "none" ]]; then add_W o2-calibration-ccdb-p
 
 if ! workflow_has_parameter CALIB_LOCAL_INTEGRATED_AGGREGATOR; then
   WORKFLOW+="o2-dpl-run $ARGS_ALL $GLOBALDPLOPT"
-  [[ $WORKFLOWMODE != "print" ]] && WORKFLOW+=" --${WORKFLOWMODE}"
+  [[ $WORKFLOWMODE != "print" ]] && WORKFLOW+=" --${WORKFLOWMODE} ${WORKFLOWMODE_FILE}"
   [[ $WORKFLOWMODE == "print" || "0$PRINT_WORKFLOW" == "01" ]] && echo "#Aggregator Workflow command:\n\n${WORKFLOW}\n" | sed -e "s/\\\\n/\n/g" -e"s/| */| \\\\\n/g" | eval cat $( [[ $WORKFLOWMODE == "dds" ]] && echo '1>&2')
   [[ $WORKFLOWMODE != "print" ]] && eval $WORKFLOW
 fi

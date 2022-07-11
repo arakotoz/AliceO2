@@ -9,18 +9,21 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifndef O2_TPCVDRIFTTGL_CALIB_DEVICE_H
-#define O2_TPCVDRIFTTGL_CALIB_DEVICE_H
+/// @file SACProcessorSpec.h
+/// @brief TPC Sampled Analogue Current processing
+/// @author Jens Wiechula
 
-/// @file   TPCVDriftTglCalibratorSpec.h
-/// @brief  Device to calibrate vdrift with tg_lambda
+#ifndef TPC_SACProcessorSpec_H_
+#define TPC_SACProcessorSpec_H_
 
 #include "Framework/DataProcessorSpec.h"
 
-namespace o2::calibration
+namespace o2::tpc
 {
 
-o2::framework::DataProcessorSpec getTPCVDriftTglCalibSpec(int ntgl, float tglMax, int ndtgl, float dtglMax, size_t slotL, size_t minEnt);
-}
+/// decode SAC raw data
+o2::framework::DataProcessorSpec getSACProcessorSpec();
 
-#endif
+} // end namespace o2::tpc
+
+#endif // TPC_SACProcessorSpec_H_

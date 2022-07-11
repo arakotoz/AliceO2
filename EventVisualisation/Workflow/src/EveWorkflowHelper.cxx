@@ -88,13 +88,11 @@ void EveWorkflowHelper::selectTracks(const CalibObjectsConst* calib,
     } else if constexpr (isMFTTrack<decltype(_tr)>()) { // Same for MFT
       t0 += 0.5f * this->mMFTROFrameLengthMUS;
       terr *= this->mMFTROFrameLengthMUS;
-    } else if constexpr (isGlobalFwdTrack<decltype(_tr)>()) {
-      t0 = _tr.getTimeMUS().getTimeStamp();
-      terr = _tr.getTimeMUS().getTimeStampError() * mPVParams->nSigmaTimeTrack; // gaussian errors must be scaled by requested n-sigma
-    } else {
+    } else if constexpr (!(isMCHTrack<decltype(_tr)>() || isMIDTrack<decltype(_tr)>() || isGlobalFwdTrack<decltype(_tr)>())) {
+      // for all other tracks the time is in \mus with gaussian error
       terr *= mPVParams->nSigmaTimeTrack; // gaussian errors must be scaled by requested n-sigma
     }
-    // for all other tracks the time is in \mus with gaussian error
+
     terr += mPVParams->timeMarginTrackTime;
 
     return Bracket{t0 - terr, t0 + terr};
@@ -427,6 +425,8 @@ void EveWorkflowHelper::drawEMCAL()
 
     const TGeoHMatrix* matrix = this->mEMCALGeom->GetMatrixForSuperModuleFromGeoManager(sm);
     const Double_t* translation = matrix->GetTranslation();
+    const Double_t* rotation = matrix->GetRotationMatrix();
+
     /*
     LOG(info) << "EMCAL -----------------------------------------------------------------------------------------------";
     LOG(info) << "EMCAL               id: "<< id  <<            "                  emcal.getTower()";
@@ -441,14 +441,15 @@ void EveWorkflowHelper::drawEMCAL()
     LOG(info) << "EMCAL index_module_eta: "<< index_module_eta ;
     LOG(info) << "EMCAL      translation: "<< "["<<translation[0]<<","<<translation[1]<<","<<translation[2]<<"]"  ;
     */
-    TVector3 gPos;
-    gPos[0] = translation[0] + relPosCell.X();
-    gPos[1] = translation[1] + relPosCell.Y();
-    gPos[2] = translation[2] + relPosCell.Z();
+    double rPos[] = {relPosCell.X(), relPosCell.Y(), relPosCell.Z()};
+    double gPos[3];
+    matrix->LocalToMaster(rPos, gPos);
+    TVector3 vPos(gPos);
+
     auto vCalo = mEvent.addCalo({.time = static_cast<float>(emcal.getTimeStamp()),
                                  .energy = emcal.getEnergy(),
-                                 .phi = (float)gPos.Phi(),
-                                 .eta = (float)gPos.Eta(),
+                                 .phi = (float)vPos.Phi(),
+                                 .eta = (float)vPos.Eta(),
                                  .PID = 0,
                                  .gid = GID::getSourceName(GID::EMC),
                                  .source = GID::EMC});

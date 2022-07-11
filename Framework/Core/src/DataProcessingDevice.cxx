@@ -516,7 +516,13 @@ void DataProcessingDevice::initPollers()
         mState.activeOutOfBandPollers.empty() &&
         mState.activeTimers.empty() &&
         mState.activeSignals.empty()) {
-      mDeviceContext.exitTransitionTimeout = 0;
+      // FIXME: this is to make sure we do not reset the output timer
+      // for readout proxies or similar. In principle this should go once
+      // we move to OutOfBand InputSpec.
+      if (mState.inputChannelInfos.empty()) {
+        LOGP(detail, "No input channels. Setting exit transition timeout to 0.");
+        mDeviceContext.exitTransitionTimeout = 0;
+      }
       for (auto& [channelName, channel] : fChannels) {
         if (channelName.rfind(mSpec.channelPrefix + "from_internal-dpl", 0) == 0) {
           LOGP(detail, "{} is an internal channel. Not polling.", channelName);
@@ -551,6 +557,7 @@ void DataProcessingDevice::initPollers()
       }
     }
   } else {
+    LOGP(detail, "This is a fake device so we exit after the first iteration.");
     mDeviceContext.exitTransitionTimeout = 0;
     // This is a fake device, so we can request to exit immediately
     mServiceRegistry.get<ControlService>().readyToQuit(QuitRequest::Me);
@@ -818,10 +825,14 @@ void DataProcessingDevice::Run()
           }
         } else {
           mState.transitionHandling = TransitionHandlingState::Expired;
-          if (mProcessingPolicies.termination == TerminationPolicy::QUIT) {
+          if (timeout == 0 && mProcessingPolicies.termination == TerminationPolicy::QUIT) {
             LOGP(info, "New state requested. No timeout set, quitting immediately as per --completion-policy");
-          } else {
+          } else if (timeout == 0 && mProcessingPolicies.termination != TerminationPolicy::QUIT) {
             LOGP(info, "New state requested. No timeout set, switching to READY state immediately");
+          } else if (mProcessingPolicies.termination == TerminationPolicy::QUIT) {
+            LOGP(info, "New state pending and we are already idle, quitting immediately as per --completion-policy");
+          } else {
+            LOGP(info, "New state pending and we are already idle, switching to READY immediately.");
           }
         }
       }
@@ -843,7 +854,9 @@ void DataProcessingDevice::Run()
       // - we can guarantee this is the last thing we do in the loop (
       //   assuming no one else is adding to the queue before this point).
       auto& queue = mServiceRegistry.get<AsyncQueue>();
-      AsyncQueueHelpers::run(queue);
+      auto oldestPossibleTimeslice = mRelayer->getOldestPossibleOutput();
+      AsyncQueueHelpers::run(queue, {oldestPossibleTimeslice.timeslice.value + 1});
+
       uv_run(mState.loop, shouldNotWait ? UV_RUN_NOWAIT : UV_RUN_ONCE);
       if ((mState.loopReason & mState.tracingFlags) != 0) {
         mState.severityStack.push_back((int)fair::Logger::GetConsoleSeverity());
@@ -959,7 +972,12 @@ void DataProcessingDevice::doPrepare(DataProcessorContext& context)
   // to be completed. In the case of data source devices, as they do not have
   // real data input channels, they have to signal EndOfStream themselves.
   context.allDone = std::any_of(context.deviceContext->state->inputChannelInfos.begin(), context.deviceContext->state->inputChannelInfos.end(), [](const auto& info) {
-    return info.parts.fParts.empty() == true && info.state != InputChannelState::Pull;
+    if (info.channel) {
+      LOGP(debug, "Input channel {}{} has {} parts left and is in state {}.", info.channel->GetName(), (info.id.value == ChannelIndex::INVALID ? " (non DPL)" : ""), info.parts.fParts.size(), (int)info.state);
+    } else {
+      LOGP(debug, "External channel {} is in state {}.", info.id.value, (int)info.state);
+    }
+    return (info.parts.fParts.empty() == true && info.state != InputChannelState::Pull);
   });
 
   // Whether or not all the channels are completed
@@ -1008,6 +1026,9 @@ void DataProcessingDevice::doPrepare(DataProcessorContext& context)
         DataProcessingDevice::handleData(context, info);
       }
       LOGP(debug, "Flushing channel {} which is in state {} and has {} parts still pending.", channelSpec.name, (int)info.state, info.parts.Size());
+      continue;
+    }
+    if (info.channel == nullptr) {
       continue;
     }
     auto& socket = info.channel->GetSocket();
@@ -1074,7 +1095,7 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
 {
   auto switchState = [&registry = context.registry,
                       &state = context.deviceContext->state](StreamingState newState) {
-    LOG(debug) << "New state " << (int)newState << " old state " << (int)state->streaming;
+    LOG(detail) << "New state " << (int)newState << " old state " << (int)state->streaming;
     state->streaming = newState;
     registry->get<ControlService>().notifyStreamingState(state->streaming);
   };
@@ -1111,7 +1132,7 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
   }
 
   if (context.deviceContext->state->streaming == StreamingState::EndOfStreaming) {
-    LOGP(debug, "We are in EndOfStreaming. Flushing queues.");
+    LOGP(detail, "We are in EndOfStreaming. Flushing queues.");
     context.registry->get<DriverClient>().flushPending();
     // We keep processing data until we are Idle.
     // FIXME: not sure this is the correct way to drain the queues, but
@@ -1129,6 +1150,7 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
     context.registry->postEOSCallbacks(eosContext);
 
     for (auto& channel : context.deviceContext->spec->outputChannels) {
+      LOGP(detail, "Sending end of stream to {}", channel.name);
       DataProcessingHelpers::sendEndOfStream(*context.deviceContext->device, channel);
     }
     // This is needed because the transport is deleted before the device.
@@ -1140,6 +1162,7 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
       *context.wasActive = true;
     }
     // On end of stream we shut down all output pollers.
+    LOGP(detail, "Shutting down output pollers");
     for (auto& poller : context.deviceContext->state->activeOutputPollers) {
       uv_poll_stop(poller);
     }
@@ -1148,6 +1171,7 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
 
   if (context.deviceContext->state->streaming == StreamingState::Idle) {
     // On end of stream we shut down all output pollers.
+    LOGP(detail, "We are in Idle. Shutting down output pollers.");
     for (auto& poller : context.deviceContext->state->activeOutputPollers) {
       uv_poll_stop(poller);
     }
@@ -1224,6 +1248,7 @@ void DataProcessingDevice::handleData(DataProcessorContext& context, InputChanne
       auto* headerData = parts.At(pi)->GetData();
       auto sih = o2::header::get<SourceInfoHeader*>(headerData);
       if (sih) {
+        LOGP(debug, "Got SourceInfoHeader with state {}", (int)sih->state);
         info.state = sih->state;
         insertInputInfo(pi, 2, InputType::SourceInfo);
         *context.wasActive = true;
@@ -1359,6 +1384,7 @@ void DataProcessingDevice::handleData(DataProcessorContext& context, InputChanne
           }
         } break;
         case InputType::SourceInfo: {
+          LOGP(detail, "Received SourceInfo");
           *context.wasActive = true;
           auto headerIndex = input.position;
           auto payloadIndex = input.position + 1;
@@ -1553,7 +1579,7 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
     auto timeslice = relayer->getTimesliceForSlot(i);
     timingInfo->timeslice = timeslice.value;
     timingInfo->tfCounter = relayer->getFirstTFCounterForSlot(i);
-    timingInfo->firstTFOrbit = relayer->getFirstTFOrbitForSlot(i);
+    timingInfo->firstTForbit = relayer->getFirstTFOrbitForSlot(i);
     timingInfo->runNumber = relayer->getRunNumberForSlot(i);
     timingInfo->creation = relayer->getCreationTimeForSlot(i);
   };
@@ -1919,7 +1945,7 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
   }
   // We now broadcast the end of stream if it was requested
   if (context.deviceContext->state->streaming == StreamingState::EndOfStreaming) {
-    LOGP(debug, "Broadcasting end of stream");
+    LOGP(detail, "Broadcasting end of stream");
     for (auto& channel : context.deviceContext->spec->outputChannels) {
       DataProcessingHelpers::sendEndOfStream(*context.deviceContext->device, channel);
     }

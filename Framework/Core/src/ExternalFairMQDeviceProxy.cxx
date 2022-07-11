@@ -21,11 +21,13 @@
 #include "Framework/CallbackService.h"
 #include "Framework/ControlService.h"
 #include "Framework/SourceInfoHeader.h"
+#include "Framework/ChannelInfo.h"
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/RateLimiter.h"
 #include "Framework/TimingInfo.h"
 #include "Headers/DataHeader.h"
 #include "Headers/Stack.h"
+#include "CommonConstants/LHCConstants.h"
 
 #include "./DeviceSpecHelpers.h"
 #include "Framework/DataProcessingHelpers.h"
@@ -241,9 +243,14 @@ InjectorFunction dplModelAdaptor(std::vector<OutputSpec> const& filterSpecs, DPL
         continue;
       }
       const_cast<DataProcessingHeader*>(dph)->startTime = dplCounter;
+      static bool override_creation = getenv("DPL_RAWPROXY_OVERRIDE_ORBITRESET");
+      if (override_creation) {
+        static uint64_t creationVal = std::stoul(getenv("DPL_RAWPROXY_OVERRIDE_ORBITRESET")) + (dh->firstTForbit * o2::constants::lhc::LHCOrbitNS * 0.000001f);
+        const_cast<DataProcessingHeader*>(dph)->creation = creationVal;
+      }
       timingInfo.timeslice = dph->startTime;
       timingInfo.creation = dph->creation;
-      timingInfo.firstTFOrbit = dh->firstTForbit;
+      timingInfo.firstTForbit = dh->firstTForbit;
       timingInfo.runNumber = dh->runNumber;
       timingInfo.tfCounter = dh->tfCounter;
       LOG(debug) << msgidx << ": " << DataSpecUtils::describe(OutputSpec{dh->dataOrigin, dh->dataDescription, dh->subSpecification}) << " part " << dh->splitPayloadIndex << " of " << dh->splitPayloadParts << "  payload " << parts.At(msgidx + 1)->GetSize();
@@ -397,17 +404,28 @@ DataProcessorSpec specifyExternalFairMQDeviceProxy(char const* name,
     // will be multiple channels. At least we throw a more informative exception.
     // fair::mq::Device calls the custom init before the channels have been configured
     // so we do the check before starting in a dedicated callback
-    auto channelConfigurationChecker = [channel, device]() {
+    auto channelConfigurationChecker = [channel, device, &services = ctx.services()]() {
+      auto& deviceState = services.get<DeviceState>();
       if (device->fChannels.count(channel) == 0) {
         throw std::runtime_error("the required out-of-band channel '" + channel + "' has not been configured, please check the name in the channel configuration");
       }
+      LOGP(detail, "Injecting channel '{}' into DPL configuration", channel);
+      // Converter should pump messages
+      deviceState.inputChannelInfos.push_back(InputChannelInfo{
+        .state = InputChannelState::Running,
+        .hasPendingEvents = false,
+        .readPolled = false,
+        .channel = nullptr,
+        .id = {ChannelIndex::INVALID},
+        .channelType = ChannelAccountingType::RAW,
+      });
     };
     ctx.services().get<CallbackService>().set(CallbackService::Id::Start, channelConfigurationChecker);
-    // Converter should pump messages
 
     auto dataHandler = [device, converter,
                         outputRoutes = std::move(outputRoutes),
                         control = &ctx.services().get<ControlService>(),
+                        deviceState = &ctx.services().get<DeviceState>(),
                         &timingInfo = ctx.services().get<TimingInfo>(),
                         outputChannels = std::move(outputChannels)](fair::mq::Parts& inputs, int) {
       // pass a copy of the outputRoutes
@@ -436,8 +454,9 @@ DataProcessorSpec specifyExternalFairMQDeviceProxy(char const* name,
       converter(timingInfo, *device, inputs, channelRetriever);
 
       if (doEos) {
-        for (auto const& channel : outputChannels) {
-          DataProcessingHelpers::sendEndOfStream(*device, channel);
+        // Mark all input channels as closed
+        for (auto& info : deviceState->inputChannelInfos) {
+          info.state = InputChannelState::Completed;
         }
         control->endOfStream();
       }
@@ -456,7 +475,7 @@ DataProcessorSpec specifyExternalFairMQDeviceProxy(char const* name,
         auto& timingInfo = ctx.services().get<TimingInfo>();
         if (dh != nullptr) {
           timingInfo.runNumber = dh->runNumber;
-          timingInfo.firstTFOrbit = dh->firstTForbit;
+          timingInfo.firstTForbit = dh->firstTForbit;
           timingInfo.tfCounter = dh->tfCounter;
         }
         auto const dph = o2::header::get<DataProcessingHeader*>(parts.At(0)->GetData());
@@ -661,6 +680,7 @@ DataProcessorSpec specifyFairMQDeviceMultiOutputProxy(char const* name,
         out.AddPart(std::move(headerMessage));
         // add empty payload message
         out.AddPart(device->NewMessageFor(channelName, 0, 0));
+        LOGP(detail, "Forwarding EoS to {}", channelName);
         sendOnChannel(*device, out, channelName, (size_t)-1);
       }
     };

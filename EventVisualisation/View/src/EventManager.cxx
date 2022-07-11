@@ -82,22 +82,20 @@ void EventManager::displayCurrentEvent()
 
     for (int i = 0; i < EVisualisationDataType::NdataTypes; ++i) {
       dataTypeLists[i] = new TEveElementList(gDataTypeNames[i].c_str());
+      dataTypeListsPhi[i] = new TEveElementList(gDataTypeNames[i].c_str());
     }
 
     VisualisationEvent event; // collect calorimeters in one drawing step
     auto displayList = dataSource->getVisualisationList(no, EventManagerFrame::getInstance().getMinTimeFrameSliderValue(), EventManagerFrame::getInstance().getMaxTimeFrameSliderValue(), EventManagerFrame::MaxRange);
+
     for (auto it = displayList.begin(); it != displayList.end(); ++it) {
       if (it->second == EVisualisationGroup::EMC || it->second == EVisualisationGroup::PHS) {
-        event.appendAnotherEventCalo(it->first);
+        displayCalorimeters(it->first, gVisualisationGroupName[it->second]);
       } else {
         displayVisualisationEvent(it->first, gVisualisationGroupName[it->second]);
       }
     }
-    displayCalorimeters(event);
-
-    for (int i = 0; i < EVisualisationDataType::NdataTypes; ++i) {
-      multiView->registerElement(dataTypeLists[i]);
-    }
+    multiView->registerElements(dataTypeLists, dataTypeListsPhi);
 
     if (vizSettings.firstEvent) {
       saveVisualisationSettings();
@@ -105,8 +103,12 @@ void EventManager::displayCurrentEvent()
     } else {
       restoreVisualisationSettings();
     }
-
-    multiView->getAnnotationTop()->SetText(TString::Format("Run %d\n%s", dataSource->getRunNumber(), dataSource->getCollisionTime().c_str()));
+    if (this->mShowDate) {
+      multiView->getAnnotationTop()->SetText(
+        TString::Format("Run %d\n%s", dataSource->getRunNumber(), dataSource->getCollisionTime().c_str()));
+    } else {
+      multiView->getAnnotationTop()->SetText(TString::Format("Run %d", dataSource->getRunNumber()));
+    }
     auto detectors = detectors::DetID::getNames(dataSource->getDetectorsMask());
     multiView->getAnnotationBottom()->SetText(TString::Format("TFOrbit: %d\nDetectors: %s", dataSource->getFirstTForbit(), detectors.c_str()));
   }
@@ -234,6 +236,10 @@ void EventManager::displayVisualisationEvent(VisualisationEvent& event, const st
 
   if (trackCount != 0) {
     dataTypeLists[EVisualisationDataType::Tracks]->AddElement(list);
+    if (detectorName != "MCH" && detectorName != "MFT" && detectorName != "MID") {
+      // LOG(info) << "phi: " << trackCount << " detector: " << detectorName;
+      dataTypeListsPhi[EVisualisationDataType::Tracks]->AddElement(list);
+    }
   }
 
   // global clusters (with no connection information)
@@ -247,67 +253,86 @@ void EventManager::displayVisualisationEvent(VisualisationEvent& event, const st
 
   if (clusterCount != 0) {
     dataTypeLists[EVisualisationDataType::Clusters]->AddElement(point_list);
+    if (detectorName != "MCH" && detectorName != "MFT" && detectorName != "MID") {
+      // LOG(info) << "phi: " << clusterCount << " detector: " << detectorName;
+      dataTypeListsPhi[EVisualisationDataType::Clusters]->AddElement(point_list);
+    }
   }
 
   LOG(info) << "tracks: " << trackCount << " detector: " << detectorName << ":" << dataTypeLists[EVisualisationDataType::Tracks]->NumChildren();
   LOG(info) << "clusters: " << clusterCount << " detector: " << detectorName << ":" << dataTypeLists[EVisualisationDataType::Clusters]->NumChildren();
 }
 
-void EventManager::displayCalorimeters(VisualisationEvent& event)
+void EventManager::displayCalorimeters(VisualisationEvent& event, const std::string& detectorName)
 {
-  struct CaloInfo {
-    unsigned int index;
-    std::string name;
-    std::string configColor;
-    int defaultColor;
-    float sizeEta;
-    float sizePhi;
-    std::string configNoise;
-    float defaultNoise;
-  };
-
-  // TODO: calculate values based on info available in O2
-  const std::unordered_map<o2::dataformats::GlobalTrackID::Source, CaloInfo> caloInfos =
-    {
-      {o2::dataformats::GlobalTrackID::EMC, {0, "emcal", "emcal.tower.color", kYellow, 0.0143, 0.0143, "emcal.tower.noise", 0}},
-      {o2::dataformats::GlobalTrackID::PHS, {1, "phos", "phos.tower.color", kYellow, 0.0046, 0.00478, "phos.tower.noise", 200}},
-    };
-
   int size = event.getCaloCount();
   if (size > 0) {
+    const std::string detector = detectorName == "EMC" ? "emcal" : "phos";
+    struct CaloInfo {
+      std::string name;
+      std::string configColor;
+      int defaultColor;
+      std::string configSizeEta;
+      float sizeEta;
+      std::string configSizePhi;
+      float sizePhi;
+      std::string configNoise;
+      float defaultNoise;
+      std::string configTransparency;
+      int defaultTransparency;
+      std::string configBarrelRadius;
+      int defaultBarrelRadius;
+      double scale;
+    };
     TEnv settings;
     ConfigurationManager::getInstance().getConfig(settings);
-    const bool showAxes = settings.GetValue("axes.show", false);
 
-    auto data = new TEveCaloDataVec(caloInfos.size());
+    // TODO: calculate values based on info available in O2
+    static const std::unordered_map<o2::dataformats::GlobalTrackID::Source, CaloInfo> caloInfos =
+      {
+        {o2::dataformats::GlobalTrackID::EMC, {"emcal", "emcal.tower.color", kYellow, "emcal.tower.size.eta", 0.0143, "emcal.tower.size.phi", 0.0143, "emcal.tower.noise", 0, "emcal.tower.transparency", 101, "emcal.barrel.radius", 500, settings.GetValue("emcal.tower.scale", 1.0)}},
+        {o2::dataformats::GlobalTrackID::PHS, {"phos", "phos.tower.color", kYellow, "phos.tower.size.eta", 0.0046, "phos.tower.size.phi", 0.00478, "phos.tower.noise", 200, "phos.tower.transparency", 101, "phos.barrel.radius", 550, settings.GetValue("phos.tower.scale", 1.0)}},
+      };
+
+    auto data = new TEveCaloDataVec(1);
     data->IncDenyDestroy();
+    auto key = detectorName == "EMC" ? o2::dataformats::GlobalTrackID::EMC : o2::dataformats::GlobalTrackID::PHS;
 
-    for (const auto& [det, info] : caloInfos) {
-      data->RefSliceInfo(info.index).Setup(info.name.c_str(), settings.GetValue(info.configNoise.c_str(), info.defaultNoise), settings.GetValue(info.configColor.c_str(), info.defaultColor));
-    }
+    const CaloInfo& info = caloInfos.at(key);
+    data->RefSliceInfo(0).Setup(info.name.c_str(),
+                                settings.GetValue(info.configNoise.c_str(), info.defaultNoise),
+                                settings.GetValue(info.configColor.c_str(), info.defaultColor),
+                                settings.GetValue(info.configTransparency.c_str(), info.defaultTransparency));
+
+    const auto dEta = settings.GetValue(info.configSizeEta.c_str(), info.sizeEta) / 2.0;
+    const auto dPhi = settings.GetValue(info.configSizePhi.c_str(), info.sizePhi) / 2.0;
+    const float barrelRadius = settings.GetValue(info.configBarrelRadius.c_str(), info.defaultBarrelRadius);
 
     for (const auto& calo : event.getCalorimetersSpan()) {
-      const auto& info = caloInfos.at(calo.getSource());
-      const auto dEta = info.sizeEta / 2;
-      const auto dPhi = info.sizePhi / 2;
       data->AddTower(calo.getEta() - dEta, calo.getEta() + dEta, calo.getPhi() - dPhi, calo.getPhi() + dPhi);
-      data->FillSlice(info.index, calo.getEnergy());
+      data->FillSlice(0, info.scale * calo.getEnergy());
     }
+
+    // remove artefacts
+    data->AddTower(-0.5, 0.5, -1.574 - 0.1, -1.574 + 0.1);
+    data->AddTower(-0.5, 0.5, 1.574 - 0.1, 1.574 + 0.1);
+    data->AddTower(-0.5, 0.5, -0.593 - 0.1, -0.593 + 0.1);
+    data->AddTower(-0.5, 0.5, -0.726 - 0.1, -0.726 + 0.1);
+    data->AddTower(-0.5, 0.5, -3.028 - 0.1, -3.028 + 0.1);
+    data->AddTower(-0.5, 0.5, -1.915 - 0.1, -1.915 + 0.1);
 
     data->DataChanged();
     data->SetAxisFromBins();
 
-    const float barrelRadius = settings.GetValue("barrel.radius", 375);
-
     auto calo3d = new TEveCalo3D(data);
-    calo3d->SetName("Calorimeters");
+    calo3d->SetName(detectorName.c_str());
 
     calo3d->SetBarrelRadius(barrelRadius);
     calo3d->SetEndCapPos(barrelRadius);
     calo3d->SetRnrFrame(false, false); // do not draw barrel grid
 
     dataTypeLists[EVisualisationDataType::Calorimeters]->AddElement(calo3d);
-    MultiView::getInstance()->registerElement(calo3d);
+    dataTypeListsPhi[EVisualisationDataType::Calorimeters]->AddElement(calo3d);
   }
 }
 
