@@ -19,68 +19,172 @@ using namespace o2::mft;
 
 ClassImp(o2::mft::AlignSensorHelper);
 
-//_________________________________________________________
-o2::math_utils::Point3D<double> AlignSensorHelper::getSensorCenterGlobalCoordinates(const int chipId) const
+//__________________________________________________________________________
+AlignSensorHelper::AlignSensorHelper(const o2::mft::GeometryTGeo* geom)
+  : mChipIndexOnLadder(0),
+    mChipIndexInMft(0),
+    mLadderInHalfDisk(0),
+    mLayer(0),
+    mDisk(0),
+    mHalf(0),
+    mChipUniqueId(0),
+    mTranslation(0, 0, 0),
+    mRx(0),
+    mRy(0),
+    mRz(0),
+    mSinRx(0),
+    mCosRx(0),
+    mSinRy(0),
+    mCosRy(0),
+    mSinRz(0),
+    mCosRz(0),
+    mIsTransformExtracted(false)
 {
-  // init the value of the global coordinates
-  o2::math_utils::Point3D<double> gloXYZ(0, 0, 0);
-
-  if (chipId < mNumberOfSensors) {
-    // The center of the sensor is the origin of the local reference system
-    o2::math_utils::Point3D<double> locXYZ(0, 0, 0);
-
-    // Transformation local --> global coordinates
-    gloXYZ = mGeometry->getMatrixL2G(chipId) * locXYZ;
-  } else {
-    LOG(warning) << "AlignSensorHelper::getSensorCenterGlobalCoordinates()"
-                 << " sensor id " << chipId
-                 << " >= " << mNumberOfSensors;
-  }
-  return gloXYZ;
+  setGeometry(geom);
 }
 
 //__________________________________________________________________________
-int AlignSensorHelper::half(const int chipId) const
+void AlignSensorHelper::setGeometry(const o2::mft::GeometryTGeo* geom)
 {
-  UShort_t half = 0;
-  if (chipId < mNumberOfSensors) {
-    o2::itsmft::MFTChipMappingData chipMapping = (mChipMapping.getChipMappingData())[chipId];
-    half = (UShort_t)chipMapping.half;
-  } else {
-    LOG(warning) << "AlignSensorHelper::half()"
-                 << " sensor id " << chipId
-                 << " >= " << mNumberOfSensors;
+  if (mGeometry == nullptr) {
+    mGeometry = geom;
+    mGeoSymbolicName = mGeometry->composeSymNameMFT();
   }
-  return (int)half;
 }
 
 //__________________________________________________________________________
-int AlignSensorHelper::disk(const int chipId) const
+bool AlignSensorHelper::setSensor(const int chipIndex)
 {
-  UShort_t disk = 0;
-  if (chipId < mNumberOfSensors) {
-    o2::itsmft::MFTChipMappingData chipMapping = (mChipMapping.getChipMappingData())[chipId];
-    disk = (UShort_t)chipMapping.disk;
+  resetSensorTransformInfo();
+
+  if (chipIndex < mNumberOfSensors) {
+    o2::itsmft::MFTChipMappingData chipMappingData = (mChipMapping.getChipMappingData())[chipIndex];
+    mChipIndexOnLadder = (UShort_t)chipMappingData.chipOnModule;
+    mChipIndexInMft = chipMappingData.globalChipSWID;
+    mLayer = (UShort_t)chipMappingData.layer;
+    mDisk = (UShort_t)chipMappingData.disk;
+    mHalf = (UShort_t)chipMappingData.half;
   } else {
-    LOG(warning) << "AlignSensorHelper::disk()"
-                 << " sensor id " << chipId
-                 << " >= " << mNumberOfSensors;
+    LOG(error) << "AlignSensorHelper::setSensor() - "
+               << "chip index " << chipIndex
+               << " >= " << mNumberOfSensors;
   }
-  return (int)disk;
+
+  setSensorUid(chipIndex);
+  setSymName();
+  extractSensorTransform();
+  return mIsTransformExtracted;
 }
 
 //__________________________________________________________________________
-int AlignSensorHelper::layer(const int chipId) const
+void AlignSensorHelper::setSensorUid(const int chipIndex)
 {
-  Int_t sensor = (Int_t)chipId;
-  UShort_t layer = 0;
-  if (sensor < mNumberOfSensors) {
-    o2::itsmft::MFTChipMappingData chipMapping = (mChipMapping.getChipMappingData())[sensor];
-    layer = (UShort_t)chipMapping.layer;
+  if (chipIndex < mNumberOfSensors) {
+    mChipUniqueId = o2::base::GeometryManager::getSensID(o2::detectors::DetID::MFT,
+                                                         chipIndex);
   } else {
-    LOG(warning) << "AlignSensorHelper::layer()"
-                 << " sensor id " << chipId
-                 << " >= " << mNumberOfSensors;
+    LOG(error) << "AlignSensorHelper::setSensorUid() - "
+               << "chip index " << chipIndex
+               << " >= " << mNumberOfSensors;
+    mChipUniqueId = o2::base::GeometryManager::getSensID(o2::detectors::DetID::MFT, 0);
   }
-  return (int)layer;
+}
+
+//__________________________________________________________________________
+void AlignSensorHelper::setSymName()
+{
+  int hf = 0, dk = 0, sr = 0;
+  if (mGeometry) {
+    mGeometry->getSensorID(mChipIndexInMft, hf, dk, mLadderInHalfDisk, sr);
+    bool isIdVerified = true;
+    isIdVerified &= (hf == (int)mHalf);
+    isIdVerified &= (dk == (int)mDisk);
+    isIdVerified &= (sr == (int)mChipIndexOnLadder);
+    if (isIdVerified) {
+      mGeoSymbolicName = mGeometry->composeSymNameChip(mHalf,
+                                                       mDisk,
+                                                       mLadderInHalfDisk,
+                                                       mChipIndexOnLadder);
+    } else {
+      LOG(error) << "AlignSensorHelper::setSymName() - mismatch in some index";
+    }
+  } else {
+    LOG(error) << "AlignSensorHelper::setSymName() - nullptr to geometry";
+  }
+}
+
+//__________________________________________________________________________
+void AlignSensorHelper::extractSensorTransform()
+{
+  if (mIsTransformExtracted)
+    return;
+  if (mGeometry) {
+    mTransform = mGeometry->getMatrixL2G(mChipIndexInMft);
+
+    Double_t* tra = mTransform.GetTranslation();
+    mTranslation.SetX(tra[0]);
+    mTranslation.SetY(tra[1]);
+    mTranslation.SetZ(tra[2]);
+
+    Double_t* rot = mTransform.GetRotationMatrix();
+    mRx = std::atan2(-rot[5], rot[8]);
+    mRy = std::asin(rot[2]);
+    mRz = std::atan2(-rot[1], rot[0]);
+
+    // force the value of some calculations of sin, cos to avoid numerical errors
+
+    // for MFT sensors, Rx = - Pi/2, or + Pi/2
+    // mSinRx = std::sin(mRx)
+    if (mRx > 0)
+      mSinRx = 1.0;
+    else
+      mSinRx = -1.0;
+    mSinRx = std::sin(mRx);
+    mCosRx = 0.0; // std::cos(mRx)
+
+    // for MFT sensors, Ry = 0
+    mSinRy = 0.0; // std::sin(mRy);
+    mCosRy = 1.0; // std::cos(mRy);
+
+    // for MFT sensors, Rz = 0 or Pi
+    // but we keep the value as it is
+    // because deltaRz is one of the alignment d.o.f.
+    mSinRz = std::sin(mRz);
+    mCosRz = std::cos(mRz);
+
+    mIsTransformExtracted = true;
+  } else {
+    resetSensorTransformInfo();
+    LOG(error) << "AlignSensorHelper::extractSensorTransform() - nullptr to geometry"
+               << std::endl;
+  }
+}
+
+//__________________________________________________________________________
+void AlignSensorHelper::resetSensorTransformInfo()
+{
+  mIsTransformExtracted = false;
+
+  double rot[9] = {
+    0., 0., 0.,
+    0., 0., 0.,
+    0., 0., 0.};
+  double tra[3] = {0., 0., 0.};
+  mTransform.SetRotation(rot);
+  mTransform.SetTranslation(tra);
+
+  mTranslation.SetX(0.0);
+  mTranslation.SetY(0.0);
+  mTranslation.SetZ(0.0);
+
+  mRx = 0;
+  mRy = 0;
+  mRz = 0;
+
+  mSinRx = 0;
+  mCosRx = 0;
+  mSinRy = 0;
+  mCosRy = 0;
+  mSinRz = 0;
+  mCosRz = 0;
 }
