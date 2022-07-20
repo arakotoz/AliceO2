@@ -31,8 +31,8 @@ namespace mft
 class AlignmentSpec : public Task
 {
  public:
-  AlignmentSpec(std::shared_ptr<o2::base::GRPGeomRequest> gr)
-    : mGGCCDBRequest(gr){};
+  AlignmentSpec(std::shared_ptr<o2::base::GRPGeomRequest> gr, bool saveTrackRecordToFile)
+    : mGGCCDBRequest(gr), mSaveTrackRecordToFile(saveTrackRecordToFile){};
   void init(o2::framework::InitContext& ic) final;
   void run(o2::framework::ProcessingContext& pc) final;
   void endOfStream(o2::framework::EndOfStreamContext& ec) final;
@@ -43,6 +43,7 @@ class AlignmentSpec : public Task
   void sendOutput(o2::framework::DataAllocator& output);
   std::unique_ptr<o2::mft::Alignment> mAlignment;
   std::shared_ptr<o2::base::GRPGeomRequest> mGGCCDBRequest;
+  bool mSaveTrackRecordToFile = false;
   enum TimerIDs { SWTot,
                   SWProcessTimeFrame,
                   SWProcessRecoTracks,
@@ -55,7 +56,7 @@ class AlignmentSpec : public Task
   TStopwatch mTimer[NStopWatches];
 };
 
-DataProcessorSpec getAlignmentSpec();
+DataProcessorSpec getAlignmentSpec(bool saveRecordsToFile);
 
 } // namespace mft
 } // namespace o2

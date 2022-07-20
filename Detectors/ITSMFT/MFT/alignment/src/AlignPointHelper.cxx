@@ -46,7 +46,7 @@ AlignPointHelper::AlignPointHelper(GeometryTGeo* geom)
     o2::itsmft::SegmentationAlpide::SensorLayerThicknessEff);
 
   mChipHelper = std::make_unique<AlignSensorHelper>(mGeometry);
-  LOG(info) << "AlignPointHelper instantiated";
+  LOGF(info, "AlignPointHelper instantiated");
 }
 
 //__________________________________________________________________________
@@ -54,18 +54,18 @@ void AlignPointHelper::computeLocalDerivatives()
 {
   mIsLocalDerivativeDone = false;
   if (mChipHelper == nullptr) {
-    LOG(error) << "AlignPointHelper::computeLocalDerivatives() - "
-               << "no AlignSensorHelper found !";
+    LOGF(error,
+         "AlignPointHelper::computeLocalDerivatives() - no AlignSensorHelper found !");
     return;
   }
   if (!mIsTrackInitialParamSet) {
-    LOG(error) << "AlignPointHelper::computeLocalDerivatives() - "
-               << "no initial track param found !";
+    LOGF(error,
+         "AlignPointHelper::computeLocalDerivatives() - no initial track param found !");
     return;
   }
   if (!mIsAlignPointSet) {
-    LOG(error) << "AlignPointHelper::computeLocalDerivatives() - "
-               << "no align point coordinates set !";
+    LOGF(error,
+         "AlignPointHelper::computeLocalDerivatives() - no align point coordinates set !");
     return;
   }
   bool success = true;
@@ -80,18 +80,17 @@ void AlignPointHelper::computeGlobalDerivatives()
 {
   mIsGlobalDerivativeDone = false;
   if (mChipHelper == nullptr) {
-    LOG(error) << "AlignPointHelper::computeGlobalDerivatives() - "
-               << "no AlignSensorHelper found !";
+    LOGF(error,
+         "AlignPointHelper::computeGlobalDerivatives() - no AlignSensorHelper found !");
     return;
   }
   if (!mIsTrackInitialParamSet) {
-    LOG(error) << "AlignPointHelper::computeGlobalDerivatives() - "
-               << "no initial track param found !";
+    LOGF(error,
+         "AlignPointHelper::computeGlobalDerivatives() - no initial track param found !");
     return;
   }
   if (!mIsAlignPointSet) {
-    LOG(error) << "AlignPointHelper::computeLocalDerivatives() - "
-               << "no align point coordinates set !";
+    LOGF(error, "AlignPointHelper::computeLocalDerivatives() - no align point coordinates set !");
     return;
   }
   bool success = true;
@@ -105,13 +104,13 @@ void AlignPointHelper::computeGlobalDerivatives()
 Int_t AlignPointHelper::getSensorId() const
 {
   if (mChipHelper == nullptr) {
-    LOG(error) << "AlignPointHelper::getSensorId() - "
-               << "no AlignSensorHelper found !";
+    LOGF(error,
+         "AlignPointHelper::getSensorId() - no AlignSensorHelper found !");
     return 0;
   }
   if (!mIsAlignPointSet) {
-    LOG(error) << "AlignPointHelper::getSensorId() - "
-               << "no align point coordinates set !";
+    LOG(error,
+        "AlignPointHelper::getSensorId() - no align point coordinates set !");
     return 0;
   }
   return mChipHelper->chipIndexInMft();
@@ -201,8 +200,8 @@ bool AlignPointHelper::computeLocalDerivativeX()
                               (mChipHelper->cosRx() * mChipHelper->sinRz()));
     return true;
   } else {
-    LOG(error) << "AlignPointHelper::computeLocalDerivativeX() - "
-               << "no sensor transform found !";
+    LOGF(error,
+         "AlignPointHelper::computeLocalDerivativeX() - no sensor transform found !");
     return false;
   }
 }
@@ -224,8 +223,8 @@ bool AlignPointHelper::computeLocalDerivativeY()
                               (mChipHelper->sinRx() * mChipHelper->sinRy() * mChipHelper->sinRz()));
     return true;
   } else {
-    LOG(error) << "AlignPointHelper::computeLocalDerivativeY() - "
-               << "no sensor transform found !";
+    LOGF(error,
+         "AlignPointHelper::computeLocalDerivativeY() - no sensor transform found !");
     return false;
   }
 }
@@ -243,8 +242,8 @@ bool AlignPointHelper::computeLocalDerivativeZ()
     mLocalDerivativeZ.mdTy = (-1.) * (mGlobalRecoPosition.Z() - mTrackInitialParam.Z0) * mChipHelper->sinRx() * mChipHelper->cosRy();
     return true;
   } else {
-    LOG(error) << "AlignPointHelper::computeLocalDerivativeZ() - "
-               << "no sensor transform found !";
+    LOGF(error,
+         "AlignPointHelper::computeLocalDerivativeZ() - no sensor transform found !");
     return false;
   }
 }
@@ -270,8 +269,8 @@ bool AlignPointHelper::computeGlobalDerivativeX()
 
     return true;
   } else {
-    LOG(error) << "AlignPointHelper::computeGlobalDerivativeX() - "
-               << "no sensor transform found !";
+    LOG(error,
+        "AlignPointHelper::computeGlobalDerivativeX() - no sensor transform found !");
     return false;
   }
 }
@@ -296,8 +295,8 @@ bool AlignPointHelper::computeGlobalDerivativeY()
                                      (mChipHelper->sinRx() * mChipHelper->sinRy() + mChipHelper->cosRz())));
     return true;
   } else {
-    LOG(error) << "AlignPointHelper::computeGlobalDerivativeY() - "
-               << "no sensor transform found !";
+    LOGF(error,
+         "AlignPointHelper::computeGlobalDerivativeY() - no sensor transform found !");
     return false;
   }
 }
@@ -317,8 +316,8 @@ bool AlignPointHelper::computeGlobalDerivativeZ()
 
     return true;
   } else {
-    LOG(error) << "AlignPointHelper::computeGlobalDerivativeZ() - "
-               << "no sensor transform found !";
+    LOGF(error,
+         "AlignPointHelper::computeGlobalDerivativeZ() - no sensor transform found !");
     return false;
   }
 }

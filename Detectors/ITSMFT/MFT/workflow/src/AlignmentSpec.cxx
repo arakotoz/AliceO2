@@ -15,7 +15,7 @@
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/CCDBParamSpec.h"
 #include "Framework/Logger.h"
-#include "MFTCalibration/AlignmentSpec.h"
+#include "MFTWorkflow/AlignmentSpec.h"
 #include "CommonUtils/NameConf.h"
 
 using namespace o2::framework;
@@ -29,7 +29,7 @@ namespace mft
 void AlignmentSpec::init(InitContext& ic)
 {
   o2::base::GRPGeomHelper::instance().setRequest(mGGCCDBRequest);
-  mAlignment = std::make_unique<o2::mft::Alignment>();
+  mAlignment = std::make_unique<o2::mft::Alignment>(mSaveTrackRecordToFile);
   for (int sw = 0; sw < NStopWatches; sw++) {
     mTimer[sw].Stop();
     mTimer[sw].Reset();
@@ -54,6 +54,7 @@ void AlignmentSpec::run(o2::framework::ProcessingContext& pc)
 //_____________________________________________________________
 void AlignmentSpec::endOfStream(o2::framework::EndOfStreamContext& ec)
 {
+  mAlignment->printProcessTrackSummary();
 
   mTimer[SWGlobalFit].Start(false);
   mAlignment->globalFit();
@@ -93,7 +94,7 @@ void AlignmentSpec::updateTimeDependentParams(ProcessingContext& pc)
     auto Bz = field->getBz(centerMFT);
     LOG(info) << "Setting MFT Assessment Bz = " << Bz;
     mAlignment->setBz(Bz);
-    mAlignment->init(mFinalizeAnalysis);
+    mAlignment->init();
   }
 }
 
@@ -110,7 +111,7 @@ void AlignmentSpec::finaliseCCDB(ConcreteDataMatcher& matcher, void* obj)
 }
 
 //_____________________________________________________________
-DataProcessorSpec getAlignmentSpec(bool useMC, bool processGen, bool finalizeAnalysis)
+DataProcessorSpec getAlignmentSpec(bool saveRecordsToFile)
 {
   std::vector<InputSpec> inputs;
   std::vector<OutputSpec> outputs;
@@ -130,12 +131,8 @@ DataProcessorSpec getAlignmentSpec(bool useMC, bool processGen, bool finalizeAna
                                                               o2::base::GRPGeomRequest::Aligned, // geometry
                                                               inputs,
                                                               true);
-  if (useMC) {
-    inputs.emplace_back("clslabels", "MFT", "CLUSTERSMCTR", 0, Lifetime::Timeframe);
-    inputs.emplace_back("trklabels", "MFT", "TRACKSMCTR", 0, Lifetime::Timeframe);
-  }
 
-  outputs.emplace_back("MFT", "MFTASSESSMENT", 0, Lifetime::Sporadic);
+  // outputs.emplace_back("MFT", "MFTASSESSMENT", 0, Lifetime::Sporadic);
 
   return DataProcessorSpec{
     "mft-alignment",

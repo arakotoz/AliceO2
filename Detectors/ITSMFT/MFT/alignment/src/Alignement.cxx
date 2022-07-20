@@ -27,17 +27,21 @@ using namespace o2::mft;
 ClassImp(o2::mft::Alignment);
 
 //__________________________________________________________________________
-Alignment::Alignment()
+Alignment::Alignment(bool saveRecordsToFile)
   : mRunNumber(0),
+    mBz(0),
     mNumberTFs(0),
     mCounterLocalEquationFailed(0),
     mCounterSkippedTracks(0),
+    mCounterUsedTracks(0),
     mChi2CutNStdDev(3),
     mResCutInitial(100.),
     mResCut(100.),
     mMinNumberClusterCut(6),
     mWeightRecord(1.),
-    mSaveTrackRecordToFile(false)
+    mSaveTrackRecordToFile(false),
+    mMilleRecordsFileName("mft_mille_records.root"),
+    mMilleConstraintsRecFileName("mft_mille_constraints.root")
 {
   mMillepede = std::make_unique<MillePede2>();
 
@@ -55,7 +59,7 @@ Alignment::Alignment()
 }
 
 //__________________________________________________________________________
-void Alignment::init(TString dataRecFName, TString consRecFName)
+void Alignment::init()
 {
   mMillepede->InitMille(mNumberOfGlobalParam,
                         mNumberOfTrackParam,
@@ -63,11 +67,12 @@ void Alignment::init(TString dataRecFName, TString consRecFName)
                         mResCut,
                         mResCutInitial);
   // filenames for the processed data and constraints records
-  mMillepede->SetDataRecFName(dataRecFName.Data());
-  mMillepede->SetConsRecFName(consRecFName.Data());
+  mMillepede->SetDataRecFName(mMilleRecordsFileName.Data());
+  mMillepede->SetConsRecFName(mMilleConstraintsRecFileName.Data());
   if (mSaveTrackRecordToFile) {
     mMillepede->InitDataRecStorage(kFALSE);
   }
+  LOGF(info, "Alignment init done");
 }
 
 //__________________________________________________________________________
@@ -152,11 +157,28 @@ void Alignment::processRecoTracks()
     if (mSaveTrackRecordToFile) {
       mMillepede->SaveRecordData();
     }
+
+    mCounterUsedTracks++;
   } // end of loop on tracks
 
   if (mSaveTrackRecordToFile) {
     mMillepede->CloseDataRecStorage();
   }
+}
+
+//__________________________________________________________________________
+bool Alignment::globalFit()
+{
+}
+
+//__________________________________________________________________________
+void Alignment::printProcessTrackSummary()
+{
+  LOGF(info, "Alignment processRecoTracks() summary: ");
+  LOGF(info,
+       "n TFs = %d, used tracks = %d, skipped tracks = %d, local equations failed = %d",
+       mNumberTFs, mCounterUsedTracks,
+       mCounterSkippedTracks, mCounterLocalEquationFailed);
 }
 
 //__________________________________________________________________________
@@ -168,9 +190,9 @@ bool Alignment::setLocalDerivative(Int_t index, Double_t value)
   if (index < mNumberOfTrackParam) {
     mLocalDerivatives[index] = value;
   } else {
-    LOG(error) << "Alignment::setLocalDerivative() - "
-               << "index " << index
-               << " >= " << mNumberOfTrackParam;
+    LOGF(error,
+         "Alignment::setLocalDerivative() - index %d >= %d",
+         index, mNumberOfTrackParam);
     success = false;
   }
   return success;
@@ -185,9 +207,9 @@ bool Alignment::setGlobalDerivative(Int_t index, Double_t value)
   if (index < mNumberOfGlobalParam) {
     mGlobalDerivatives[index] = value;
   } else {
-    LOG(error) << "Alignment::setGlobalDerivative() - "
-               << "index " << index
-               << " >= " << mNumberOfGlobalParam;
+    LOGF(error,
+         "Alignment::setGlobalDerivative() - index %d >= %d",
+         index, mNumberOfGlobalParam);
     success = false;
   }
   return success;

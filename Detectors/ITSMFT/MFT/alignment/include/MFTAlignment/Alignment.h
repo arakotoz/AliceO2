@@ -39,21 +39,26 @@ class AlignPointHelper;
 class Alignment
 {
  public:
-  Alignment() = default;
+  Alignment() = delete;
+  Alignment(bool saveRecordsToFile);
   ~Alignment() = default;
 
-  void init(TString dataRecFName, TString consRecFName);
+  void init();
   void setClusterDictionary(const o2::itsmft::TopologyDictionary* d) { mDictionary = d; }
+  void setRunNumber(const int value) { mRunNumber = value; }
+  void setBz(float bz) { mBz = bz; }
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
-
- protected:
   void processRecoTracks();
+  void globalFit();
+  void printProcessTrackSummary();
 
  protected:
   int mRunNumber = 0;
+  float mBz = 0;
   int mNumberTFs = 0;
   int mCounterLocalEquationFailed = 0;
   int mCounterSkippedTracks = 0;
+  int mCounterUsedTracks = 0;
   static constexpr int mNumberOfTrackParam = 4;                                  ///< Number of track (= local) parameters (X0, Tx, Y0, Ty)
   static constexpr int mNDofPerSensor = 4;                                       ///< translation in global x, y, z, and rotation Rz around global z-axis
   static o2::itsmft::ChipMappingMFT mChipMapping;                                ///< MFT chip <-> ladder, layer, disk, half mapping
@@ -69,6 +74,8 @@ class Alignment
   o2::mft::MillePedeRecord mTrackRecord;                                         ///< running MillePede Track record
   double mWeightRecord = 1.;
   bool mSaveTrackRecordToFile = false;
+  TString mMilleRecordsFileName;
+  TString mMilleConstraintsRecFileName;
   std::unique_ptr<o2::mft::MillePede2> mMillepede = nullptr;   ///< Millepede2 implementation copied from AliROOT
   const o2::itsmft::TopologyDictionary* mDictionary = nullptr; ///< cluster patterns dictionary
   gsl::span<const o2::mft::TrackMFT> mMFTTracks;
@@ -102,4 +109,5 @@ class Alignment
 
 } // namespace mft
 } // namespace o2
+
 #endif

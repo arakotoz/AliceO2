@@ -1,0 +1,46 @@
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
+//
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
+#include "Framework/DataProcessorSpec.h"
+#include "MFTWorkflow/AlignmentSpec.h"
+#include "CommonUtils/ConfigurableParam.h"
+
+using namespace o2::framework;
+
+// we need to add workflow options before including Framework/runDataProcessing
+void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
+{
+  // option allowing to set parameters
+  std::vector<o2::framework::ConfigParamSpec> options{
+    {"run-alignment", o2::framework::VariantType::Bool, false, {"run MFT alignment workflow"}},
+    {"enable-millerecords-output", o2::framework::VariantType::Bool, false, {"enable saving millepede records to file"}}};
+  std::swap(workflowOptions, options);
+}
+
+// ------------------------------------------------------------------
+
+#include "Framework/runDataProcessing.h"
+
+WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
+{
+  // Update the (declared) parameters if changed from the command line
+  o2::conf::ConfigurableParam::updateFromString(configcontext.options().get<std::string>("configKeyValues"));
+  // write the configuration used for the workflow
+  o2::conf::ConfigurableParam::writeINI("o2-mft-alignment.ini");
+  auto runAlignment = configcontext.options().get<bool>("run-alignment");
+  auto saveRecordsToFile = configcontext.options().get<bool>("enable-millerecords-output");
+
+  LOG(info) << "MFT Alignment: enable-millerecords-output = " << configcontext.options().get<std::string>("enable-millerecords-output");
+
+  WorkflowSpec specs;
+  specs.emplace_back(o2::mft::getMFTAssessmentSpec(saveRecordsToFile));
+  return specs;
+}

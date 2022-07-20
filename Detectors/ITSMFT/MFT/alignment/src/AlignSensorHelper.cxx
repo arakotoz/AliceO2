@@ -41,7 +41,7 @@ AlignSensorHelper::AlignSensorHelper(o2::mft::GeometryTGeo* geom)
     mIsTransformExtracted(false)
 {
   setGeometry(geom);
-  LOG(info) << "AlignSensorHelper instantiated";
+  LOGF(info, "AlignSensorHelper instantiated");
 }
 
 //__________________________________________________________________________
@@ -66,9 +66,8 @@ bool AlignSensorHelper::setSensor(const int chipIndex)
     mDisk = (UShort_t)chipMappingData.disk;
     mHalf = (UShort_t)chipMappingData.half;
   } else {
-    LOG(error) << "AlignSensorHelper::setSensor() - "
-               << "chip index " << chipIndex
-               << " >= " << mNumberOfSensors;
+    LOGF(error, "AlignSensorHelper::setSensor() - chip index %d >= %d",
+         chipIndex, mNumberOfSensors);
   }
 
   setSensorUid(chipIndex);
@@ -84,9 +83,8 @@ void AlignSensorHelper::setSensorUid(const int chipIndex)
     mChipUniqueId = o2::base::GeometryManager::getSensID(o2::detectors::DetID::MFT,
                                                          chipIndex);
   } else {
-    LOG(error) << "AlignSensorHelper::setSensorUid() - "
-               << "chip index " << chipIndex
-               << " >= " << mNumberOfSensors;
+    LOGF(error, "AlignSensorHelper::setSensorUid() - chip index %d >= %d",
+         chipIndex, mNumberOfSensors);
     mChipUniqueId = o2::base::GeometryManager::getSensID(o2::detectors::DetID::MFT, 0);
   }
 }
@@ -107,10 +105,10 @@ void AlignSensorHelper::setSymName()
                                                        mLadderInHalfDisk,
                                                        mChipIndexOnLadder);
     } else {
-      LOG(error) << "AlignSensorHelper::setSymName() - mismatch in some index";
+      LOGF(error, "AlignSensorHelper::setSymName() - mismatch in some index");
     }
   } else {
-    LOG(error) << "AlignSensorHelper::setSymName() - nullptr to geometry";
+    LOGF(error, "AlignSensorHelper::setSymName() - nullptr to geometry");
   }
 }
 
@@ -154,8 +152,8 @@ void AlignSensorHelper::extractSensorTransform()
     mIsTransformExtracted = true;
   } else {
     resetSensorTransformInfo();
-    LOG(error) << "AlignSensorHelper::extractSensorTransform() - nullptr to geometry"
-               << std::endl;
+    LOGF(error,
+         "AlignSensorHelper::extractSensorTransform() - nullptr to geometry");
   }
 }
 
