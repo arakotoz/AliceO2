@@ -20,7 +20,7 @@ using namespace o2::mft;
 ClassImp(o2::mft::AlignSensorHelper);
 
 //__________________________________________________________________________
-AlignSensorHelper::AlignSensorHelper(const o2::mft::GeometryTGeo* geom)
+AlignSensorHelper::AlignSensorHelper(o2::mft::GeometryTGeo* geom)
   : mChipIndexOnLadder(0),
     mChipIndexInMft(0),
     mLadderInHalfDisk(0),
@@ -41,10 +41,11 @@ AlignSensorHelper::AlignSensorHelper(const o2::mft::GeometryTGeo* geom)
     mIsTransformExtracted(false)
 {
   setGeometry(geom);
+  LOG(info) << "AlignSensorHelper instantiated";
 }
 
 //__________________________________________________________________________
-void AlignSensorHelper::setGeometry(const o2::mft::GeometryTGeo* geom)
+void AlignSensorHelper::setGeometry(o2::mft::GeometryTGeo* geom)
 {
   if (mGeometry == nullptr) {
     mGeometry = geom;
@@ -134,13 +135,11 @@ void AlignSensorHelper::extractSensorTransform()
     // force the value of some calculations of sin, cos to avoid numerical errors
 
     // for MFT sensors, Rx = - Pi/2, or + Pi/2
-    // mSinRx = std::sin(mRx)
     if (mRx > 0)
-      mSinRx = 1.0;
+      mSinRx = 1.0; // std::sin(mRx)
     else
-      mSinRx = -1.0;
-    mSinRx = std::sin(mRx);
-    mCosRx = 0.0; // std::cos(mRx)
+      mSinRx = -1.0; // std::sin(mRx)
+    mCosRx = 0.0;    // std::cos(mRx)
 
     // for MFT sensors, Ry = 0
     mSinRy = 0.0; // std::sin(mRy);

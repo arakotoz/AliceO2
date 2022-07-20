@@ -30,8 +30,6 @@ namespace o2
 namespace mft
 {
 
-using TransformationCreator = std::function<o2::math_utils::Transform3D(int chipId)>;
-
 /// \class AlignSensorHelper
 class AlignSensorHelper
 {
@@ -40,13 +38,13 @@ class AlignSensorHelper
   AlignSensorHelper() = delete;
 
   /// \brief constructor with a pointer to the geometry
-  AlignSensorHelper(const o2::mft::GeometryTGeo* geom);
+  AlignSensorHelper(o2::mft::GeometryTGeo* geom);
 
   /// \brief default destructor
   ~AlignSensorHelper() = default;
 
   /// \brief set pointer to geometry that should already have done fillMatrixCache()
-  void setGeometry(const o2::mft::GeometryTGeo* geom);
+  void setGeometry(o2::mft::GeometryTGeo* geom);
 
   /// \brief set the studied sensor
   bool setSensor(const int chipIndex);
@@ -102,9 +100,12 @@ class AlignSensorHelper
   double sinRz() const { return mSinRz; }
   double cosRz() const { return mCosRz; }
 
+  /// \brief return the status of the sensor transform extraction
+  bool isTransformExtracted() const { return mIsTransformExtracted; }
+
  protected:
   static o2::itsmft::ChipMappingMFT mChipMapping;                   ///< MFT chip <-> ladder, layer, disk, half mapping
-  const o2::mft::GeometryTGeo* mGeometry = nullptr;                 ///< MFT geometry
+  o2::mft::GeometryTGeo* mGeometry = nullptr;                       ///< MFT geometry
   static constexpr int mNumberOfSensors = mChipMapping.getNChips(); ///< Total number of sensors (detection elements) in the MFT
   Int_t mChipIndexOnLadder = 0;                                     ///< sensor index within the ladder [0, 4]
   Int_t mChipIndexInMft = 0;                                        ///< sensor sw index within the MFT [0, 935]

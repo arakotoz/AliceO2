@@ -15,8 +15,10 @@
 #pragma link off all classes;
 #pragma link off all functions;
 
+#pragma link C++ class o2::mft::AlignPointHelper + ;
+#pragma link C++ class o2::mft::AlignSensorHelper + ;
 #pragma link C++ class o2::mft::NoiseCalibrator + ;
-//#pragma link C++ class o2::mft::Alignment + ;
+#pragma link C++ class o2::mft::Alignment + ;
 #pragma link C++ class o2::mft::MatrixSparse + ;
 #pragma link C++ class o2::mft::MatrixSq + ;
 #pragma link C++ class o2::mft::MillePede2 + ;

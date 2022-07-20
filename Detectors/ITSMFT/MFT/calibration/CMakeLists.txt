@@ -13,7 +13,10 @@ o2_add_library(MFTCalibration
         SOURCES src/NoiseCalibrator.cxx
                 src/NoiseCalibratorSpec.cxx
                 src/AlignConfig.cxx
-                # src/Alignment.cxx
+                src/AlignPointHelper.cxx
+                src/AlignSensorHelper.cxx
+                src/Alignment.cxx
+                src/AlignmentSpec.cxx
                 src/MatrixSparse.cxx
                 src/MatrixSq.cxx
                 src/MillePede2.cxx
@@ -32,7 +35,9 @@ o2_add_library(MFTCalibration
 o2_target_root_dictionary(MFTCalibration
         HEADERS include/MFTCalibration/NoiseCalibrator.h
                 include/MFTCalibration/AlignConfig.h
-                # include/MFTCalibration/Alignment.h
+                include/MFTCalibration/AlignPointHelper.h
+                include/MFTCalibration/AlignSensorHelper.h
+                include/MFTCalibration/Alignment.h
                 include/MFTCalibration/MatrixSparse.h
                 include/MFTCalibration/MatrixSq.h
                 include/MFTCalibration/MillePede2.h
