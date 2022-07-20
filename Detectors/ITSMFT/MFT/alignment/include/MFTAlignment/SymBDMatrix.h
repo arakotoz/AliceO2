@@ -18,7 +18,7 @@
 
 #include <TObject.h>
 #include <TVectorD.h>
-#include "MFTCalibration/MatrixSq.h"
+#include "MFTAlignment/MatrixSq.h"
 
 namespace o2
 {

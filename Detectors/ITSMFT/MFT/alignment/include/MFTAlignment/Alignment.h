@@ -18,6 +18,7 @@
 
 #include <Rtypes.h>
 #include <array>
+#include <TString.h>
 
 #include "Framework/ProcessingContext.h"
 #include "DataFormatsITSMFT/TopologyDictionary.h"
@@ -26,8 +27,8 @@
 #include "DataFormatsITSMFT/CompCluster.h"
 #include "ITSMFTReconstruction/ChipMappingMFT.h"
 #include "ReconstructionDataFormats/BaseCluster.h"
-#include "MFTCalibration/MillePedeRecord.h"
-#include "MFTCalibration/MillePede2.h"
+#include "MFTAlignment/MillePedeRecord.h"
+#include "MFTAlignment/MillePede2.h"
 
 namespace o2
 {
@@ -49,7 +50,7 @@ class Alignment
   void setBz(float bz) { mBz = bz; }
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
   void processRecoTracks();
-  void globalFit();
+  bool globalFit();
   void printProcessTrackSummary();
 
  protected:

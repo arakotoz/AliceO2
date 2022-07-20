@@ -17,7 +17,6 @@
 
 #pragma link C++ class o2::mft::AlignPointHelper + ;
 #pragma link C++ class o2::mft::AlignSensorHelper + ;
-#pragma link C++ class o2::mft::NoiseCalibrator + ;
 #pragma link C++ class o2::mft::Alignment + ;
 #pragma link C++ class o2::mft::MatrixSparse + ;
 #pragma link C++ class o2::mft::MatrixSq + ;

@@ -14,7 +14,7 @@
 #include <string.h>
 #include <TString.h>
 
-#include "MFTCalibration/VectorSparse.h"
+#include "MFTAlignment/VectorSparse.h"
 
 using namespace o2::mft;
 

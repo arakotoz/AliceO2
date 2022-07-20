@@ -13,7 +13,7 @@
 
 #include <Rtypes.h>
 #include "Framework/Logger.h"
-#include "MFTCalibration/AlignSensorHelper.h"
+#include "MFTAlignment/AlignSensorHelper.h"
 
 using namespace o2::mft;
 

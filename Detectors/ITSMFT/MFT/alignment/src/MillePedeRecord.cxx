@@ -11,7 +11,7 @@
 
 /// @file MillePedeRecord.cxx
 
-#include "MFTCalibration/MillePedeRecord.h"
+#include "MFTAlignment/MillePedeRecord.h"
 #include <TMath.h>
 #include "Framework/Logger.h"
 

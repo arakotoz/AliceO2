@@ -18,7 +18,7 @@
 
 #include "TClass.h"
 #include "TMath.h"
-#include "MFTCalibration/MatrixSq.h"
+#include "MFTAlignment/MatrixSq.h"
 
 using namespace o2::mft;
 

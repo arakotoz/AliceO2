@@ -19,7 +19,7 @@
 #include <TVectorD.h>
 #include <TString.h>
 
-#include "MFTCalibration/MatrixSq.h"
+#include "MFTAlignment/MatrixSq.h"
 
 namespace o2
 {

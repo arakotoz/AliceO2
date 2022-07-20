@@ -22,12 +22,12 @@
 #include <TObject.h>
 #include <TString.h>
 #include <TTree.h>
-#include "MFTCalibration/MinResSolve.h"
-#include "MFTCalibration/MillePedeRecord.h"
-#include "MFTCalibration/SymMatrix.h"
-#include "MFTCalibration/RectMatrix.h"
-#include "MFTCalibration/MatrixSparse.h"
-#include "MFTCalibration/MatrixSq.h"
+#include "MFTAlignment/MinResSolve.h"
+#include "MFTAlignment/MillePedeRecord.h"
+#include "MFTAlignment/SymMatrix.h"
+#include "MFTAlignment/RectMatrix.h"
+#include "MFTAlignment/MatrixSparse.h"
+#include "MFTAlignment/MatrixSq.h"
 
 class TFile;
 class TStopwatch;

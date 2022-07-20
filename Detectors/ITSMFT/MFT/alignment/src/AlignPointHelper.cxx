@@ -14,8 +14,8 @@
 #include <Rtypes.h>
 #include "Framework/Logger.h"
 #include "DataFormatsMFT/TrackMFT.h"
-#include "MFTCalibration/AlignSensorHelper.h"
-#include "MFTCalibration/AlignPointHelper.h"
+#include "MFTAlignment/AlignSensorHelper.h"
+#include "MFTAlignment/AlignPointHelper.h"
 #include "MFTTracking/IOUtils.h"
 #include "ITSMFTBase/SegmentationAlpide.h"
 

@@ -12,7 +12,7 @@
 
 /// @file MillePede2.cxx
 
-#include "MFTCalibration/MillePede2.h"
+#include "MFTAlignment/MillePede2.h"
 #include "Framework/Logger.h"
 #include <TStopwatch.h>
 #include <TFile.h>

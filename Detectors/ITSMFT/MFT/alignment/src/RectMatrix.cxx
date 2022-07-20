@@ -12,7 +12,7 @@
 /// @file RectMatrix.cxx
 
 #include <TString.h>
-#include "MFTCalibration/RectMatrix.h"
+#include "MFTAlignment/RectMatrix.h"
 
 using namespace o2::mft;
 

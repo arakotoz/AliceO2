@@ -15,7 +15,7 @@
 #include <TStopwatch.h>
 
 #include "Framework/Logger.h"
-#include "MFTCalibration/MatrixSparse.h"
+#include "MFTAlignment/MatrixSparse.h"
 
 using namespace o2::mft;
 

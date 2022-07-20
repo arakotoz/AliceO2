@@ -19,7 +19,7 @@
 
 #include <TClass.h>
 #include <TMath.h>
-#include "MFTCalibration/SymMatrix.h"
+#include "MFTAlignment/SymMatrix.h"
 #include "Framework/Logger.h"
 
 using namespace o2::mft;

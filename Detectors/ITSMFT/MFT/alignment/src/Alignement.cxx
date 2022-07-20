@@ -14,13 +14,13 @@
 #include "Framework/InputSpec.h"
 #include "Framework/Logger.h"
 #include <Framework/InputRecord.h>
-#include "MFTCalibration/AlignPointHelper.h"
-#include "MFTCalibration/Alignment.h"
+#include "MFTAlignment/AlignPointHelper.h"
+#include "MFTAlignment/Alignment.h"
 #include "MFTTracking/IOUtils.h"
 #include "MFTBase/Geometry.h"
 #include "MFTBase/GeometryTGeo.h"
-#include "MFTCalibration/MillePedeRecord.h"
-#include "MFTCalibration/MillePede2.h"
+#include "MFTAlignment/MillePedeRecord.h"
+#include "MFTAlignment/MillePede2.h"
 
 using namespace o2::mft;
 

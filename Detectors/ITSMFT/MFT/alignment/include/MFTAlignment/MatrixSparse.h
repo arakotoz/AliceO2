@@ -16,8 +16,8 @@
 #ifndef ALICEO2_MFT_MATRIXSPARSE_H
 #define ALICEO2_MFT_MATRIXSPARSE_H
 
-#include "MFTCalibration/MatrixSq.h"
-#include "MFTCalibration/VectorSparse.h"
+#include "MFTAlignment/MatrixSq.h"
+#include "MFTAlignment/VectorSparse.h"
 
 namespace o2
 {

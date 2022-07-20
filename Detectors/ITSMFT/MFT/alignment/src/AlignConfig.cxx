@@ -12,5 +12,5 @@
 /// @file AlignConfig.cxx
 /// @brief Configuration file for MFT standalone alignment
 
-#include "MFTCalibration/AlignConfig.h"
+#include "MFTAlignment/AlignConfig.h"
 O2ParamImpl(o2::mft::AlignConfig);

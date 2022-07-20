@@ -17,10 +17,10 @@
 #include <TStopwatch.h>
 
 #include "Framework/Logger.h"
-#include "MFTCalibration/MinResSolve.h"
-#include "MFTCalibration/MatrixSq.h"
-#include "MFTCalibration/MatrixSparse.h"
-#include "MFTCalibration/SymBDMatrix.h"
+#include "MFTAlignment/MinResSolve.h"
+#include "MFTAlignment/MatrixSq.h"
+#include "MFTAlignment/MatrixSparse.h"
+#include "MFTAlignment/SymBDMatrix.h"
 
 using namespace o2::mft;
 

@@ -18,7 +18,7 @@
 
 #include "TClass.h"
 #include "TMath.h"
-#include "MFTCalibration/SymBDMatrix.h"
+#include "MFTAlignment/SymBDMatrix.h"
 
 using namespace o2::mft;
 
