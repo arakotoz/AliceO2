@@ -16,6 +16,8 @@
 #include "DataFormatsMFT/TrackMFT.h"
 #include "MFTCalibration/AlignSensorHelper.h"
 #include "MFTCalibration/AlignPointHelper.h"
+#include "MFTTracking/IOUtils.h"
+#include "ITSMFTBase/SegmentationAlpide.h"
 
 using namespace o2::mft;
 
@@ -29,13 +31,19 @@ AlignPointHelper::AlignPointHelper(GeometryTGeo* geom)
     mIsTrackInitialParamSet(false),
     mGeometry(geom),
     mGlobalRecoPosition(0., 0., 0.),
-    mLocalMeasuredPosition(0., 0., 0.)
+    mLocalMeasuredPosition(0., 0., 0.),
+    mMeasuredPositionSigma(0., 0., 0)
 {
   mTrackInitialParam.X0 = 0.;
   mTrackInitialParam.Y0 = 0.;
   mTrackInitialParam.Z0 = 0.;
   mTrackInitialParam.Tx = 0.;
   mTrackInitialParam.Ty = 0.;
+
+  mMeasuredPositionSigma.SetXYZ(
+    o2::mft::ioutils::DefClusErrorRow,
+    o2::mft::ioutils::DefClusErrorCol,
+    o2::itsmft::SegmentationAlpide::SensorLayerThicknessEff);
 
   mChipHelper = std::make_unique<AlignSensorHelper>(mGeometry);
   LOG(info) << "AlignPointHelper instantiated";

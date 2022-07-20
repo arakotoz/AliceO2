@@ -145,6 +145,8 @@ class AlignPointHelper
   // Current cartesian position (cm, in Local frame) of the cluster
   o2::math_utils::Point3D<double> mLocalMeasuredPosition;
 
+  o2::math_utils::Point3D<double> mMeasuredPositionSigma; ///< Estimated spatial resolution on measurement
+
   /// \brief compute X component of the local derivatives
   bool computeLocalDerivativeX();
 
