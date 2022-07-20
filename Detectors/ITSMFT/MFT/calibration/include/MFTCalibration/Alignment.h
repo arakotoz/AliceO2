@@ -50,23 +50,27 @@ class Alignment
   void processRecoTracks();
 
  protected:
+  int mRunNumber = 0;
   int mNumberTFs = 0;
-  static constexpr int mNumberOfTrackParam = 4;                                  ///< Number of track (= local) parameters (x0, t_x, y0, t_y)
-  static constexpr int mNDofPerSensor = 4;                                       ///< translation in x, y, z, and rotation in phi
+  int mCounterLocalEquationFailed = 0;
+  int mCounterSkippedTracks = 0;
+  static constexpr int mNumberOfTrackParam = 4;                                  ///< Number of track (= local) parameters (X0, Tx, Y0, Ty)
+  static constexpr int mNDofPerSensor = 4;                                       ///< translation in global x, y, z, and rotation Rz around global z-axis
   static o2::itsmft::ChipMappingMFT mChipMapping;                                ///< MFT chip <-> ladder, layer, disk, half mapping
   static constexpr int mNumberOfSensors = mChipMapping.getNChips();              ///< Total number of sensors (detection elements) in the MFT
   static constexpr int mNumberOfGlobalParam = mNDofPerSensor * mNumberOfSensors; ///< Number of alignment (= global) parameters
-  std::array<Double_t, mNumberOfGlobalParam> mGlobalDerivatives;                 ///< Array of global derivatives
-  std::array<Double_t, mNumberOfTrackParam> mLocalDerivatives;                   ///< Array of local derivatives
+  Double_t mGlobalDerivatives[mNumberOfGlobalParam];                             ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+  Double_t mLocalDerivatives[mNumberOfTrackParam];                               ///< Array of local derivatives {dX0, dTx, dY0, dTz}
   std::array<Double_t, mNDofPerSensor> mAllowVar;                                ///< "Encouraged" variation for degrees of freedom
-  Double_t mSigmaX;                                                              ///< Estimated spatial resolution on measurement in global x direction
-  Double_t mSigmaY;                                                              ///< Estimated spatial resolution on measurement in global y direction
   Int_t mChi2CutNStdDev = 3;                                                     ///< Number of standard deviations for chi2 cut
   Double_t mResCutInitial = 100.;                                                ///< Cut on residual on first iteration
   Double_t mResCut = 100.;                                                       ///< Cut on residual for other iterations
+  int mMinNumberClusterCut = 6;                                                  ///< Minimum number of clusters in the track to be used for alignment
   o2::mft::MillePedeRecord mTrackRecord;                                         ///< running MillePede Track record
-  std::unique_ptr<o2::mft::MillePede2> mMillepede = nullptr;                     ///< Millepede2 implementation copied from AliROOT
-  const o2::itsmft::TopologyDictionary* mDictionary = nullptr;                   ///< cluster patterns dictionary
+  double mWeightRecord = 1.;
+  bool mSaveTrackRecordToFile = false;
+  std::unique_ptr<o2::mft::MillePede2> mMillepede = nullptr;   ///< Millepede2 implementation copied from AliROOT
+  const o2::itsmft::TopologyDictionary* mDictionary = nullptr; ///< cluster patterns dictionary
   gsl::span<const o2::mft::TrackMFT> mMFTTracks;
   gsl::span<const o2::itsmft::ROFRecord> mMFTTracksROF;
   gsl::span<const int> mMFTTrackClusIdx;
@@ -78,16 +82,20 @@ class Alignment
   std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;
 
   /// \brief set array of local derivatives
-  void setLocalDerivative(Int_t index, Double_t value);
+  bool setLocalDerivative(Int_t index, Double_t value);
 
   /// \brief set array of global derivatives
-  void setGlobalDerivative(Int_t index, Double_t value);
+  bool setGlobalDerivative(Int_t index, Double_t value);
 
   /// \brief reset the array of the Local derivative
   void resetLocalDerivative();
 
   /// \brief reset the array of the Global derivative
   void resetGlocalDerivative();
+
+  bool setLocalEquationX();
+  bool setLocalEquationY();
+  bool setLocalEquationZ();
 
   ClassDefNV(Alignment, 1);
 };

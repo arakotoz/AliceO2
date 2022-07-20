@@ -19,6 +19,8 @@
 #include "MFTTracking/IOUtils.h"
 #include "MFTBase/Geometry.h"
 #include "MFTBase/GeometryTGeo.h"
+#include "MFTCalibration/MillePedeRecord.h"
+#include "MFTCalibration/MillePede2.h"
 
 using namespace o2::mft;
 
@@ -26,10 +28,16 @@ ClassImp(o2::mft::Alignment);
 
 //__________________________________________________________________________
 Alignment::Alignment()
-  : mNumberTFs(0),
+  : mRunNumber(0),
+    mNumberTFs(0),
+    mCounterLocalEquationFailed(0),
+    mCounterSkippedTracks(0),
     mChi2CutNStdDev(3),
     mResCutInitial(100.),
-    mResCut(100.)
+    mResCut(100.),
+    mMinNumberClusterCut(6),
+    mWeightRecord(1.),
+    mSaveTrackRecordToFile(false)
 {
   mMillepede = std::make_unique<MillePede2>();
 
@@ -57,6 +65,9 @@ void Alignment::init(TString dataRecFName, TString consRecFName)
   // filenames for the processed data and constraints records
   mMillepede->SetDataRecFName(dataRecFName.Data());
   mMillepede->SetConsRecFName(consRecFName.Data());
+  if (mSaveTrackRecordToFile) {
+    mMillepede->InitDataRecStorage(kFALSE);
+  }
 }
 
 //__________________________________________________________________________
@@ -83,36 +94,103 @@ void Alignment::processTimeFrame(o2::framework::ProcessingContext& ctx)
 //__________________________________________________________________________
 void Alignment::processRecoTracks()
 {
-  for (auto& mftTrack : mMFTTracks) {
+  for (auto oneTrack : mMFTTracks) { // track loop
 
-    resetLocalDerivative();
-    resetGlocalDerivative();
+    // Skip the track if not enough clusters
+    auto ncls = oneTrack.getNumberOfPoints();
+    if (ncls < mMinNumberClusterCut) {
+      mCounterSkippedTracks++;
+      continue;
+    }
+
+    auto offset = oneTrack.getExternalClusterIndexOffset();
+
     mTrackRecord.Reset();
+    if (mMillepede->GetRecord()) {
+      mMillepede->GetRecord()->Reset();
+    }
+
+    // Store the initial track parameters
+    mAlignPoint->resetTrackInitialParam();
+    mAlignPoint->recordTrackInitialParam(oneTrack);
+
+    for (int icls = 0; icls < ncls; ++icls) { // cluster loop
+
+      mAlignPoint->resetDerivatives();
+      mAlignPoint->resetAlignPoint();
+
+      auto clsEntry = mMFTTrackClusIdx[offset + icls];
+      auto globalCluster = mMFTClustersGlobal[clsEntry];
+
+      // Propagate track to the current z plane of this cluster
+      oneTrack.propagateParamToZlinear(globalCluster.getZ());
+
+      // Store reco and measured positions
+      mAlignPoint->setGlobalRecoPosition(oneTrack);
+      mAlignPoint->setLocalMeasuredPosition(globalCluster);
+
+      // Compute derivatives
+      mAlignPoint->computeLocalDerivatives();
+      mAlignPoint->computeGlobalDerivatives();
+
+      // Set local equations
+      bool success = true;
+      success &= setLocalEquationX();
+      success &= setLocalEquationY();
+      success &= setLocalEquationZ();
+      if (!success)
+        mCounterLocalEquationFailed++;
+
+    } // end of loop on clusters
+
+    // copy track record
+    mMillepede->SetRecordRun(mRunNumber);
+    mMillepede->SetRecordWeight(mWeightRecord);
+    mTrackRecord = *mMillepede->GetRecord();
+
+    // save record data
+    if (mSaveTrackRecordToFile) {
+      mMillepede->SaveRecordData();
+    }
+  } // end of loop on tracks
+
+  if (mSaveTrackRecordToFile) {
+    mMillepede->CloseDataRecStorage();
   }
 }
 
 //__________________________________________________________________________
-void Alignment::setLocalDerivative(Int_t index, Double_t value)
+bool Alignment::setLocalDerivative(Int_t index, Double_t value)
 {
+  // index [0 .. 3] for {dX0, dTx, dY0, dTz}
+
+  bool success = true;
   if (index < mNumberOfTrackParam) {
     mLocalDerivatives[index] = value;
   } else {
     LOG(error) << "Alignment::setLocalDerivative() - "
                << "index " << index
                << " >= " << mNumberOfTrackParam;
+    success = false;
   }
+  return success;
 }
 
 //__________________________________________________________________________
-void Alignment::setGlobalDerivative(Int_t index, Double_t value)
+bool Alignment::setGlobalDerivative(Int_t index, Double_t value)
 {
+  // index [0 .. 3] for {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+
+  bool success = true;
   if (index < mNumberOfGlobalParam) {
     mGlobalDerivatives[index] = value;
   } else {
     LOG(error) << "Alignment::setGlobalDerivative() - "
                << "index " << index
                << " >= " << mNumberOfGlobalParam;
+    success = false;
   }
+  return success;
 }
 
 //__________________________________________________________________________
@@ -129,4 +207,135 @@ void Alignment::resetGlocalDerivative()
   for (int i = 0; i < mNumberOfGlobalParam; ++i) {
     mGlobalDerivatives[i] = 0.0;
   }
+}
+
+//__________________________________________________________________________
+bool Alignment::setLocalEquationX()
+{
+
+  if (!mAlignPoint->isAlignPointSet())
+    return false;
+  if (!mAlignPoint->isGlobalDerivativeDone())
+    return false;
+  if (!mAlignPoint->isLocalDerivativeDone())
+    return false;
+
+  // clean slate for the local equation for this measurement
+
+  resetGlocalDerivative();
+  resetLocalDerivative();
+
+  bool success = true;
+
+  // local derivatives
+  // index [0 .. 3] for {dX0, dTx, dY0, dTz}
+
+  success &= setLocalDerivative(0, mAlignPoint->localDerivativeX().dX0());
+  success &= setLocalDerivative(1, mAlignPoint->localDerivativeX().dTx());
+  success &= setLocalDerivative(2, mAlignPoint->localDerivativeX().dY0());
+  success &= setLocalDerivative(3, mAlignPoint->localDerivativeX().dTy());
+
+  // global derivatives
+  // index [0 .. 3] for {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+
+  Int_t chipId = mAlignPoint->getSensorId();
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 0, mAlignPoint->globalDerivativeX().dDeltaX());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 1, mAlignPoint->globalDerivativeX().dDeltaY());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 2, mAlignPoint->globalDerivativeX().dDeltaRz());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 3, mAlignPoint->globalDerivativeX().dDeltaZ());
+
+  mMillepede->SetLocalEquation(
+    mGlobalDerivatives,
+    mLocalDerivatives,
+    mAlignPoint->getLocalMeasuredPosition().X(),
+    mAlignPoint->getMeasuredPositionSigma().X());
+
+  return success;
+}
+
+//__________________________________________________________________________
+bool Alignment::setLocalEquationY()
+{
+  if (!mAlignPoint->isAlignPointSet())
+    return false;
+  if (!mAlignPoint->isGlobalDerivativeDone())
+    return false;
+  if (!mAlignPoint->isLocalDerivativeDone())
+    return false;
+
+  // clean slate for the local equation for this measurement
+
+  resetGlocalDerivative();
+  resetLocalDerivative();
+
+  bool success = true;
+
+  // local derivatives
+  // index [0 .. 3] for {dX0, dTx, dY0, dTz}
+
+  success &= setLocalDerivative(0, mAlignPoint->localDerivativeY().dX0());
+  success &= setLocalDerivative(1, mAlignPoint->localDerivativeY().dTx());
+  success &= setLocalDerivative(2, mAlignPoint->localDerivativeY().dY0());
+  success &= setLocalDerivative(3, mAlignPoint->localDerivativeY().dTy());
+
+  // global derivatives
+  // index [0 .. 3] for {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+
+  Int_t chipId = mAlignPoint->getSensorId();
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 0, mAlignPoint->globalDerivativeY().dDeltaX());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 1, mAlignPoint->globalDerivativeY().dDeltaY());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 2, mAlignPoint->globalDerivativeY().dDeltaRz());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 3, mAlignPoint->globalDerivativeY().dDeltaZ());
+
+  mMillepede->SetLocalEquation(
+    mGlobalDerivatives,
+    mLocalDerivatives,
+    mAlignPoint->getLocalMeasuredPosition().Y(),
+    mAlignPoint->getMeasuredPositionSigma().Y());
+
+  return success;
+}
+
+//__________________________________________________________________________
+bool Alignment::setLocalEquationZ()
+{
+
+  if (!mAlignPoint->isAlignPointSet())
+    return false;
+  if (!mAlignPoint->isGlobalDerivativeDone())
+    return false;
+  if (!mAlignPoint->isLocalDerivativeDone())
+    return false;
+
+  // clean slate for the local equation for this measurement
+
+  resetGlocalDerivative();
+  resetLocalDerivative();
+
+  bool success = true;
+
+  // local derivatives
+  // index [0 .. 3] for {dX0, dTx, dY0, dTz}
+
+  success &= setLocalDerivative(0, mAlignPoint->localDerivativeZ().dX0());
+  success &= setLocalDerivative(1, mAlignPoint->localDerivativeZ().dTx());
+  success &= setLocalDerivative(2, mAlignPoint->localDerivativeZ().dY0());
+  success &= setLocalDerivative(3, mAlignPoint->localDerivativeZ().dTy());
+
+  // global derivatives
+  // index [0 .. 3] for {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+
+  Int_t chipId = mAlignPoint->getSensorId();
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 0, mAlignPoint->globalDerivativeZ().dDeltaX());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 1, mAlignPoint->globalDerivativeZ().dDeltaY());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 2, mAlignPoint->globalDerivativeZ().dDeltaRz());
+  success &= setGlobalDerivative(chipId + mNDofPerSensor + 3, mAlignPoint->globalDerivativeZ().dDeltaZ());
+
+  mMillepede->SetLocalEquation(
+    mGlobalDerivatives,
+    mLocalDerivatives,
+    mAlignPoint->getLocalMeasuredPosition().Z(),
+    mAlignPoint->getMeasuredPositionSigma().Z());
+
+  return success;
 }

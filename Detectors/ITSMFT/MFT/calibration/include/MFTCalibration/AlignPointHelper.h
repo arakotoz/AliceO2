@@ -105,12 +105,26 @@ class AlignPointHelper
   void computeLocalDerivatives();
   void computeGlobalDerivatives();
 
-  GlobalDerivative globalDerivativeX() { return mGlobalDerivativeX; }
-  GlobalDerivative globalDerivativeY() { return mGlobalDerivativeY; }
-  GlobalDerivative globalDerivativeZ() { return mGlobalDerivativeZ; }
-  LocalDerivative localDerivativeX() { return mLocalDerivativeX; }
-  LocalDerivative localDerivativeY() { return mLocalDerivativeY; }
-  LocalDerivative localDerivativeZ() { return mLocalDerivativeZ; }
+  Int_t getSensorId() const;
+
+  bool isAlignPointSet() const { return mIsAlignPointSet; }
+  bool isGlobalDerivativeDone() const { return mIsGlobalDerivativeDone; }
+  bool isLocalDerivativeDone() const { return mIsLocalDerivativeDone; }
+
+  GlobalDerivative globalDerivativeX() const { return mGlobalDerivativeX; }
+  GlobalDerivative globalDerivativeY() const { return mGlobalDerivativeY; }
+  GlobalDerivative globalDerivativeZ() const { return mGlobalDerivativeZ; }
+  LocalDerivative localDerivativeX() const { return mLocalDerivativeX; }
+  LocalDerivative localDerivativeY() const { return mLocalDerivativeY; }
+  LocalDerivative localDerivativeZ() const { return mLocalDerivativeZ; }
+  o2::math_utils::Point3D<double> getLocalMeasuredPosition() const
+  {
+    return mLocalMeasuredPosition;
+  }
+  o2::math_utils::Point3D<double> getMeasuredPositionSigma() const
+  {
+    return mMeasuredPositionSigma;
+  }
 
   void resetAlignPoint();
   void resetDerivatives();

@@ -102,6 +102,22 @@ void AlignPointHelper::computeGlobalDerivatives()
 }
 
 //__________________________________________________________________________
+Int_t AlignPointHelper::getSensorId() const
+{
+  if (mChipHelper == nullptr) {
+    LOG(error) << "AlignPointHelper::getSensorId() - "
+               << "no AlignSensorHelper found !";
+    return 0;
+  }
+  if (!mIsAlignPointSet) {
+    LOG(error) << "AlignPointHelper::getSensorId() - "
+               << "no align point coordinates set !";
+    return 0;
+  }
+  return mChipHelper->chipIndexInMft();
+}
+
+//__________________________________________________________________________
 void AlignPointHelper::resetAlignPoint()
 {
   mGlobalRecoPosition.SetXYZ(0., 0., 0.);
