@@ -112,16 +112,19 @@ class AlignPointHelper
   LocalDerivative localDerivativeY() { return mLocalDerivativeY; }
   LocalDerivative localDerivativeZ() { return mLocalDerivativeZ; }
 
-  void reset();
+  void resetAlignPoint();
+  void resetDerivatives();
+  void resetTrackInitialParam();
 
   void recordTrackInitialParam(o2::mft::TrackMFT mftTrack);
   void setGlobalRecoPosition(o2::mft::TrackMFT mftTrack);
   void setLocalMeasuredPosition(o2::BaseCluster<float> mftCluster);
 
  protected:
-  bool mIsTrackInitialParamSet = false; ///< boolean to indicate if the initial track parameters are recorded
-  bool mIsLocalDerivativeDone = false;  ///< boolean to indicate if the local derivatives computation is done
+  bool mIsAlignPointSet = false;        ///< boolean to indicate if mGlobalRecoPosition and mLocalMeasuredPosition are set
   bool mIsGlobalDerivativeDone = false; ///< boolean to indicate if the global derivatives computaion is done
+  bool mIsLocalDerivativeDone = false;  ///< boolean to indicate if the local derivatives computation is done
+  bool mIsTrackInitialParamSet = false; ///< boolean to indicate if the initial track parameters are recorded
 
   o2::mft::GeometryTGeo* mGeometry = nullptr; ///< MFT geometry
   std::unique_ptr<o2::mft::AlignSensorHelper> mChipHelper = nullptr;

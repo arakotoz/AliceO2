@@ -23,9 +23,10 @@ ClassImp(o2::mft::AlignPointHelper);
 
 //__________________________________________________________________________
 AlignPointHelper::AlignPointHelper(GeometryTGeo* geom)
-  : mIsTrackInitialParamSet(false),
-    mIsLocalDerivativeDone(false),
+  : mIsAlignPointSet(false),
     mIsGlobalDerivativeDone(false),
+    mIsLocalDerivativeDone(false),
+    mIsTrackInitialParamSet(false),
     mGeometry(geom),
     mGlobalRecoPosition(0., 0., 0.),
     mLocalMeasuredPosition(0., 0., 0.)
@@ -54,6 +55,11 @@ void AlignPointHelper::computeLocalDerivatives()
                << "no initial track param found !";
     return;
   }
+  if (!mIsAlignPointSet) {
+    LOG(error) << "AlignPointHelper::computeLocalDerivatives() - "
+               << "no align point coordinates set !";
+    return;
+  }
   bool success = true;
   success &= computeLocalDerivativeX();
   success &= computeLocalDerivativeY();
@@ -75,6 +81,11 @@ void AlignPointHelper::computeGlobalDerivatives()
                << "no initial track param found !";
     return;
   }
+  if (!mIsAlignPointSet) {
+    LOG(error) << "AlignPointHelper::computeLocalDerivatives() - "
+               << "no align point coordinates set !";
+    return;
+  }
   bool success = true;
   success &= computeGlobalDerivativeX();
   success &= computeGlobalDerivativeY();
@@ -83,15 +94,32 @@ void AlignPointHelper::computeGlobalDerivatives()
 }
 
 //__________________________________________________________________________
-void AlignPointHelper::reset()
+void AlignPointHelper::resetAlignPoint()
+{
+  mGlobalRecoPosition.SetXYZ(0., 0., 0.);
+  mLocalMeasuredPosition.SetXYZ(0., 0., 0.);
+
+  mIsAlignPointSet = false;
+}
+
+//__________________________________________________________________________
+void AlignPointHelper::resetDerivatives()
 {
   mLocalDerivativeX.reset();
   mLocalDerivativeY.reset();
   mLocalDerivativeZ.reset();
+
   mGlobalDerivativeX.reset();
   mGlobalDerivativeY.reset();
   mGlobalDerivativeZ.reset();
 
+  mIsLocalDerivativeDone = false;
+  mIsGlobalDerivativeDone = false;
+}
+
+//__________________________________________________________________________
+void AlignPointHelper::resetTrackInitialParam()
+{
   mTrackInitialParam.X0 = 0.;
   mTrackInitialParam.Y0 = 0.;
   mTrackInitialParam.Z0 = 0.;
@@ -99,8 +127,6 @@ void AlignPointHelper::reset()
   mTrackInitialParam.Ty = 0.;
 
   mIsTrackInitialParamSet = false;
-  mIsLocalDerivativeDone = false;
-  mIsGlobalDerivativeDone = false;
 }
 
 //__________________________________________________________________________
@@ -120,9 +146,9 @@ void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT mftTrack)
 //__________________________________________________________________________
 void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT mftTrack)
 {
-  mGlobalRecoPosition.SetX(mftTrack.getX());
-  mGlobalRecoPosition.SetY(mftTrack.getY());
-  mGlobalRecoPosition.SetZ(mftTrack.getZ());
+  mIsAlignPointSet = false;
+  mGlobalRecoPosition.SetXYZ(mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
+  mIsAlignPointSet = true;
 }
 
 //__________________________________________________________________________
@@ -131,7 +157,7 @@ void AlignPointHelper::setLocalMeasuredPosition(o2::BaseCluster<float> mftCluste
   o2::math_utils::Point3D<double> gloXYZ(
     mftCluster.getX(), mftCluster.getY(), mftCluster.getZ());
   mLocalMeasuredPosition = mGeometry->getMatrixL2G(mftCluster.getSensorID()).ApplyInverse(gloXYZ);
-  mChipHelper->setSensor(mftCluster.getSensorID());
+  mIsAlignPointSet &= mChipHelper->setSensor(mftCluster.getSensorID());
 }
 
 //__________________________________________________________________________
