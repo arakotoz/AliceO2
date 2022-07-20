@@ -11,10 +11,17 @@
 
 /// @file Alignment.cxx
 
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#include <TString.h>
+
 #include "Framework/InputSpec.h"
 #include "Framework/Logger.h"
 #include <Framework/InputRecord.h>
 #include "MFTAlignment/AlignPointHelper.h"
+#include "MFTAlignment/AlignSensorHelper.h"
 #include "MFTAlignment/Alignment.h"
 #include "MFTTracking/IOUtils.h"
 #include "MFTBase/Geometry.h"
@@ -45,11 +52,11 @@ Alignment::Alignment(bool saveRecordsToFile)
 {
   mMillepede = std::make_unique<MillePede2>();
 
-  GeometryTGeo* geom = GeometryTGeo::Instance();
-  geom->fillMatrixCache(
+  mGeometry = GeometryTGeo::Instance();
+  mGeometry->fillMatrixCache(
     o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
                              o2::math_utils::TransformType::L2G));
-  mAlignPoint = std::make_unique<AlignPointHelper>(geom);
+  mAlignPoint = std::make_unique<AlignPointHelper>(mGeometry);
 
   // default allowed variations w.r.t. global system coordinates
   mAllowVar[0] = 0.5;  // x (cm)
@@ -169,6 +176,24 @@ void Alignment::processRecoTracks()
 //__________________________________________________________________________
 bool Alignment::globalFit()
 {
+  mMillepede->GlobalFit(mAlignParam, mAlignParamErrors, mAlignParamPulls);
+
+  LOGF(info, "Alignment: done fitting global parameters");
+  LOGF(info, "sensor info, dx (cm), dy (cm), dz (cm), dRz (rad)");
+
+  AlignSensorHelper chipHelper(mGeometry);
+  bool wSymName = false;
+
+  for (int chipId = 0; chipId < mNumberOfSensors; chipId++) {
+    chipHelper.setSensorOnlyInfo(chipId);
+    std::stringstream name = chipHelper.getSensorFullName(wSymName);
+    LOGF(info, "%s, %.3e, %.3e, %.3e, %.3e",
+         name.str().c_str(),
+         mAlignParam[chipId * mNDofPerSensor + 0],
+         mAlignParam[chipId * mNDofPerSensor + 1],
+         mAlignParam[chipId * mNDofPerSensor + 3],
+         mAlignParam[chipId * mNDofPerSensor + 2]);
+  }
 }
 
 //__________________________________________________________________________

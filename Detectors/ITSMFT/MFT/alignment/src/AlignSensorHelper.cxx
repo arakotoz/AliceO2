@@ -11,6 +11,11 @@
 
 /// @file AlignSensorHelper.cxx
 
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+
 #include <Rtypes.h>
 #include "Framework/Logger.h"
 #include "MFTAlignment/AlignSensorHelper.h"
@@ -24,7 +29,10 @@ AlignSensorHelper::AlignSensorHelper(o2::mft::GeometryTGeo* geom)
   : mChipIndexOnLadder(0),
     mChipIndexInMft(0),
     mLadderInHalfDisk(0),
+    mConnector(0),
+    mTransceiver(0),
     mLayer(0),
+    mZone(0),
     mDisk(0),
     mHalf(0),
     mChipUniqueId(0),
@@ -54,24 +62,52 @@ void AlignSensorHelper::setGeometry(o2::mft::GeometryTGeo* geom)
 }
 
 //__________________________________________________________________________
-bool AlignSensorHelper::setSensor(const int chipIndex)
+void AlignSensorHelper::setSensorOnlyInfo(const int chipIndex)
 {
-  resetSensorTransformInfo();
-
   if (chipIndex < mNumberOfSensors) {
     o2::itsmft::MFTChipMappingData chipMappingData = (mChipMapping.getChipMappingData())[chipIndex];
     mChipIndexOnLadder = (UShort_t)chipMappingData.chipOnModule;
     mChipIndexInMft = chipMappingData.globalChipSWID;
+    mConnector = (UShort_t)chipMappingData.connector;
+    mTransceiver = (UShort_t)chipMappingData.cable;
+    mZone = (UShort_t)chipMappingData.zone;
     mLayer = (UShort_t)chipMappingData.layer;
     mDisk = (UShort_t)chipMappingData.disk;
     mHalf = (UShort_t)chipMappingData.half;
   } else {
-    LOGF(error, "AlignSensorHelper::setSensor() - chip index %d >= %d",
+    LOGF(error, "AlignSensorHelper::setSensorOnlyInfo() - chip index %d >= %d",
          chipIndex, mNumberOfSensors);
   }
 
   setSensorUid(chipIndex);
   setSymName();
+}
+
+//__________________________________________________________________________
+std::stringstream AlignSensorHelper::getSensorFullName(bool wSymName)
+{
+  std::stringstream name;
+  if (mGeometry == nullptr) {
+    wSymName = false;
+  }
+  name << "h " << mHalf << " d " << mDisk << " layer " << mLayer
+       << " z " << mZone << " lr " << std::setw(3) << mLadderInHalfDisk
+       << " con " << std::setw(1) << mConnector
+       << " tr " << std::setw(2) << mTransceiver
+       << " sr " << std::setw(1) << mChipIndexOnLadder
+       << " iChip " << std::setw(3) << mChipIndexInMft
+       << " uid " << mChipUniqueId;
+  if (wSymName) {
+    name << " " << mGeoSymbolicName;
+  }
+  return name;
+}
+
+//__________________________________________________________________________
+bool AlignSensorHelper::setSensor(const int chipIndex)
+{
+  resetSensorTransformInfo();
+  setSensorOnlyInfo(chipIndex);
   extractSensorTransform();
   return mIsTransformExtracted;
 }

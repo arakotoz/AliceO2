@@ -36,6 +36,7 @@ namespace mft
 {
 
 class AlignPointHelper;
+class GeometryTGeo;
 
 class Alignment
 {
@@ -88,6 +89,10 @@ class Alignment
   gsl::span<const unsigned char>::iterator pattIt;
   std::vector<o2::BaseCluster<float>> mMFTClustersGlobal;
   std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;
+  Double_t* mAlignParam = nullptr;
+  Double_t* mAlignParamErrors = nullptr;
+  Double_t* mAlignParamPulls = nullptr;
+  o2::mft::GeometryTGeo* mGeometry = nullptr;
 
   /// \brief set array of local derivatives
   bool setLocalDerivative(Int_t index, Double_t value);

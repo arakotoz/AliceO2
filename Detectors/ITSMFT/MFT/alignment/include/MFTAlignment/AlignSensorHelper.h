@@ -16,6 +16,8 @@
 #ifndef ALICEO2_MFT_ALIGN_SENSOR_HELPER_H
 #define ALICEO2_MFT_ALIGN_SENSOR_HELPER_H
 
+#include <sstream>
+
 #include <TGeoMatrix.h>
 #include <TString.h>
 #include <Rtypes.h>
@@ -49,6 +51,9 @@ class AlignSensorHelper
   /// \brief set the studied sensor
   bool setSensor(const int chipIndex);
 
+  /// \brief set the studied sensor
+  void setSensorOnlyInfo(const int chipIndex);
+
   /// \brief return sensor index within the ladder [0, 4]
   Int_t chipIndexOnLadder() const { return mChipIndexOnLadder; }
 
@@ -67,8 +72,20 @@ class AlignSensorHelper
   /// \brief return the layer number to which belongs the sensor
   Int_t layer() const { return mLayer; }
 
+  /// \brief return the zone to which belongs the sensor
+  Int_t zone() const { return mZone; }
+
+  /// \brief return the connector to which the ladder is plugged
+  Int_t connector() const { return mConnector; }
+
+  /// \brief return the transceiver on the RU for this sensor
+  Int_t transceiver() const { return mTransceiver; }
+
   /// \brief return the ALICE global unique id of the sensor
   Int_t sensorUid() const { return mChipUniqueId; }
+
+  /// \brief return the geo symbolic name for this sensor
+  TString geoSymbolicName() { return mGeoSymbolicName; }
 
   /// \brief return the x component of the translation in the sensor transform
   double translateX() const { return mTranslation.X(); }
@@ -103,6 +120,9 @@ class AlignSensorHelper
   /// \brief return the status of the sensor transform extraction
   bool isTransformExtracted() const { return mIsTransformExtracted; }
 
+  /// \brief return a stringstream filled with the sensor info
+  std::stringstream getSensorFullName(bool wSymName = true);
+
  protected:
   static o2::itsmft::ChipMappingMFT mChipMapping;                   ///< MFT chip <-> ladder, layer, disk, half mapping
   o2::mft::GeometryTGeo* mGeometry = nullptr;                       ///< MFT geometry
@@ -110,7 +130,10 @@ class AlignSensorHelper
   Int_t mChipIndexOnLadder = 0;                                     ///< sensor index within the ladder [0, 4]
   Int_t mChipIndexInMft = 0;                                        ///< sensor sw index within the MFT [0, 935]
   Int_t mLadderInHalfDisk = 0;                                      ///< ladder geo index in this half MFT disk [0, 33]
+  Int_t mConnector = 0;                                             ///< connector index to which the ladder is plugged in the zone [0, 4]
+  Int_t mTransceiver = 0;                                           ///< transceiver id to which the sensor is connected in the zone [0, 24]
   Int_t mLayer = 0;                                                 ///< layer id [0, 9]
+  Int_t mZone = 0;                                                  ///< zone id [0,3]
   Int_t mDisk = 0;                                                  ///< disk id [0, 4]
   Int_t mHalf = 0;                                                  ///< half id [0, 1]
   Int_t mChipUniqueId = 0;                                          ///< ALICE global unique id of the sensor
