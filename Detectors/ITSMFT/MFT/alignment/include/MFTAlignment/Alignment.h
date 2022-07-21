@@ -29,6 +29,7 @@
 #include "ReconstructionDataFormats/BaseCluster.h"
 #include "MFTAlignment/MillePedeRecord.h"
 #include "MFTAlignment/MillePede2.h"
+#include "MFTAlignment/AlignConfig.h"
 
 namespace o2
 {
@@ -41,14 +42,27 @@ class GeometryTGeo;
 class Alignment
 {
  public:
-  Alignment() = delete;
-  Alignment(bool saveRecordsToFile);
+  Alignment() = default;
   ~Alignment() = default;
 
   void init();
+
   void setClusterDictionary(const o2::itsmft::TopologyDictionary* d) { mDictionary = d; }
   void setRunNumber(const int value) { mRunNumber = value; }
-  void setBz(float bz) { mBz = bz; }
+  void setBz(const float bz) { mBz = bz; }
+  void setSaveTrackRecordToFile(const bool choice) { mSaveTrackRecordToFile = choice; }
+  void setChi2CutNStdDev(const Int_t value) { mChi2CutNStdDev = value; }
+  void setResidualCutInitial(const Double_t value) { mResCutInitial = value; }
+  void setResidualCut(const Double_t value) { mResCut = value; }
+  void setMinNumberClusterCut(const int value) { mMinNumberClusterCut = value; }
+  void setAllowedVariationDeltaX(const int value) { mAllowVar[0] = value; }
+  void setAllowedVariationDeltaY(const int value) { mAllowVar[1] = value; }
+  void setAllowedVariationDeltaZ(const int value) { mAllowVar[3] = value; }
+  void setAllowedVariationDeltaRz(const int value) { mAllowVar[2] = value; }
+
+  /// \brief set pointer to geometry that should already have done fillMatrixCache()
+  void setGeometry(const o2::mft::GeometryTGeo* geom) { mGeometry = geom; }
+
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
   void processRecoTracks();
   bool globalFit();
@@ -68,7 +82,8 @@ class Alignment
   static constexpr int mNumberOfGlobalParam = mNDofPerSensor * mNumberOfSensors; ///< Number of alignment (= global) parameters
   Double_t mGlobalDerivatives[mNumberOfGlobalParam];                             ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
   Double_t mLocalDerivatives[mNumberOfTrackParam];                               ///< Array of local derivatives {dX0, dTx, dY0, dTz}
-  std::array<Double_t, mNDofPerSensor> mAllowVar;                                ///< "Encouraged" variation for degrees of freedom
+  std::array<Double_t, mNDofPerSensor> mAllowVar;                                ///< "Encouraged" variation for degrees of freedom {dx, dy, dRz, dz}
+  double mStartFac = 256;                                                        ///< Initial value for chi2 cut (if > 1, iterations in Millepede are turned on)
   Int_t mChi2CutNStdDev = 3;                                                     ///< Number of standard deviations for chi2 cut
   Double_t mResCutInitial = 100.;                                                ///< Cut on residual on first iteration
   Double_t mResCut = 100.;                                                       ///< Cut on residual for other iterations
@@ -89,10 +104,17 @@ class Alignment
   gsl::span<const unsigned char>::iterator pattIt;
   std::vector<o2::BaseCluster<float>> mMFTClustersGlobal;
   std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;
+
+  // arrays used to store the results of the global fit
   Double_t* mAlignParam = nullptr;
   Double_t* mAlignParamErrors = nullptr;
   Double_t* mAlignParamPulls = nullptr;
-  o2::mft::GeometryTGeo* mGeometry = nullptr;
+
+  // geometry must be initialised outside of Alignment
+  // and used to set Alignment pointer to geometry
+  const o2::mft::GeometryTGeo* mGeometry = nullptr;
+
+  bool mIsInitDone = false;
 
   /// \brief set array of local derivatives
   bool setLocalDerivative(Int_t index, Double_t value);

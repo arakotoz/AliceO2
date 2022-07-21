@@ -25,7 +25,7 @@ using namespace o2::mft;
 ClassImp(o2::mft::AlignSensorHelper);
 
 //__________________________________________________________________________
-AlignSensorHelper::AlignSensorHelper(o2::mft::GeometryTGeo* geom)
+AlignSensorHelper::AlignSensorHelper(const o2::mft::GeometryTGeo* geom)
   : mChipIndexOnLadder(0),
     mChipIndexInMft(0),
     mLadderInHalfDisk(0),
@@ -53,7 +53,7 @@ AlignSensorHelper::AlignSensorHelper(o2::mft::GeometryTGeo* geom)
 }
 
 //__________________________________________________________________________
-void AlignSensorHelper::setGeometry(o2::mft::GeometryTGeo* geom)
+void AlignSensorHelper::setGeometry(const o2::mft::GeometryTGeo* geom)
 {
   if (mGeometry == nullptr) {
     mGeometry = geom;

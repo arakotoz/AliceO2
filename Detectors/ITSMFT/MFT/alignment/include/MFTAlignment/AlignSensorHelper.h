@@ -40,13 +40,13 @@ class AlignSensorHelper
   AlignSensorHelper() = delete;
 
   /// \brief constructor with a pointer to the geometry
-  AlignSensorHelper(o2::mft::GeometryTGeo* geom);
+  AlignSensorHelper(const o2::mft::GeometryTGeo* geom);
 
   /// \brief default destructor
   ~AlignSensorHelper() = default;
 
   /// \brief set pointer to geometry that should already have done fillMatrixCache()
-  void setGeometry(o2::mft::GeometryTGeo* geom);
+  void setGeometry(const o2::mft::GeometryTGeo* geom);
 
   /// \brief set the studied sensor
   bool setSensor(const int chipIndex);
@@ -125,7 +125,7 @@ class AlignSensorHelper
 
  protected:
   static o2::itsmft::ChipMappingMFT mChipMapping;                   ///< MFT chip <-> ladder, layer, disk, half mapping
-  o2::mft::GeometryTGeo* mGeometry = nullptr;                       ///< MFT geometry
+  const o2::mft::GeometryTGeo* mGeometry = nullptr;                 ///< MFT geometry
   static constexpr int mNumberOfSensors = mChipMapping.getNChips(); ///< Total number of sensors (detection elements) in the MFT
   Int_t mChipIndexOnLadder = 0;                                     ///< sensor index within the ladder [0, 4]
   Int_t mChipIndexInMft = 0;                                        ///< sensor sw index within the MFT [0, 935]

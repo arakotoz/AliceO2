@@ -18,7 +18,7 @@
 
 #include "Framework/DataProcessorSpec.h"
 #include "Framework/Task.h"
-#include "MFTCalibration/Alignment.h"
+#include "MFTAlignment/Alignment.h"
 #include "TStopwatch.h"
 #include "DetectorsBase/GRPGeomHelper.h"
 

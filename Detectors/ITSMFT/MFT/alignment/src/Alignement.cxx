@@ -34,13 +34,14 @@ using namespace o2::mft;
 ClassImp(o2::mft::Alignment);
 
 //__________________________________________________________________________
-Alignment::Alignment(bool saveRecordsToFile)
+Alignment::Alignment()
   : mRunNumber(0),
     mBz(0),
     mNumberTFs(0),
     mCounterLocalEquationFailed(0),
     mCounterSkippedTracks(0),
     mCounterUsedTracks(0),
+    mStartFac(256),
     mChi2CutNStdDev(3),
     mResCutInitial(100.),
     mResCut(100.),
@@ -48,38 +49,59 @@ Alignment::Alignment(bool saveRecordsToFile)
     mWeightRecord(1.),
     mSaveTrackRecordToFile(false),
     mMilleRecordsFileName("mft_mille_records.root"),
-    mMilleConstraintsRecFileName("mft_mille_constraints.root")
+    mMilleConstraintsRecFileName("mft_mille_constraints.root"),
+    mIsInitDone(false)
 {
   mMillepede = std::make_unique<MillePede2>();
-
-  mGeometry = GeometryTGeo::Instance();
-  mGeometry->fillMatrixCache(
-    o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
-                             o2::math_utils::TransformType::L2G));
-  mAlignPoint = std::make_unique<AlignPointHelper>(mGeometry);
-
   // default allowed variations w.r.t. global system coordinates
-  mAllowVar[0] = 0.5;  // x (cm)
-  mAllowVar[1] = 0.5;  // y (cm)
+  mAllowVar[0] = 0.5;  // delta translation in x (cm)
+  mAllowVar[1] = 0.5;  // delta translation in y (cm)
   mAllowVar[2] = 0.01; // rotation angle Rz around z-axis (rad)
-  mAllowVar[3] = 0.5;  // z (cm)
+  mAllowVar[3] = 0.5;  // delta translation in z (cm)
 }
 
 //__________________________________________________________________________
 void Alignment::init()
 {
+  if (mIsInitDone)
+    return;
+  if (mGeometry == nullptr) {
+    LOGF(fatal, "Alignment::init() failed because no geometry is defined");
+    mIsInitDone = false;
+    return;
+  }
+  mAlignPoint = std::make_unique<AlignPointHelper>(mGeometry);
   mMillepede->InitMille(mNumberOfGlobalParam,
                         mNumberOfTrackParam,
                         mChi2CutNStdDev,
                         mResCut,
                         mResCutInitial);
-  // filenames for the processed data and constraints records
+  // filenames for the processed tracks and constraints records
   mMillepede->SetDataRecFName(mMilleRecordsFileName.Data());
   mMillepede->SetConsRecFName(mMilleConstraintsRecFileName.Data());
+
   if (mSaveTrackRecordToFile) {
     mMillepede->InitDataRecStorage(kFALSE);
   }
+
+  LOGF(info,
+       "Allowed variation: dx %.3f, dy %.3f, dz %.3f, dRz %.4f",
+       mAllowVar[0], mAllowVar[1], mAllowVar[3], mAllowVar[2]);
+
+  // set allowed variations for all parameters
+  for (int chipId = 0; chipId < mNumberOfSensors; ++chipId) {
+    for (Int_t iPar = 0; iPar < mNDofPerSensor; ++iPar) {
+      mMillepede->SetParSigma(chipId * mNDofPerSensor + iPar, mAllowVar[iPar]);
+    }
+  }
+
+  // set iterations
+  if (mStartFac > 1) {
+    mMillepede->SetIterations(mStartFac);
+  }
+
   LOGF(info, "Alignment init done");
+  mIsInitDone = true;
 }
 
 //__________________________________________________________________________
@@ -106,6 +128,11 @@ void Alignment::processTimeFrame(o2::framework::ProcessingContext& ctx)
 //__________________________________________________________________________
 void Alignment::processRecoTracks()
 {
+  if (!mIsInitDone) {
+    LOGF(fatal, "Alignment::processRecoTracks() aborted because init was not done!");
+    return;
+  }
+
   for (auto oneTrack : mMFTTracks) { // track loop
 
     // Skip the track if not enough clusters
@@ -176,6 +203,11 @@ void Alignment::processRecoTracks()
 //__________________________________________________________________________
 bool Alignment::globalFit()
 {
+  if (!mIsInitDone) {
+    LOGF(fatal, "Alignment::globalFit() aborted because init was not done!");
+    return;
+  }
+
   mMillepede->GlobalFit(mAlignParam, mAlignParamErrors, mAlignParamPulls);
 
   LOGF(info, "Alignment: done fitting global parameters");

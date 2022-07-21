@@ -24,7 +24,7 @@ using namespace o2::mft;
 ClassImp(o2::mft::AlignPointHelper);
 
 //__________________________________________________________________________
-AlignPointHelper::AlignPointHelper(GeometryTGeo* geom)
+AlignPointHelper::AlignPointHelper(const GeometryTGeo* geom)
   : mIsAlignPointSet(false),
     mIsGlobalDerivativeDone(false),
     mIsLocalDerivativeDone(false),

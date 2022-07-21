@@ -94,7 +94,7 @@ class AlignPointHelper
   AlignPointHelper() = delete;
 
   /// \brief constructor with a pointer to the geometry
-  AlignPointHelper(o2::mft::GeometryTGeo* geom);
+  AlignPointHelper(const o2::mft::GeometryTGeo* geom);
 
   ~AlignPointHelper() = default;
 
@@ -140,7 +140,7 @@ class AlignPointHelper
   bool mIsLocalDerivativeDone = false;  ///< boolean to indicate if the local derivatives computation is done
   bool mIsTrackInitialParamSet = false; ///< boolean to indicate if the initial track parameters are recorded
 
-  o2::mft::GeometryTGeo* mGeometry = nullptr; ///< MFT geometry
+  const o2::mft::GeometryTGeo* mGeometry = nullptr; ///< MFT geometry
   std::unique_ptr<o2::mft::AlignSensorHelper> mChipHelper = nullptr;
 
   LocalDerivative mLocalDerivativeX;

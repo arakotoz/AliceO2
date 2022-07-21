@@ -15,6 +15,9 @@
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/CCDBParamSpec.h"
 #include "Framework/Logger.h"
+#include "TGeoGlobalMagField.h"
+#include "MFTBase/GeometryTGeo.h"
+
 #include "MFTWorkflow/AlignmentSpec.h"
 #include "CommonUtils/NameConf.h"
 
@@ -29,13 +32,22 @@ namespace mft
 void AlignmentSpec::init(InitContext& ic)
 {
   o2::base::GRPGeomHelper::instance().setRequest(mGGCCDBRequest);
-  mAlignment = std::make_unique<o2::mft::Alignment>(mSaveTrackRecordToFile);
+
+  auto& alignConfigParam = o2::mft::AlignConfig::Instance();
+  mAlignment = std::make_unique<o2::mft::Alignment>();
+  mAlignment->setSaveTrackRecordToFile(mSaveTrackRecordToFile);
+  mAlignment->setChi2CutNStdDev(alignConfigParam.chi2CutNStdDev);
+  mAlignment->setResidualCutInitial(alignConfigParam.residualCutInitial);
+  mAlignment->setResidualCut(alignConfigParam.residualCut);
+  mAlignment->setAllowedVariationDeltaX(alignConfigParam.allowedVarDeltaX);
+  mAlignment->setAllowedVariationDeltaY(alignConfigParam.allowedVarDeltaY);
+  mAlignment->setAllowedVariationDeltaZ(alignConfigParam.allowedVarDeltaZ);
+  mAlignment->setAllowedVariationDeltaRz(alignConfigParam.allowedVarDeltaRz);
   for (int sw = 0; sw < NStopWatches; sw++) {
     mTimer[sw].Stop();
     mTimer[sw].Reset();
   }
   mTimer[SWTot].Start(false);
-  mAlignment->init();
 }
 
 //_____________________________________________________________
@@ -89,11 +101,18 @@ void AlignmentSpec::updateTimeDependentParams(ProcessingContext& pc)
     initOnceDone = true;
     pc.inputs().get<o2::itsmft::TopologyDictionary*>("cldict"); // just to trigger the finaliseCCDB
 
+    o2::mft::GeometryTGeo* geom = o2::mft::GeometryTGeo::Instance();
+    geom->fillMatrixCache(o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                                                   o2::math_utils::TransformType::T2GRot,
+                                                   o2::math_utils::TransformType::T2G));
+    mAlignment->setGeometry(geom);
+    auto& alignConfigParam = o2::mft::AlignConfig::Instance();
     auto field = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField());
     double centerMFT[3] = {0, 0, -61.4}; // Field at center of MFT
     auto Bz = field->getBz(centerMFT);
     LOG(info) << "Setting MFT Assessment Bz = " << Bz;
     mAlignment->setBz(Bz);
+    mAlignment->setMinNumberClusterCut(alignConfigParam.minPoints[o2::mft::AlignConfig::Collision]);
     mAlignment->init();
   }
 }
