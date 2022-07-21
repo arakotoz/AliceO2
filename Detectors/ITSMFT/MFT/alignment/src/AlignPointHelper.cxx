@@ -109,8 +109,8 @@ Int_t AlignPointHelper::getSensorId() const
     return 0;
   }
   if (!mIsAlignPointSet) {
-    LOG(error,
-        "AlignPointHelper::getSensorId() - no align point coordinates set !");
+    LOGF(error,
+         "AlignPointHelper::getSensorId() - no align point coordinates set !");
     return 0;
   }
   return mChipHelper->chipIndexInMft();
@@ -269,8 +269,8 @@ bool AlignPointHelper::computeGlobalDerivativeX()
 
     return true;
   } else {
-    LOG(error,
-        "AlignPointHelper::computeGlobalDerivativeX() - no sensor transform found !");
+    LOGF(error,
+         "AlignPointHelper::computeGlobalDerivativeX() - no sensor transform found !");
     return false;
   }
 }
