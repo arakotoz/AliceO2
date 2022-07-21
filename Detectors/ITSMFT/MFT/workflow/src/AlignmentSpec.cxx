@@ -15,6 +15,7 @@
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/CCDBParamSpec.h"
 #include "Framework/Logger.h"
+#include "Field/MagneticField.h"
 #include "TGeoGlobalMagField.h"
 #include "MFTBase/GeometryTGeo.h"
 
