@@ -85,7 +85,7 @@ void AlignmentSpec::endOfStream(o2::framework::EndOfStreamContext& ec)
 void AlignmentSpec::sendOutput(DataAllocator& output)
 {
   TObjArray objar;
-  mAlignment->getHistos(objar);
+  // mAlignment->getHistos(objar);
 
   output.snapshot(Output{"MFT", "MFTASSESSMENT", 0, Lifetime::Sporadic}, objar);
 
