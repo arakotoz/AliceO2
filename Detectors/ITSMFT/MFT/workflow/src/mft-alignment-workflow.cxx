@@ -41,6 +41,6 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   LOG(info) << "MFT Alignment: enable-millerecords-output = " << configcontext.options().get<std::string>("enable-millerecords-output");
 
   WorkflowSpec specs;
-  specs.emplace_back(o2::mft::getMFTAssessmentSpec(saveRecordsToFile));
+  specs.emplace_back(o2::mft::getAlignmentSpec(saveRecordsToFile));
   return specs;
 }

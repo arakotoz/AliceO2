@@ -201,7 +201,7 @@ void Alignment::processRecoTracks()
 }
 
 //__________________________________________________________________________
-bool Alignment::globalFit()
+void Alignment::globalFit()
 {
   if (!mIsInitDone) {
     LOGF(fatal, "Alignment::globalFit() aborted because init was not done!");

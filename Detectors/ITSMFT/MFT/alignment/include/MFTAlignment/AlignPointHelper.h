@@ -20,13 +20,14 @@
 #include "MFTBase/Geometry.h"
 #include "MFTBase/GeometryTGeo.h"
 #include "ReconstructionDataFormats/BaseCluster.h"
+#include "MFTAlignment/AlignSensorHelper.h"
+#include "MFTBase/GeometryTGeo.h"
 
 namespace o2
 {
 namespace mft
 {
 
-class AlignSensorHelper;
 class TrackMFT;
 
 /// \class GlobalDerivative

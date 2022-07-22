@@ -18,6 +18,7 @@
 #include "Field/MagneticField.h"
 #include "TGeoGlobalMagField.h"
 #include "MFTBase/GeometryTGeo.h"
+#include "MFTAlignment/AlignConfig.h"
 
 #include "MFTWorkflow/AlignmentSpec.h"
 #include "CommonUtils/NameConf.h"
@@ -158,7 +159,7 @@ DataProcessorSpec getAlignmentSpec(bool saveRecordsToFile)
     "mft-alignment",
     inputs,
     outputs,
-    AlgorithmSpec{adaptFromTask<o2::mft::AlignmentSpec>(ggRequest)},
+    AlgorithmSpec{adaptFromTask<o2::mft::AlignmentSpec>(ggRequest, saveRecordsToFile)},
     Options{{}}};
 }
 

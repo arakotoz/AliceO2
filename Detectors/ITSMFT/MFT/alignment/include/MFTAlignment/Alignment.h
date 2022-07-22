@@ -29,20 +29,18 @@
 #include "ReconstructionDataFormats/BaseCluster.h"
 #include "MFTAlignment/MillePedeRecord.h"
 #include "MFTAlignment/MillePede2.h"
-#include "MFTAlignment/AlignConfig.h"
+#include "MFTAlignment/AlignPointHelper.h"
+#include "MFTBase/GeometryTGeo.h"
 
 namespace o2
 {
 namespace mft
 {
 
-class AlignPointHelper;
-class GeometryTGeo;
-
 class Alignment
 {
  public:
-  Alignment() = default;
+  Alignment();
   ~Alignment() = default;
 
   void init();
@@ -65,7 +63,7 @@ class Alignment
 
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
   void processRecoTracks();
-  bool globalFit();
+  void globalFit();
   void printProcessTrackSummary();
 
  protected:
