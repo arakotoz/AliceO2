@@ -175,7 +175,7 @@ auto populateCacheWith(std::shared_ptr<CCDBFetcherHelper> const& helper,
                        DataAllocator& allocator) -> void
 {
   std::string ccdbMetadataPrefix = "ccdb-metadata-";
-  bool checkValidity = timingInfo.timeslice % helper->queryDownScaleRate == 0;
+  bool checkValidityGlo = timingInfo.timeslice % helper->queryDownScaleRate == 0;
   for (auto& route : helper->routes) {
     LOGP(debug, "Fetching object for route {}", route.matcher);
 
@@ -186,6 +186,7 @@ auto populateCacheWith(std::shared_ptr<CCDBFetcherHelper> const& helper,
     std::map<std::string, std::string> headers;
     std::string path = "";
     std::string etag = "";
+    bool checkValidity = checkValidityGlo;
     for (auto& meta : route.matcher.metadata) {
       if (meta.name == "ccdb-path") {
         path = meta.defaultValue.get<std::string>();
@@ -196,8 +197,12 @@ auto populateCacheWith(std::shared_ptr<CCDBFetcherHelper> const& helper,
         auto value = meta.defaultValue.get<std::string>();
         LOGP(debug, "Adding metadata {}: {} to the request", key, value);
         metadata[key] = value;
+      } else if (meta.name == "ccdb-query-rate") {
+        checkValidity = (timingInfo.timeslice % meta.defaultValue.get<int64_t>() == 0);
       }
     }
+    LOGP(debug, "checkValidity is {} for slice {} of {}", checkValidity, timingInfo.timeslice, path);
+
     const auto url2uuid = helper->mapURL2UUID.find(path);
     if (url2uuid != helper->mapURL2UUID.end()) {
       etag = url2uuid->second.etag;
@@ -306,6 +311,7 @@ AlgorithmSpec CCDBHelpers::fetchFromCCDB()
       });
 
       return adaptStateless([helper](DataTakingContext& dtc, DataAllocator& allocator, TimingInfo& timingInfo) {
+        char* err = nullptr;
         static Long64_t orbitResetTime = -1;
         static size_t lastTimeUsed = -1;
         if (timingInfo.creation & DataProcessingHeader::DUMMY_CREATION_TIME_OFFSET) {
@@ -315,10 +321,7 @@ AlgorithmSpec CCDBHelpers::fetchFromCCDB()
         lastTimeUsed = timingInfo.creation;
         // Fetch the CCDB object for the CTP
         {
-          // FIXME: this (the static) is needed because for now I cannot get
-          // a pointer for the cachedObject in the fetcher itself.
-          // Will be fixed at a later point.
-          std::string path = "CTP/Calib/OrbitReset";
+          const std::string path = "CTP/Calib/OrbitReset";
           std::map<std::string, std::string> metadata;
           std::map<std::string, std::string> headers;
           std::string etag;
@@ -369,14 +372,11 @@ AlgorithmSpec CCDBHelpers::fetchFromCCDB()
           LOGP(debug, "Reusing {} for {}", cacheId.value, path);
           helper->mapURL2UUID[path].cacheHit++;
           allocator.adoptFromCache(output, cacheId, header::gSerializationMethodNone);
-          // We need to find a way to get "v" also in this case.
-          // orbitResetTime = getOrbitResetTime(v);
-          // the outputBuffer was not used, can we destroy it?
 
           if (newOrbitResetTime != orbitResetTime) {
-            LOGP(debug, "Orbit reset time now at {} (was {})",
-                 newOrbitResetTime, orbitResetTime);
+            LOGP(debug, "Orbit reset time now at {} (was {})", newOrbitResetTime, orbitResetTime);
             orbitResetTime = newOrbitResetTime;
+            dtc.orbitResetTimeMUS = orbitResetTime;
           }
         }
 
@@ -386,6 +386,8 @@ AlgorithmSpec CCDBHelpers::fetchFromCCDB()
           if (notWarnedYet) {
             LOGP(warn, "timestamp {} for orbit {} and orbit reset time {} is well behind TF creation time {}, use the latter", timestamp, timingInfo.firstTForbit, orbitResetTime / 1000, timingInfo.creation);
             notWarnedYet = false;
+            // apparently the orbit reset time from the CTP object makes no sense (i.e. orbit was reset for this run w/o create an object, as it happens for technical runs)
+            dtc.orbitResetTimeMUS = 1000 * timingInfo.creation - timingInfo.firstTForbit * o2::constants::lhc::LHCOrbitNS / 1000;
           }
           timestamp = timingInfo.creation;
         }

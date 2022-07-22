@@ -82,6 +82,7 @@ struct TrackingParameters {
   unsigned long MaxMemory = 12000000000UL;
   std::array<float, 2> FitIterationMaxChi2 = {50, 20};
   bool UseTrackFollower = false;
+  bool FindShortTracks = false;
 };
 
 struct MemoryParameters {
@@ -110,6 +111,7 @@ struct VertexingParameters {
   float histPairCut = 0.04f;
   float tanLambdaCut = 0.002f; // tanLambda = deltaZ/deltaR
   int clusterContributorsCut = 16;
+  int maxTrackletsPerCluster = 2e3;
   int phiSpan = -1;
   int zSpan = -1;
 };

@@ -67,7 +67,7 @@ int TrackletsParser::Parse(std::array<uint32_t, o2::trd::constants::HBFBUFFERMAX
   mEventRecords = eventrecords;
   if (std::distance(start, end) > o2::trd::constants::MAXDATAPERLINK32) { // full event is all digits and 3 tracklets per mcm,
     //sanity check that the length of data to scan is less the possible maximum for a link
-    LOG(error) << "Attempt to parse a block of data for tracklets that is longer than a link can poossibly be : " << std::distance(start, end) << " should be less than : " << o2::trd::constants::MAXDATAPERLINK32 << " dumping this block of data.";
+    LOG(warn) << "Attempt to parse a block of data for tracklets that is longer than a link can poossibly be : " << std::distance(start, end) << " should be less than : " << o2::trd::constants::MAXDATAPERLINK32 << " dumping this block of data.";
     return -1;
   }
   if (eventrecord == nullptr) {
@@ -167,7 +167,7 @@ int TrackletsParser::Parse()
   int headertrackletcount = 0;
   bool ignoreDataTillTrackletEndMarker = false;             // used for when we need to dump the rest of the tracklet data.
   if (std::distance(mStartParse, mEndParse) > o2::trd::constants::MAXDATAPERLINK32) { // full event is all digits and 3 tracklets per mcm,
-    LOG(error) << "Attempt to parse a block of data for tracklets that is longer than a link can poossibly be : " << std::distance(mStartParse, mEndParse) << " should be less than : " << o2::trd::constants::MAXDATAPERLINK32 << " dumping this data.";
+    LOG(warn) << "Attempt to parse a block of data for tracklets that is longer than a link can poossibly be : " << std::distance(mStartParse, mEndParse) << " should be less than : " << o2::trd::constants::MAXDATAPERLINK32 << " dumping this data.";
     //sanity check that the length of data to scan is less the possible maximum for a link
     return -1;
   }
@@ -225,9 +225,6 @@ int TrackletsParser::Parse()
           TrackletHCHeader a;
           a.word = *word;
           printTrackletHCHeader(a);
-        }
-        if ((mFEEID.supermodule > 15) && mOptions[TRDFixSM1617Bit] && mTrackletHCHeaderState == 2) {
-          *word |= 1 << 12; //flip bit twelth bit for the tracklethcheader for the last 2 supermodules (bug/misconfiguration/broken/other) not sure why its like this yet, but it is.
         }
         //LOG(info) << "mFEEID : 0x"<< std::hex << mFEEID.word << " supermodule : 0x" << (int)mFEEID.supermodule << " tracklethcheader : 0x" << *word;
       }
@@ -305,7 +302,7 @@ int TrackletsParser::Parse()
           // take the header and this data word and build the underlying 64bit tracklet.
           int q0, q1, q2;
           if (mcmtrackletcount > 2) {
-            LOG(alarm) << "mcmtrackletcount is not in [0:2] count=" << mcmtrackletcount << " headertrackletcount=" << headertrackletcount << " something very wrong parsing the TrackletMCMData fields with data of : 0x" << std::hex << *word;
+            LOG(info) << "mcmtrackletcount is not in [0:2] count=" << mcmtrackletcount << " headertrackletcount=" << headertrackletcount << " something very wrong parsing the TrackletMCMData fields with data of : 0x" << std::hex << *word;
             incParsingError(TRDParsingTrackletInvalidTrackletCount);
             //this should have been caught above by the headertrackletcount to mcmtrackletcount
             ignoreDataTillTrackletEndMarker = true;
@@ -327,7 +324,6 @@ int TrackletsParser::Parse()
             int hcid = mDetector * 2 + mHalfChamberSide;
             if (mHeaderVerbose) {
               if (mTrackletHCHeaderState) {
-                //LOG(info) << "Tracklet HCID : " << hcid << " mDetector:" << mDetector << " robside:" << mHalfChamberSide << " " << mTrackletMCMHeader->padrow << ":" << mTrackletMCMHeader->col << " ---- " << mTrackletHCHeader->supermodule << ":" << mTrackletHCHeader->stack << ":" << mTrackletHCHeader->layer << ":" << mTrackletHCHeader->side << " rawhcheader : 0x" << std::hex << std::hex << mTrackletHCHeader->word;
                 LOG(info) << "Tracklet HCID : " << hcid << " mDetector:" << mDetector << " robside:" << mHalfChamberSide << " " << mTrackletMCMHeader->padrow << ":" << mTrackletMCMHeader->col << " ---- " << mTrackletHCHeader.supermodule << ":" << mTrackletHCHeader.stack << ":" << mTrackletHCHeader.layer << ":" << mTrackletHCHeader.side << " rawhcheader : 0x" << std::hex << std::hex << mTrackletHCHeader.word;
               } else {
                 LOG(info) << "Tracklet HCID : " << hcid << " mDetector:" << mDetector << " robside:" << mHalfChamberSide << " " << mTrackletMCMHeader->padrow << ":" << mTrackletMCMHeader->col;

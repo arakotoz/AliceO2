@@ -42,13 +42,14 @@ struct ResidualsContainer {
   ResidualsContainer& operator=(const ResidualsContainer& src) = delete;
   ~ResidualsContainer();
 
-  void init(const TrackResiduals* residualsEngine, std::string outputDir, bool wBinnedResid, bool wUnbinnedResid, bool wTrackData);
+  void init(const TrackResiduals* residualsEngine, std::string outputDir, bool wFile, bool wBinnedResid, bool wUnbinnedResid, bool wTrackData, int autosave);
   void fillStatisticsBranches();
   uint64_t getNEntries() const { return nResidualsTotal; }
 
   void fill(const o2::dataformats::TFIDInfo& ti, const std::pair<gsl::span<const o2::tpc::TrackData>, gsl::span<const TrackResiduals::UnbinnedResid>> data);
   void merge(ResidualsContainer* prev);
   void print();
+  void writeToFile(bool closeFileAfterwards);
 
   const TrackResiduals* trackResiduals{nullptr};
   std::array<std::vector<TrackResiduals::LocalResid>, SECTORSPERSIDE * SIDES> residuals{}; ///< local residuals per sector which are sent to the aggregator
@@ -72,13 +73,15 @@ struct ResidualsContainer {
   std::unique_ptr<TTree> treeOutStats{nullptr};
   std::unique_ptr<TTree> treeOutRecords{nullptr};
 
+  bool writeToRootFile{true};
   bool writeBinnedResid{false};
   bool writeUnbinnedResiduals{false};
   bool writeTrackData{false};
+  int autosaveInterval{0};
 
   uint64_t nResidualsTotal{0};
 
-  ClassDefNV(ResidualsContainer, 2);
+  ClassDefNV(ResidualsContainer, 3);
 };
 
 class ResidualAggregator final : public o2::calibration::TimeSlotCalibration<TrackResiduals::UnbinnedResid, ResidualsContainer>
@@ -100,6 +103,8 @@ class ResidualAggregator final : public o2::calibration::TimeSlotCalibration<Tra
   void setWriteBinnedResiduals(bool f) { mWriteBinnedResiduals = f; }
   void setWriteUnbinnedResiduals(bool f) { mWriteUnbinnedResiduals = f; }
   void setWriteTrackData(bool f) { mWriteTrackData = f; }
+  void setAutosaveInterval(int n) { mAutosaveInterval = n; }
+  void disableFileWriting() { mWriteOutput = false; }
 
   bool hasEnoughData(const Slot& slot) const final;
   void initOutput() final;
@@ -113,12 +118,14 @@ class ResidualAggregator final : public o2::calibration::TimeSlotCalibration<Tra
   std::string mMetaOutputDir{"none"}; ///< the directory where the meta data file is stored
   std::string mLHCPeriod{""};         ///< the LHC period to be put into the meta file
   bool mStoreMetaData{false};         ///< flag, whether meta file is supposed to be stored
+  bool mWriteOutput{true};            ///< if false, no output files will be written
   bool mWriteBinnedResiduals{false};  ///< flag, whether to write binned residuals to output file
   bool mWriteUnbinnedResiduals{false}; ///< flag, whether to write unbinned residuals to output file
   bool mWriteTrackData{false};         ///< flag, whether to write track data to output file
+  int mAutosaveInterval{0};            ///< if >0 then the output is written to a file for every n-th TF
   size_t mMinEntries;             ///< the minimum number of residuals required for the map creation (per voxel)
 
-  ClassDefOverride(ResidualAggregator, 2);
+  ClassDefOverride(ResidualAggregator, 3);
 };
 
 } // namespace tpc
