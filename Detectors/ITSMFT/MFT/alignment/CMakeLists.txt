@@ -14,7 +14,6 @@ o2_add_library(MFTAlignment
                 src/AlignPointHelper.cxx
                 src/AlignSensorHelper.cxx
                 src/Alignment.cxx
-                src/AlignmentSpec.cxx
                 src/MatrixSparse.cxx
                 src/MatrixSq.cxx
                 src/MillePede2.cxx
