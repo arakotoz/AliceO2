@@ -31,6 +31,7 @@
 #include "MFTAlignment/MillePede2.h"
 #include "MFTAlignment/AlignPointHelper.h"
 #include "MFTBase/GeometryTGeo.h"
+#include "DetectorsCommonDataFormats/AlignParam.h"
 
 namespace o2
 {
@@ -102,11 +103,7 @@ class Alignment
   gsl::span<const unsigned char>::iterator pattIt;
   std::vector<o2::BaseCluster<float>> mMFTClustersGlobal;
   std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;
-
-  // arrays used to store the results of the global fit
-  Double_t* mAlignParam = nullptr;
-  Double_t* mAlignParamErrors = nullptr;
-  Double_t* mAlignParamPulls = nullptr;
+  std::vector<o2::detectors::AlignParam> mAlignParams;
 
   // geometry must be initialised outside of Alignment
   // and used to set Alignment pointer to geometry

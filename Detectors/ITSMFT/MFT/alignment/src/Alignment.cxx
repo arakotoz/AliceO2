@@ -208,23 +208,38 @@ void Alignment::globalFit()
     return;
   }
 
-  mMillepede->GlobalFit(mAlignParam, mAlignParamErrors, mAlignParamPulls);
+  // arrays used to temporarily store the results of the global fit
+  Double_t* param = nullptr;
+  Double_t* paramErrors = nullptr;
+  Double_t* paramPulls = nullptr;
+
+  mMillepede->GlobalFit(param, paramErrors, paramPulls);
 
   LOGF(info, "Alignment: done fitting global parameters");
   LOGF(info, "sensor info, dx (cm), dy (cm), dz (cm), dRz (rad)");
 
   AlignSensorHelper chipHelper(mGeometry);
-  bool wSymName = false;
+  double dRx = 0., dRy = 0., dRz = 0.; // delta rotations
+  double dx = 0., dy = 0., dz = 0.;    // delta translations
+  bool global = true;
+  bool withSymName = false;
 
   for (int chipId = 0; chipId < mNumberOfSensors; chipId++) {
     chipHelper.setSensorOnlyInfo(chipId);
-    std::stringstream name = chipHelper.getSensorFullName(wSymName);
-    LOGF(info, "%s, %.3e, %.3e, %.3e, %.3e",
-         name.str().c_str(),
-         mAlignParam[chipId * mNDofPerSensor + 0],
-         mAlignParam[chipId * mNDofPerSensor + 1],
-         mAlignParam[chipId * mNDofPerSensor + 3],
-         mAlignParam[chipId * mNDofPerSensor + 2]);
+    std::stringstream name = chipHelper.getSensorFullName(withSymName);
+    dx = param[chipId * mNDofPerSensor + 0];
+    dy = param[chipId * mNDofPerSensor + 1];
+    dz = param[chipId * mNDofPerSensor + 3];
+    dRz = param[chipId * mNDofPerSensor + 2];
+    LOGF(info,
+         "%s, %.3e, %.3e, %.3e, %.3e",
+         name.str().c_str(), dx, dy, dz, dRz);
+    mAlignParams.emplace_back(
+      chipHelper.geoSymbolicName(),
+      chipHelper.sensorUid(),
+      dx, dy, dz,
+      dRx, dRy, dRz,
+      global);
   }
 }
 
