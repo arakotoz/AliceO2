@@ -83,10 +83,16 @@ void Alignment::init()
   if (mSaveTrackRecordToFile) {
     mMillepede->InitDataRecStorage(kFALSE);
   }
-
+  LOG(info) << "-------------- Alignment configured with -----------------";
+  LOGF(info, "Chi2CutNStdDev = %d", mChi2CutNStdDev);
+  LOGF(info, "ResidualCutInitial = %.3f", mResCutInitial);
+  LOGF(info, "ResidualCut = %.3f", mResCut);
+  LOGF(info, "MinNumberClusterCut = %d", mMinNumberClusterCut);
+  LOGF(info, "mStartFac = %.3f", mStartFac);
   LOGF(info,
-       "Allowed variation: dx %.3f, dy %.3f, dz %.3f, dRz %.4f",
+       "Allowed variation: dx = %.3f, dy = %.3f, dz = %.3f, dRz = %.4f",
        mAllowVar[0], mAllowVar[1], mAllowVar[3], mAllowVar[2]);
+  LOG(info) << "-----------------------------------------------------------";
 
   // set allowed variations for all parameters
   for (int chipId = 0; chipId < mNumberOfSensors; ++chipId) {
