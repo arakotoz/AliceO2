@@ -60,10 +60,10 @@ class Alignment
   void setResidualCutInitial(const Double_t value) { mResCutInitial = value; }
   void setResidualCut(const Double_t value) { mResCut = value; }
   void setMinNumberClusterCut(const int value) { mMinNumberClusterCut = value; }
-  void setAllowedVariationDeltaX(const int value) { mAllowVar[0] = value; }
-  void setAllowedVariationDeltaY(const int value) { mAllowVar[1] = value; }
-  void setAllowedVariationDeltaZ(const int value) { mAllowVar[3] = value; }
-  void setAllowedVariationDeltaRz(const int value) { mAllowVar[2] = value; }
+  void setAllowedVariationDeltaX(const double value) { mAllowVar[0] = value; }
+  void setAllowedVariationDeltaY(const double value) { mAllowVar[1] = value; }
+  void setAllowedVariationDeltaZ(const double value) { mAllowVar[3] = value; }
+  void setAllowedVariationDeltaRz(const double value) { mAllowVar[2] = value; }
 
   /// \brief set pointer to geometry prepared outside of the class i.e. already had fillMatrixCache()
   void setGeometry(const o2::mft::GeometryTGeo* geom) { mGeometry = geom; }
