@@ -180,9 +180,7 @@ void AlignSensorHelper::extractSensorTransform()
     mCosRy = 1.0; // std::cos(mRy);
 
     // for MFT sensors, Rz = 0 or Pi
-    // but we keep the value as it is
-    // because deltaRz is one of the alignment d.o.f.
-    mSinRz = std::sin(mRz);
+    mSinRz = 0.0; // std::sin(mRz);
     mCosRz = std::cos(mRz);
 
     mIsTransformExtracted = true;
