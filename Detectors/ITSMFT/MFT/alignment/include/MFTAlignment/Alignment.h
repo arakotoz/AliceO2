@@ -41,10 +41,16 @@ namespace mft
 class Alignment
 {
  public:
+  /// \brief construtor
   Alignment();
+
+  /// \brief destructor
   ~Alignment() = default;
 
+  /// \brief init Millipede and AlignPointHelper
   void init();
+
+  // simple setters
 
   void setClusterDictionary(const o2::itsmft::TopologyDictionary* d) { mDictionary = d; }
   void setRunNumber(const int value) { mRunNumber = value; }
@@ -59,21 +65,31 @@ class Alignment
   void setAllowedVariationDeltaZ(const int value) { mAllowVar[3] = value; }
   void setAllowedVariationDeltaRz(const int value) { mAllowVar[2] = value; }
 
-  /// \brief set pointer to geometry that should already have done fillMatrixCache()
+  /// \brief set pointer to geometry prepared outside of the class i.e. already had fillMatrixCache()
   void setGeometry(const o2::mft::GeometryTGeo* geom) { mGeometry = geom; }
 
+  /// \brief access mft tracks and clusters in the timeframe
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
+
+  /// \brief use valid tracks to build Mille records
   void processRecoTracks();
+
+  /// \brief perform the simultaneous fit of track and alignement parameters
   void globalFit();
+
+  /// \brief print a summary status of what happened in processRecoTracks()
   void printProcessTrackSummary();
 
+  /// \brief provide access to the AlignParam vector
+  void getAlignParams(std::vector<o2::detectors::AlignParam>& alignParams) { alignParams = mAlignParams; }
+
  protected:
-  int mRunNumber = 0;
-  float mBz = 0;
-  int mNumberTFs = 0;
-  int mCounterLocalEquationFailed = 0;
-  int mCounterSkippedTracks = 0;
-  int mCounterUsedTracks = 0;
+  int mRunNumber = 0;                                                            ///< run number
+  float mBz = 0;                                                                 ///< magnetic field status
+  int mNumberTFs = 0;                                                            ///< number of timeframes processed
+  int mCounterLocalEquationFailed = 0;                                           ///< count how many times we failed to set a local equation
+  int mCounterSkippedTracks = 0;                                                 ///< count how many tracks did not met the cut on the min. nb of clusters
+  int mCounterUsedTracks = 0;                                                    ///< count how many tracks were used to make Mille records
   static constexpr int mNumberOfTrackParam = 4;                                  ///< Number of track (= local) parameters (X0, Tx, Y0, Ty)
   static constexpr int mNDofPerSensor = 4;                                       ///< translation in global x, y, z, and rotation Rz around global z-axis
   static o2::itsmft::ChipMappingMFT mChipMapping;                                ///< MFT chip <-> ladder, layer, disk, half mapping
@@ -88,12 +104,19 @@ class Alignment
   Double_t mResCut = 100.;                                                       ///< Cut on residual for other iterations
   int mMinNumberClusterCut = 6;                                                  ///< Minimum number of clusters in the track to be used for alignment
   o2::mft::MillePedeRecord mTrackRecord;                                         ///< running MillePede Track record
-  double mWeightRecord = 1.;
-  bool mSaveTrackRecordToFile = false;
-  TString mMilleRecordsFileName;
-  TString mMilleConstraintsRecFileName;
-  std::unique_ptr<o2::mft::MillePede2> mMillepede = nullptr;   ///< Millepede2 implementation copied from AliROOT
-  const o2::itsmft::TopologyDictionary* mDictionary = nullptr; ///< cluster patterns dictionary
+  double mWeightRecord = 1.;                                                     ///< the weight given to a single Mille record in Millepede algorithm
+  bool mSaveTrackRecordToFile = false;                                           ///< true if we want to save Mille records in a ROOT file
+  TString mMilleRecordsFileName;                                                 ///< output file name when saving the Mille records
+  TString mMilleConstraintsRecFileName;                                          ///< output file name when saving the records of the constraints
+  std::unique_ptr<o2::mft::MillePede2> mMillepede = nullptr;                     ///< Millepede2 implementation copied from AliROOT
+  const o2::itsmft::TopologyDictionary* mDictionary = nullptr;                   ///< cluster patterns dictionary
+  std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;              ///< Alignment point helper
+  std::vector<o2::detectors::AlignParam> mAlignParams;                           ///< vector of alignment parameters computed by Millepede global fit
+  const o2::mft::GeometryTGeo* mGeometry = nullptr;                              ///< geometry that must be initialised outside of Alignment
+  bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
+
+  // access these data from CTFs
+
   gsl::span<const o2::mft::TrackMFT> mMFTTracks;
   gsl::span<const o2::itsmft::ROFRecord> mMFTTracksROF;
   gsl::span<const int> mMFTTrackClusIdx;
@@ -102,14 +125,6 @@ class Alignment
   gsl::span<const unsigned char> mMFTClusterPatterns;
   gsl::span<const unsigned char>::iterator pattIt;
   std::vector<o2::BaseCluster<float>> mMFTClustersGlobal;
-  std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;
-  std::vector<o2::detectors::AlignParam> mAlignParams;
-
-  // geometry must be initialised outside of Alignment
-  // and used to set Alignment pointer to geometry
-  const o2::mft::GeometryTGeo* mGeometry = nullptr;
-
-  bool mIsInitDone = false;
 
   /// \brief set array of local derivatives
   bool setLocalDerivative(Int_t index, Double_t value);
@@ -123,8 +138,13 @@ class Alignment
   /// \brief reset the array of the Global derivative
   void resetGlocalDerivative();
 
+  /// \brief set the first component of the local equation vector for a given alignment point
   bool setLocalEquationX();
+
+  /// \brief set the 2nd component of the local equation vector for a given alignment point
   bool setLocalEquationY();
+
+  /// \brief set the last component of the local equation vector for a given alignment point
   bool setLocalEquationZ();
 
   ClassDefNV(Alignment, 1);

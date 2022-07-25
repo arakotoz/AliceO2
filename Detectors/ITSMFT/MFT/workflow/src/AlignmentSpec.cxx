@@ -22,6 +22,7 @@
 
 #include "MFTWorkflow/AlignmentSpec.h"
 #include "CommonUtils/NameConf.h"
+#include "DetectorsCommonDataFormats/AlignParam.h"
 
 using namespace o2::framework;
 
@@ -85,13 +86,12 @@ void AlignmentSpec::endOfStream(o2::framework::EndOfStreamContext& ec)
 //_____________________________________________________________
 void AlignmentSpec::sendOutput(DataAllocator& output)
 {
-  TObjArray objar;
-  // mAlignment->getHistos(objar);
-
-  output.snapshot(Output{"MFT", "MFTASSESSMENT", 0, Lifetime::Sporadic}, objar);
-
-  TFile* f = new TFile(Form("mft_alignment_records.root"), "RECREATE");
-  objar.Write();
+  std::vector<o2::detectors::AlignParam> alignParams;
+  mAlignment->getAlignParams(alignParams);
+  output.snapshot(Output{"MFT", "MFTALIGNMENT", 0, Lifetime::Sporadic}, alignParams);
+  LOG(info) << "Storing MFT alignment params in local file mft_alignment.root";
+  TFile* f = new TFile(Form("mft_alignment.root"), "RECREATE");
+  f->WriteObjectAny(&alignParams, "std::vector<o2::detectors::AlignParam>", "alignment");
   f->Close();
 }
 ///_______________________________________
@@ -153,7 +153,7 @@ DataProcessorSpec getAlignmentSpec(bool saveRecordsToFile)
                                                               inputs,
                                                               true);
 
-  // outputs.emplace_back("MFT", "MFTASSESSMENT", 0, Lifetime::Sporadic);
+  outputs.emplace_back("MFT", "MFTALIGNMENT", 0, Lifetime::Sporadic);
 
   return DataProcessorSpec{
     "mft-alignment",
