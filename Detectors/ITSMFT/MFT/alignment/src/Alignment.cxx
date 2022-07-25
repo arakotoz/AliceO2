@@ -208,12 +208,26 @@ void Alignment::globalFit()
     return;
   }
 
-  // arrays used to temporarily store the results of the global fit
-  Double_t* param = nullptr;
-  Double_t* paramErrors = nullptr;
-  Double_t* paramPulls = nullptr;
+  // allocate memory in arrays to temporarily store the results of the global fit
 
-  mMillepede->GlobalFit(param, paramErrors, paramPulls);
+  Double_t* params = new Double_t[mNumberOfGlobalParam];
+  Double_t* paramsErrors = new Double_t[mNumberOfGlobalParam];
+  Double_t* paramsPulls = new Double_t[mNumberOfGlobalParam];
+
+  // initialise the content of each array
+
+  for (int ii = 0; ii < mNumberOfGlobalParam; ii++) {
+    params[ii] = 0.;
+    paramsErrors[ii] = 0.;
+    paramsPulls[ii] = 0.;
+  }
+
+  // perform the simultaneous fit of track and alignement parameters
+
+  mMillepede->GlobalFit(params, paramsErrors, paramsPulls);
+
+  // post-treatment:
+  // debug output + save Millepede global fit result in AlignParam vector
 
   LOGF(info, "Alignment: done fitting global parameters");
   LOGF(info, "sensor info, dx (cm), dy (cm), dz (cm), dRz (rad)");
@@ -221,16 +235,16 @@ void Alignment::globalFit()
   AlignSensorHelper chipHelper(mGeometry);
   double dRx = 0., dRy = 0., dRz = 0.; // delta rotations
   double dx = 0., dy = 0., dz = 0.;    // delta translations
-  bool global = true;
+  bool global = true;                  // delta in global ref. system
   bool withSymName = false;
 
   for (int chipId = 0; chipId < mNumberOfSensors; chipId++) {
     chipHelper.setSensorOnlyInfo(chipId);
     std::stringstream name = chipHelper.getSensorFullName(withSymName);
-    dx = param[chipId * mNDofPerSensor + 0];
-    dy = param[chipId * mNDofPerSensor + 1];
-    dz = param[chipId * mNDofPerSensor + 3];
-    dRz = param[chipId * mNDofPerSensor + 2];
+    dx = params[chipId * mNDofPerSensor + 0];
+    dy = params[chipId * mNDofPerSensor + 1];
+    dz = params[chipId * mNDofPerSensor + 3];
+    dRz = params[chipId * mNDofPerSensor + 2];
     LOGF(info,
          "%s, %.3e, %.3e, %.3e, %.3e",
          name.str().c_str(), dx, dy, dz, dRz);
@@ -241,6 +255,12 @@ void Alignment::globalFit()
       dRx, dRy, dRz,
       global);
   }
+
+  // free allocated memory
+
+  delete[] params;
+  delete[] paramsErrors;
+  delete[] paramsPulls;
 }
 
 //__________________________________________________________________________
