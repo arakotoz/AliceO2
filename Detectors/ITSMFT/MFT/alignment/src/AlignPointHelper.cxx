@@ -266,7 +266,12 @@ bool AlignPointHelper::computeGlobalDerivativeX()
                                    ((mGlobalRecoPosition.Y() - mChipHelper->translateY()) *
                                     ((mChipHelper->cosRx() * mChipHelper->cosRz()) -
                                      (mChipHelper->sinRx() * mChipHelper->sinRy() * mChipHelper->sinRz())));
-
+    LOGF(debug,
+         "computeGlobalDerivativeX(): dx = %.3e, dy = %.3e, dz = %.3e, dRz = %.3e",
+         mGlobalDerivativeX.mdDeltaX,
+         mGlobalDerivativeX.mdDeltaY,
+         mGlobalDerivativeX.mdDeltaZ,
+         mGlobalDerivativeX.mdDeltaRz);
     return true;
   } else {
     LOGF(error,
@@ -293,6 +298,12 @@ bool AlignPointHelper::computeGlobalDerivativeY()
                                    ((mGlobalRecoPosition.Y() - mChipHelper->translateY()) *
                                     ((mChipHelper->cosRx() * mChipHelper->sinRz()) +
                                      (mChipHelper->sinRx() * mChipHelper->sinRy() + mChipHelper->cosRz())));
+    LOGF(debug,
+         "computeGlobalDerivativeY(): dx = %.3e, dy = %.3e, dz = %.3e, dRz = %.3e",
+         mGlobalDerivativeY.mdDeltaX,
+         mGlobalDerivativeY.mdDeltaY,
+         mGlobalDerivativeY.mdDeltaZ,
+         mGlobalDerivativeY.mdDeltaRz);
     return true;
   } else {
     LOGF(error,
@@ -313,7 +324,12 @@ bool AlignPointHelper::computeGlobalDerivativeZ()
                                   (mTrackInitialParam.Ty * mChipHelper->sinRx() * mChipHelper->cosRy());
 
     mGlobalDerivativeZ.mdDeltaRz = 0;
-
+    LOGF(debug,
+         "computeGlobalDerivativeZ(): dx = %.3e, dy = %.3e, dz = %.3e, dRz = %.3e",
+         mGlobalDerivativeZ.mdDeltaX,
+         mGlobalDerivativeZ.mdDeltaY,
+         mGlobalDerivativeZ.mdDeltaZ,
+         mGlobalDerivativeZ.mdDeltaRz);
     return true;
   } else {
     LOGF(error,

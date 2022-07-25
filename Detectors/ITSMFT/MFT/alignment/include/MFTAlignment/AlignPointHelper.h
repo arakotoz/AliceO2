@@ -126,6 +126,7 @@ class AlignPointHelper
   {
     return mMeasuredPositionSigma;
   }
+  TrackParam getTrackInitialParam() const { return mTrackInitialParam; }
 
   void resetAlignPoint();
   void resetDerivatives();
