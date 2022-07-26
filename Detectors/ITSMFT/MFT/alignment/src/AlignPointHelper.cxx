@@ -32,7 +32,8 @@ AlignPointHelper::AlignPointHelper(const GeometryTGeo* geom)
     mGeometry(geom),
     mGlobalRecoPosition(0., 0., 0.),
     mLocalMeasuredPosition(0., 0., 0.),
-    mMeasuredPositionSigma(0., 0., 0)
+    mMeasuredPositionSigma(0., 0., 0),
+    mLocalResidual(0., 0., 0.)
 {
   mTrackInitialParam.X0 = 0.;
   mTrackInitialParam.Y0 = 0.;
@@ -43,7 +44,7 @@ AlignPointHelper::AlignPointHelper(const GeometryTGeo* geom)
   mMeasuredPositionSigma.SetXYZ(
     o2::mft::ioutils::DefClusErrorRow,
     o2::mft::ioutils::DefClusErrorCol,
-    o2::itsmft::SegmentationAlpide::SensorLayerThicknessEff);
+    o2::itsmft::SegmentationAlpide::SensorLayerThicknessEff * 0.5);
 
   mChipHelper = std::make_unique<AlignSensorHelper>(mGeometry);
   LOGF(info, "AlignPointHelper instantiated");
@@ -181,6 +182,19 @@ void AlignPointHelper::setLocalMeasuredPosition(o2::BaseCluster<float> mftCluste
     mftCluster.getX(), mftCluster.getY(), mftCluster.getZ());
   mLocalMeasuredPosition = mGeometry->getMatrixL2G(mftCluster.getSensorID()).ApplyInverse(gloXYZ);
   mIsAlignPointSet &= mChipHelper->setSensor(mftCluster.getSensorID());
+}
+
+//__________________________________________________________________________
+void AlignPointHelper::setLocalResidual()
+{
+  o2::math_utils::Point3D<double> locTrackPos(0., 0., 0.);
+  if (mIsAlignPointSet) {
+    locTrackPos = mGeometry->getMatrixL2G(getSensorId()).ApplyInverse(mGlobalRecoPosition);
+    mLocalResidual.SetCoordinates(
+      mLocalMeasuredPosition.X() - locTrackPos.X(),
+      mLocalMeasuredPosition.Y() - locTrackPos.Y(),
+      mLocalMeasuredPosition.Z() - locTrackPos.Z());
+  }
 }
 
 //__________________________________________________________________________

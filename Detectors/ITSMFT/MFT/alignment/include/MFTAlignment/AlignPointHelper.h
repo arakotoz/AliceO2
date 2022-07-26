@@ -126,6 +126,10 @@ class AlignPointHelper
   {
     return mMeasuredPositionSigma;
   }
+  o2::math_utils::Point3D<double> getLocalResidual() const
+  {
+    return mLocalResidual;
+  }
   TrackParam getTrackInitialParam() const { return mTrackInitialParam; }
 
   void resetAlignPoint();
@@ -135,6 +139,7 @@ class AlignPointHelper
   void recordTrackInitialParam(o2::mft::TrackMFT mftTrack);
   void setGlobalRecoPosition(o2::mft::TrackMFT mftTrack);
   void setLocalMeasuredPosition(o2::BaseCluster<float> mftCluster);
+  void setLocalResidual();
 
  protected:
   bool mIsAlignPointSet = false;        ///< boolean to indicate if mGlobalRecoPosition and mLocalMeasuredPosition are set
@@ -154,14 +159,10 @@ class AlignPointHelper
 
   TrackParam mTrackInitialParam; ///< Track parameters at the reference plane z = z0
 
-  // Current cartesian position (cm, in Global frame) of the reconstructed track
-  // analytically propagated to the z position of the cluster
-  o2::math_utils::Point3D<double> mGlobalRecoPosition;
-
-  // Current cartesian position (cm, in Local frame) of the cluster
-  o2::math_utils::Point3D<double> mLocalMeasuredPosition;
-
+  o2::math_utils::Point3D<double> mGlobalRecoPosition;    ///< Current cartesian position (cm, in Global ref. system) of the reconstructed track analytically propagated to the z position of the cluster
+  o2::math_utils::Point3D<double> mLocalMeasuredPosition; ///< Current cartesian position (cm, in Local ref. system) of the cluster
   o2::math_utils::Point3D<double> mMeasuredPositionSigma; ///< Estimated spatial resolution on measurement
+  o2::math_utils::Point3D<double> mLocalResidual;         ///< residual between track x-ing point and cluster in local ref. system
 
   /// \brief compute X component of the local derivatives
   bool computeLocalDerivativeX();
