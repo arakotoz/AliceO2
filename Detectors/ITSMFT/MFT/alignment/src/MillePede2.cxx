@@ -758,7 +758,7 @@ Int_t MillePede2::LocalFit(double* localParams)
         (absres >= fResCut && fIter > 1)) {
       if (fLocFitAdd)
         fNLocFitsRejected++;
-      LOGF(info, "MillePede2 - reject res %5ld %+e\n", fCurrRecDataID, resid); // A.R. comment
+      LOGF(info, "MillePede2 - reject res %+e in record %5ld ", resid, fCurrRecDataID); // A.R. comment
       return 0;
     }
 
@@ -773,7 +773,8 @@ Int_t MillePede2::LocalFit(double* localParams)
   if (fNStdDev != 0 && nDoF > 0 && lChi2 > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor) { // check final chi2
     if (fLocFitAdd)
       fNLocFitsRejected++;
-    LOGF(info, "MillePede2 - reject chi2 %5ld: %+e\n", fCurrRecDataID, lChi2); // A.R. comment
+    LOGF(info, "MillePede2 - reject chi2 %+e record %5ld: (nDOF %d)", lChi2, fCurrRecDataID, nDoF); // A.R. comment
+    fRecord->Print();                                                                               // A.R. comment
     return 0;
   }
 
