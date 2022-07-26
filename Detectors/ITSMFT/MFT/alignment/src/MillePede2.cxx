@@ -230,7 +230,9 @@ Int_t MillePede2::InitMille(int nGlo, int nLoc, int lNStdDev, double lResCut, do
           maxPID = regroup[i];
       }
     maxPID++;
-    LOG(info) << Form("Regrouping is requested: from %d raw to %d formal globals grouped to %d real globals", nGlo, ng, maxPID);
+    LOGF(info,
+         "MillePede2 - Regrouping is requested: from %d raw to %d formal globals grouped to %d real globals",
+         nGlo, ng, maxPID);
     nGlo = maxPID;
   }
   if (nLoc > 0)
@@ -243,7 +245,7 @@ Int_t MillePede2::InitMille(int nGlo, int nLoc, int lNStdDev, double lResCut, do
     fResCut = lResCut;
   if (lNStdDev > 0)
     fNStdDev = lNStdDev;
-  LOG(info) << Form("NLoc: %d NGlo: %d", fNLocPar, fNGloPar);
+  LOGF(info, "MillePede2 - NLoc: %d NGlo: %d", fNLocPar, fNGloPar);
 
   fNGloSize = fNGloPar;
 
@@ -310,7 +312,7 @@ Bool_t MillePede2::ImposeConsRecFile(const char* fname)
 Bool_t MillePede2::InitDataRecStorage(Bool_t read)
 {
   if (fTreeData) {
-    LOG(warning) << "Data Records File is already initialized";
+    LOG(warning) << "MillePede2 - Data Records File is already initialized";
     return kFALSE;
   }
 
@@ -320,10 +322,10 @@ Bool_t MillePede2::InitDataRecStorage(Bool_t read)
   if (!read) { // write mode: cannot use chain
     fDataRecFile = TFile::Open(GetDataRecFName(), "recreate");
     if (!fDataRecFile) {
-      LOG(fatal) << Form("Failed to initialize data records file %s", GetDataRecFName());
+      LOGF(fatal, "MillePede2 - Failed to initialize data records file %s", GetDataRecFName());
       return kFALSE;
     }
-    LOG(info) << Form("File %s used for derivatives records", GetDataRecFName());
+    LOGF(info, "MillePede2 - File %s used for derivatives records", GetDataRecFName());
     fTreeData = new TTree(GetRecDataTreeName(), "Data Records for MillePede2");
     fTreeData->Branch(GetRecDataBranchName(), "MillePedeRecord", &fRecord, 32000, 99);
   } else { // use chain
@@ -333,32 +335,32 @@ Bool_t MillePede2::InitDataRecStorage(Bool_t read)
     else { // assume text file with list of filenames
       ifstream inpf(fDataRecFName.Data());
       if (!inpf.good()) {
-        LOG(info) << Form("Failed on input records list %s\n", fDataRecFName.Data());
+        LOGF(info, "MillePede2 - Failed on input records list %s\n", fDataRecFName.Data());
         return kFALSE;
       }
       TString recfName;
       while (!(recfName.ReadLine(inpf)).eof()) {
         recfName = recfName.Strip(TString::kBoth, ' ');
         if (recfName.BeginsWith("//") || recfName.BeginsWith("#") || !recfName.EndsWith(".root")) { // comment
-          LOG(info) << Form("Skip %s\n", recfName.Data());
+          LOGF(info, "MillePede2 - Skip %s\n", recfName.Data());
           continue;
         }
         recfName = recfName.Strip(TString::kBoth, ',');
         recfName = recfName.Strip(TString::kBoth, '"');
         gSystem->ExpandPathName(recfName);
-        printf("Adding %s\n", recfName.Data());
+        LOGF(info, "MillePede2 - Adding %s\n", recfName.Data());
         ch->AddFile(recfName.Data());
       }
     }
 
     Long64_t nent = ch->GetEntries();
     if (nent < 1) {
-      LOG(info) << "Obtained chain is empty";
+      LOG(info) << "MillePede2 - Obtained chain is empty";
       return kFALSE;
     }
     fTreeData = ch;
     fTreeData->SetBranchAddress(GetRecDataBranchName(), &fRecord);
-    LOG(info) << Form("Found %lld derivatives records", nent);
+    LOGF(info, "MillePede2 - Found %lld derivatives records", nent);
   }
   fCurrRecDataID = -1;
   fRecFileStatus = read ? 1 : 2;
@@ -370,7 +372,7 @@ Bool_t MillePede2::InitDataRecStorage(Bool_t read)
 Bool_t MillePede2::InitConsRecStorage(Bool_t read)
 {
   if (fConsRecFile) {
-    LOG(warning) << "Constraints Records File is already initialized";
+    LOG(warning) << "MillePede2 - Constraints Records File is already initialized";
     return kFALSE;
   }
 
@@ -379,19 +381,19 @@ Bool_t MillePede2::InitConsRecStorage(Bool_t read)
 
   fConsRecFile = TFile::Open(GetConsRecFName(), read ? "" : "recreate");
   if (!fConsRecFile) {
-    LOG(info) << Form("Failed to initialize constraints records file %s", GetConsRecFName());
+    LOGF(info, "MillePede2 - Failed to initialize constraints records file %s", GetConsRecFName());
     return kFALSE;
   }
 
-  LOG(info) << Form("File %s used for constraints records", GetConsRecFName());
+  LOGF(info, "MillePede2 - File %s used for constraints records", GetConsRecFName());
   if (read) {
     fTreeConstr = (TTree*)fConsRecFile->Get(GetRecConsTreeName());
     if (!fTreeConstr) {
-      LOG(info) << Form("Did not find constraints records tree in %s", GetConsRecFName());
+      LOGF(info, "MillePede2 - Did not find constraints records tree in %s", GetConsRecFName());
       return kFALSE;
     }
     fTreeConstr->SetBranchAddress(GetRecConsBranchName(), &fRecord);
-    LOG(info) << Form("Found %lld constraints records", fTreeConstr->GetEntries());
+    LOGF(info, "MillePede2 - Found %lld constraints records", fTreeConstr->GetEntries());
 
   } else {
 
@@ -564,7 +566,7 @@ void MillePede2::SetGlobalConstraint(const double* dergb, double val, double sig
   fNGloConstraints++;
   if (IsZero(sigma))
     fNLagrangeConstraints++;
-  //  printf("NewConstraint:\n"); fRecord->Print(); //RRR
+  //  LOG(info) << "MillePede2 - NewConstraint:"; fRecord->Print(); //RRR
   SaveRecordConstraint();
 }
 
@@ -705,9 +707,9 @@ Int_t MillePede2::LocalFit(double* localParams)
   */
   // first try to solve by faster Cholesky decomposition, then by Gaussian elimination
   if (!matCLoc.SolveChol(fVecBLoc, kTRUE)) {
-    LOG(warning) << "Failed to solve locals by Cholesky, trying Gaussian Elimination";
+    LOG(warning) << "MillePede2 - Failed to solve locals by Cholesky, trying Gaussian Elimination";
     if (!matCLoc.SolveSpmInv(fVecBLoc, kTRUE)) {
-      LOG(warning) << "Failed to solve locals by Gaussian Elimination, skip...";
+      LOG(warning) << "MillePede2 - Failed to solve locals by Gaussian Elimination, skip...";
       matCLoc.Print("d");
       return 0; // failed to solve
     }
@@ -756,7 +758,7 @@ Int_t MillePede2::LocalFit(double* localParams)
         (absres >= fResCut && fIter > 1)) {
       if (fLocFitAdd)
         fNLocFitsRejected++;
-      //      printf("reject res %5ld %+e\n",fCurrRecDataID,resid);
+      LOGF(info, "MillePede2 - reject res %5ld %+e\n", fCurrRecDataID, resid); // A.R. comment
       return 0;
     }
 
@@ -771,7 +773,7 @@ Int_t MillePede2::LocalFit(double* localParams)
   if (fNStdDev != 0 && nDoF > 0 && lChi2 > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor) { // check final chi2
     if (fLocFitAdd)
       fNLocFitsRejected++;
-    //    printf("reject chi2 %5ld: %+e\n",fCurrRecDataID, lChi2);
+    LOGF(info, "MillePede2 - reject chi2 %5ld: %+e\n", fCurrRecDataID, lChi2); // A.R. comment
     return 0;
   }
 
@@ -850,7 +852,7 @@ Int_t MillePede2::LocalFit(double* localParams)
   } // end of Update matrices
   //
   /*//RRR
-  printf("After GLO\n");
+  LOG(info) << "MillePede2 - After GLO";
   printf("MatCLoc: "); fMatCLoc->Print("l");
   printf("MatCGlo: "); fMatCGlo->Print("l");
   printf("MatCGlLc:"); fMatCGloLoc->Print("l");
@@ -903,7 +905,7 @@ Int_t MillePede2::LocalFit(double* localParams)
   // reset compressed index array
 
   /*//RRR
-  printf("After GLOLoc\n");
+  LOG(info) << "MillePede2 - After GLOLoc";
   printf("MatCGlo: "); fMatCGlo->Print("");
   printf("BGlo: "); for (int i=0; i<fNGloPar; i++) printf("%+e |",fVecBGlo[i]); printf("\n");
   */
@@ -925,7 +927,7 @@ Int_t MillePede2::GlobalFit(Double_t* par, Double_t* error, Double_t* pull)
   sw.Start();
 
   int res = 0;
-  LOG(info) << "Starting Global fit.";
+  LOG(info) << "MillePede2 - Starting Global fit.";
   while (fIter <= fMaxIter) {
     //
     res = GlobalFitIteration();
@@ -943,7 +945,7 @@ Int_t MillePede2::GlobalFit(Double_t* par, Double_t* error, Double_t* pull)
   }
 
   sw.Stop();
-  LOG(info) << Form("Global fit %s, CPU time: %.1f", res ? "Converged" : "Failed", sw.CpuTime());
+  LOGF(info, "MillePede2 - Global fit %s, CPU time: %.1f", res ? "Converged" : "Failed", sw.CpuTime());
   if (!res)
     return 0;
 
@@ -966,10 +968,10 @@ Int_t MillePede2::GlobalFit(Double_t* par, Double_t* error, Double_t* pull)
 //_____________________________________________________________________________
 Int_t MillePede2::GlobalFitIteration()
 {
-  LOG(info) << Form("Global Fit Iteration#%2d (Local Fit Chi^2 cut factor: %.2f)", fIter, fChi2CutFactor);
+  LOGF(info, "MillePede2 - Global Fit Iteration#%2d (Local Fit Chi^2 cut factor: %.2f)", fIter, fChi2CutFactor);
 
   if (!fNGloPar || !fTreeData) {
-    LOG(info) << "No data was stored, stopping iteration";
+    LOG(info) << "MillePede2 - No data was stored, stopping iteration";
     return 0;
   }
   TStopwatch sw, sws;
@@ -1013,7 +1015,7 @@ Int_t MillePede2::GlobalFitIteration()
   Long_t last = fSelLast < 1 ? ndr : (fSelLast >= ndr ? ndr : fSelLast + Long_t(1));
   ndr = last - first;
 
-  LOG(info) << Form("Building the Global matrix from data records %ld : %ld", first, last);
+  LOGF(info, "MillePede2 - Building the Global matrix from data records %ld : %ld", first, last);
   if (ndr < 1)
     return 0;
 
@@ -1030,7 +1032,7 @@ Int_t MillePede2::GlobalFitIteration()
       printf("%.1f%% of local fits done\n", double(100. * i) / ndr);
   }
   swt.Stop();
-  printf("%ld local fits done: ", ndr);
+  LOGF(info, "MillePede2 - %ld local fits done: ", ndr);
   /*
   printf("MatCGlo: "); fMatCGlo->Print("l");
   printf("BGlo: "); for (int i=0; i<fNGloPar; i++) printf("%+e |",fVecBGlo[i]); printf("\n");
@@ -1042,7 +1044,7 @@ Int_t MillePede2::GlobalFitIteration()
   fNGloFix = 0;
   if (fMinPntValid > 1 && fNGroupsSet) {
     //
-    printf("Checking parameters with statistics < %d\n", fMinPntValid);
+    LOGF(info, "MillePede2 - Checking parameters with statistics < %d", fMinPntValid);
     TStopwatch swsup;
     swsup.Start();
     // 1) build the list of parameters to fix
@@ -1127,7 +1129,7 @@ Int_t MillePede2::GlobalFitIteration()
     fLocFitAdd = kTRUE;
 
     if (nFixedGroups) {
-      printf("Suppressed contributions of groups with NPoints<%d :\n", fMinPntValid);
+      LOGF(info, "MillePede2 - Suppressed contributions of groups with NPoints < %d :", fMinPntValid);
       for (int i = 0; i < nFixedGroups; i++)
         printf("%d ", fixGroups[i]);
       printf("\n");
@@ -1167,7 +1169,7 @@ Int_t MillePede2::GlobalFitIteration()
       for (int jp = csize; jp--;) {
         int idp = indV[jp];
         if (fkReGroup[idp] < 0)
-          LOG(fatal) << Form("Constain is requested for suppressed parameter #%d", indV[jp]);
+          LOGF(fatal, "MillePede2 - Constain is requested for suppressed parameter #%d", indV[jp]);
         indV[jp] = idp;
       }
     }
@@ -1227,8 +1229,8 @@ Int_t MillePede2::GlobalFitIteration()
     }
   }
 
-  LOG(info) << Form("Obtained %-7ld equations from %-7ld records (%-7ld rejected). Fixed %-4d globals",
-                    fNLocEquations, fNLocFits, fNLocFitsRejected, fNGloFix);
+  LOGF(info, "MillePede2 - Obtained %-7ld equations from %-7ld records (%-7ld rejected). Fixed %-4d globals",
+       fNLocEquations, fNLocFits, fNLocFitsRejected, fNGloFix);
 
   sws.Start();
 
@@ -1297,7 +1299,7 @@ Int_t MillePede2::GlobalFitIteration()
   sws.Print();
   //
   sw.Stop();
-  LOG(info) << Form("Iteration#%2d %s. CPU time: %.1f", fIter, fGloSolveStatus == kFailed ? "Failed" : "Converged", sw.CpuTime());
+  LOGF(info, "MillePede2 - Iteration#%2d %s. CPU time: %.1f", fIter, fGloSolveStatus == kFailed ? "Failed" : "Converged", sw.CpuTime());
   if (fGloSolveStatus == kFailed)
     return 0;
   //
@@ -1349,12 +1351,12 @@ Int_t MillePede2::SolveGlobalMatEq()
       if (((SymMatrix*)fMatCGlo)->SolveChol(fVecBGlo, fgInvChol))
         return fgInvChol ? kInvert : kNoInversion;
       else
-        LOG(warning) << "Solution of Global Dense System by Cholesky failed, trying Gaussian Elimiation";
+        LOG(warning) << "MillePede2 - Solution of Global Dense System by Cholesky failed, trying Gaussian Elimiation";
     }
     if (((SymMatrix*)fMatCGlo)->SolveSpmInv(fVecBGlo, kTRUE))
       return kInvert;
     else
-      LOG(warning) << "Solution of Global Dense System by Gaussian Elimination failed, trying iterative methods";
+      LOG(warning) << "MillePede2 - Solution of Global Dense System by Gaussian Elimination failed, trying iterative methods";
   }
   // try to solve by minres
   TVectorD sol(fNGloSize);
@@ -1369,7 +1371,7 @@ Int_t MillePede2::SolveGlobalMatEq()
   else if (fgIterSol == MinResSolve::kSolFGMRes)
     res = slv->SolveFGMRES(sol, fgMinResCondType, fgMinResMaxIter, fgMinResTol, fgNKrylovV);
   else
-    LOG(warning) << Form("Undefined Iteritive Solver ID=%d, only %d are defined", fgIterSol, MinResSolve::kNSolvers);
+    LOGF(warning, "MillePede2 - Undefined Iteritive Solver ID=%d, only %d are defined", fgIterSol, MinResSolve::kNSolvers);
 
   if (!res) {
     const char* faildump = "fgmr_failed.dat";
@@ -1393,7 +1395,7 @@ Int_t MillePede2::SolveGlobalMatEq()
       close(defout);
       printf("#Dumped failed matrix and RHS to %s\n", faildump);
     } else
-      LOG(warning) << "Failed on file open for matrix dumping";
+      LOG(warning) << "MillePede2 - Failed on file open for matrix dumping";
     close(defout);
     return kFailed;
   }
@@ -1440,7 +1442,7 @@ Float_t MillePede2::Chi2DoFLim(int nSig, int nDoF) const
 Int_t MillePede2::SetIterations(double lChi2CutFac)
 {
   fChi2CutFactor = TMath::Max(1.0, lChi2CutFac);
-  LOG(info) << Form("Initial cut factor is %f", fChi2CutFactor);
+  LOGF(info, "MillePede2 - Initial cut factor is %f", fChi2CutFactor);
   fIter = 1; // Initializes the iteration process
   return 1;
 }
@@ -1530,7 +1532,7 @@ Bool_t MillePede2::IsRecordAcceptable()
       for (int i = n; i--;)
         if (runID == (*fRejRunList)[i]) {
           prevAns = kFALSE;
-          LOG(info) << Form("New Run to reject: %ld", runID);
+          LOGF(info, "MillePede2 - New Run to reject: %ld", runID);
           break;
         }
     } else if (fAccRunList && (n = fAccRunList->GetSize())) { // is run specifically selected
@@ -1540,11 +1542,11 @@ Bool_t MillePede2::IsRecordAcceptable()
           prevAns = kTRUE;
           if (fAccRunListWgh)
             fRunWgh = (*fAccRunListWgh)[i];
-          LOG(info) << Form("New Run to accept explicitly: %ld, weight=%f", runID, fRunWgh);
+          LOGF(info, "MillePede2 - New Run to accept explicitly: %ld, weight=%f", runID, fRunWgh);
           break;
         }
       if (!prevAns)
-        LOG(info) << Form("New Run is not in the list to accept: %ld", runID);
+        LOGF(info, "New Run is not in the list to accept: %ld", runID);
     }
   }
 
