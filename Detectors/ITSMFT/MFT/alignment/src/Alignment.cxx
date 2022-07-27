@@ -483,7 +483,7 @@ bool Alignment::setLocalEquationZ()
   if (success) {
     if (mCounterUsedTracks < 5)
       LOGF(info,
-           "setLocalEquationZ(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Z %.3e",
+           "Alignment::setLocalEquationZ(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Z %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
            mGlobalDerivatives[chipId * mNDofPerSensor + 0],
