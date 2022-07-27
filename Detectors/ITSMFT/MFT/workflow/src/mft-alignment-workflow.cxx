@@ -20,8 +20,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
 {
   // option allowing to set parameters
   std::vector<o2::framework::ConfigParamSpec> options{
-    {"run-alignment", o2::framework::VariantType::Bool, false, {"run MFT alignment workflow"}},
-    {"enable-millerecords-output", o2::framework::VariantType::Bool, false, {"enable saving millepede records to file"}}};
+    {"run-alignment", o2::framework::VariantType::Bool, false, {"run MFT alignment workflow"}}};
   std::swap(workflowOptions, options);
 }
 
@@ -36,11 +35,8 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   // write the configuration used for the workflow
   o2::conf::ConfigurableParam::writeINI("o2-mft-alignment.ini");
   auto runAlignment = configcontext.options().get<bool>("run-alignment");
-  auto saveRecordsToFile = configcontext.options().get<bool>("enable-millerecords-output");
-
-  LOG(info) << "MFT Alignment: enable-millerecords-output = " << configcontext.options().get<std::string>("enable-millerecords-output");
 
   WorkflowSpec specs;
-  specs.emplace_back(o2::mft::getAlignmentSpec(saveRecordsToFile));
+  specs.emplace_back(o2::mft::getAlignmentSpec());
   return specs;
 }

@@ -37,8 +37,7 @@ framework::WorkflowSpec getWorkflow(
   bool runAssessment,
   bool processGen,
   bool runTracking,
-  bool runAlignment,
-  bool saveRecordsToFile)
+  bool runAlignment)
 {
   framework::WorkflowSpec specs;
 
@@ -60,7 +59,7 @@ framework::WorkflowSpec getWorkflow(
       specs.emplace_back(o2::mft::getMFTAssessmentSpec(useMC, processGen));
     }
     if (runAlignment) {
-      specs.emplace_back(o2::mft::getAlignmentSpec(saveRecordsToFile));
+      specs.emplace_back(o2::mft::getAlignmentSpec());
     }
   }
   return specs;

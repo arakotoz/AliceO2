@@ -47,7 +47,6 @@ Alignment::Alignment()
     mResCut(100.),
     mMinNumberClusterCut(6),
     mWeightRecord(1.),
-    mSaveTrackRecordToFile(false),
     mMilleRecordsFileName("mft_mille_records.root"),
     mMilleConstraintsRecFileName("mft_mille_constraints.root"),
     mIsInitDone(false)
@@ -80,9 +79,8 @@ void Alignment::init()
   mMillepede->SetDataRecFName(mMilleRecordsFileName.Data());
   mMillepede->SetConsRecFName(mMilleConstraintsRecFileName.Data());
 
-  if (mSaveTrackRecordToFile) {
-    mMillepede->InitDataRecStorage(kFALSE);
-  }
+  bool read = false;
+  mMillepede->InitDataRecStorage(read);
   LOG(info) << "-------------- Alignment configured with -----------------";
   LOGF(info, "Chi2CutNStdDev = %d", mChi2CutNStdDev);
   LOGF(info, "ResidualCutInitial = %.3f", mResCutInitial);
@@ -190,23 +188,13 @@ void Alignment::processRecoTracks()
     } // end of loop on clusters
 
     if (isTrackUsed) {
-      // copy track record
       mMillepede->SetRecordRun(mRunNumber);
       mMillepede->SetRecordWeight(mWeightRecord);
-      mTrackRecord = *mMillepede->GetRecord();
-
-      // save record data
-      if (mSaveTrackRecordToFile) {
-        mMillepede->SaveRecordData();
-      }
-
+      mTrackRecord = *mMillepede->GetRecord(); // copy track record (A.R. why ?)
+      mMillepede->SaveRecordData();            // save record data
       mCounterUsedTracks++;
     }
   } // end of loop on tracks
-
-  if (mSaveTrackRecordToFile) {
-    mMillepede->CloseDataRecStorage();
-  }
 }
 
 //__________________________________________________________________________

@@ -41,9 +41,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
     {"run-assessment", o2::framework::VariantType::Bool, false, {"run MFT assessment workflow"}},
     {"disable-process-gen", o2::framework::VariantType::Bool, false, {"disable processing of all generated tracks (depends on --run-assessment)"}},
     {"configKeyValues", VariantType::String, "", {"Semicolon separated key=value strings"}},
-    {"run-alignment", o2::framework::VariantType::Bool, false, {"run MFT alignment workflow"}},
-    {"enable-millerecords-output", o2::framework::VariantType::Bool, false, {"enable saving millepede records to file"}},
-  };
+    {"run-alignment", o2::framework::VariantType::Bool, false, {"run MFT alignment workflow"}}};
   o2::raw::HBFUtilsInitializer::addConfigOption(options);
   std::swap(workflowOptions, options);
 }
@@ -65,7 +63,6 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   auto processGen = !configcontext.options().get<bool>("disable-process-gen");
   auto runTracking = !configcontext.options().get<bool>("disable-tracking");
   auto runAlignment = configcontext.options().get<bool>("run-alignment");
-  auto saveRecordsToFile = configcontext.options().get<bool>("enable-millerecords-output");
 
   auto wf = o2::mft::reco_workflow::getWorkflow(
     useMC,
@@ -75,8 +72,7 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
     runAssessment,
     processGen,
     runTracking,
-    runAlignment,
-    saveRecordsToFile);
+    runAlignment);
 
   // configure dpl timer to inject correct firstTForbit: start from the 1st orbit of TF containing 1st sampled orbit
   o2::raw::HBFUtilsInitializer hbfIni(configcontext, wf);

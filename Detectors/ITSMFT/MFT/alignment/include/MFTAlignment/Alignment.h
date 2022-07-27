@@ -55,7 +55,6 @@ class Alignment
   void setClusterDictionary(const o2::itsmft::TopologyDictionary* d) { mDictionary = d; }
   void setRunNumber(const int value) { mRunNumber = value; }
   void setBz(const float bz) { mBz = bz; }
-  void setSaveTrackRecordToFile(const bool choice) { mSaveTrackRecordToFile = choice; }
   void setChi2CutNStdDev(const Int_t value) { mChi2CutNStdDev = value; }
   void setResidualCutInitial(const Double_t value) { mResCutInitial = value; }
   void setResidualCut(const Double_t value) { mResCut = value; }
@@ -105,7 +104,6 @@ class Alignment
   int mMinNumberClusterCut = 6;                                                  ///< Minimum number of clusters in the track to be used for alignment
   o2::mft::MillePedeRecord mTrackRecord;                                         ///< running MillePede Track record
   double mWeightRecord = 1.;                                                     ///< the weight given to a single Mille record in Millepede algorithm
-  bool mSaveTrackRecordToFile = false;                                           ///< true if we want to save Mille records in a ROOT file
   TString mMilleRecordsFileName;                                                 ///< output file name when saving the Mille records
   TString mMilleConstraintsRecFileName;                                          ///< output file name when saving the records of the constraints
   std::unique_ptr<o2::mft::MillePede2> mMillepede = nullptr;                     ///< Millepede2 implementation copied from AliROOT

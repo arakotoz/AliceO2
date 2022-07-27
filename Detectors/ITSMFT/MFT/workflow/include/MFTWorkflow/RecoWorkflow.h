@@ -31,8 +31,7 @@ framework::WorkflowSpec getWorkflow(
   bool runAssessment,
   bool processGen,
   bool runTracking,
-  bool runAlignment,
-  bool saveRecordsToFile);
+  bool runAlignment);
 }
 
 } // namespace mft

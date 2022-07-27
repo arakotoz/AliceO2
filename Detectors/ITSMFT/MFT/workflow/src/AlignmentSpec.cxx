@@ -38,7 +38,6 @@ void AlignmentSpec::init(InitContext& ic)
 
   auto& alignConfigParam = o2::mft::AlignConfig::Instance();
   mAlignment = std::make_unique<o2::mft::Alignment>();
-  mAlignment->setSaveTrackRecordToFile(mSaveTrackRecordToFile);
   mAlignment->setChi2CutNStdDev(alignConfigParam.chi2CutNStdDev);
   mAlignment->setResidualCutInitial(alignConfigParam.residualCutInitial);
   mAlignment->setResidualCut(alignConfigParam.residualCut);
@@ -132,7 +131,7 @@ void AlignmentSpec::finaliseCCDB(ConcreteDataMatcher& matcher, void* obj)
 }
 
 //_____________________________________________________________
-DataProcessorSpec getAlignmentSpec(bool saveRecordsToFile)
+DataProcessorSpec getAlignmentSpec()
 {
   std::vector<InputSpec> inputs;
   std::vector<OutputSpec> outputs;
@@ -159,7 +158,7 @@ DataProcessorSpec getAlignmentSpec(bool saveRecordsToFile)
     "mft-alignment",
     inputs,
     outputs,
-    AlgorithmSpec{adaptFromTask<o2::mft::AlignmentSpec>(ggRequest, saveRecordsToFile)},
+    AlgorithmSpec{adaptFromTask<o2::mft::AlignmentSpec>(ggRequest)},
     Options{{}}};
 }
 
