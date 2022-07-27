@@ -366,14 +366,15 @@ bool Alignment::setLocalEquationX()
   if (success) {
     if (mCounterUsedTracks < 5)
       LOGF(debug,
-           "Alignment::setLocalEquationX(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e X %.3e",
+           "Alignment::setLocalEquationX(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e X %.3e sigma %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
            mGlobalDerivatives[chipId * mNDofPerSensor + 0],
            mGlobalDerivatives[chipId * mNDofPerSensor + 1],
            mGlobalDerivatives[chipId * mNDofPerSensor + 2],
            mGlobalDerivatives[chipId * mNDofPerSensor + 3],
-           mAlignPoint->getLocalMeasuredPosition().X());
+           mAlignPoint->getLocalMeasuredPosition().X(),
+           mAlignPoint->getMeasuredPositionSigma().X());
 
     mMillepede->SetLocalEquation(
       mGlobalDerivatives,
@@ -424,14 +425,15 @@ bool Alignment::setLocalEquationY()
   if (success) {
     if (mCounterUsedTracks < 5)
       LOGF(debug,
-           "Alignment::setLocalEquationY(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Y %.3e",
+           "Alignment::setLocalEquationY(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Y %.3e sigma %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
            mGlobalDerivatives[chipId * mNDofPerSensor + 0],
            mGlobalDerivatives[chipId * mNDofPerSensor + 1],
            mGlobalDerivatives[chipId * mNDofPerSensor + 2],
            mGlobalDerivatives[chipId * mNDofPerSensor + 3],
-           mAlignPoint->getLocalMeasuredPosition().Y());
+           mAlignPoint->getLocalMeasuredPosition().Y(),
+           mAlignPoint->getMeasuredPositionSigma().Y());
 
     mMillepede->SetLocalEquation(
       mGlobalDerivatives,
@@ -483,14 +485,16 @@ bool Alignment::setLocalEquationZ()
   if (success) {
     if (mCounterUsedTracks < 5)
       LOGF(info,
-           "Alignment::setLocalEquationZ(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Z %.3e",
+           "Alignment::setLocalEquationZ(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Z %.3e sigma %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
            mGlobalDerivatives[chipId * mNDofPerSensor + 0],
            mGlobalDerivatives[chipId * mNDofPerSensor + 1],
            mGlobalDerivatives[chipId * mNDofPerSensor + 2],
            mGlobalDerivatives[chipId * mNDofPerSensor + 3],
-           mAlignPoint->getLocalMeasuredPosition().Y());
+           mAlignPoint->getLocalMeasuredPosition().Z(),
+           mAlignPoint->getMeasuredPositionSigma().Z());
+
     mMillepede->SetLocalEquation(
       mGlobalDerivatives,
       mLocalDerivatives,
