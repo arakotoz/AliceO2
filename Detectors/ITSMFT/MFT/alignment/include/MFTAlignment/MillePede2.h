@@ -232,7 +232,7 @@ class MillePede2 : public TObject
   void SetRecordWeight(double wgh);
 
   /// \brief assing derivs of loc.eq.
-  void SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma);
+  void SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma, bool wDebugPrint = false);
 
   /// \brief write data of single measurement.
   ///        Note: the records ignore regrouping, store direct parameters

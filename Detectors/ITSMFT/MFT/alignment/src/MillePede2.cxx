@@ -479,7 +479,7 @@ void MillePede2::SetRecordRun(Int_t run)
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma)
+void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma, bool wDebugPrint)
 {
   if (fRecFileStatus < 2)
     InitDataRecStorage(); // create a buffer to store the data
@@ -512,7 +512,8 @@ void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, do
       int idrg = GetRGId(i);
       fRecord->MarkGroup(idrg < 0 ? -1 : fParamGrID[i]);
     }
-  //  fRecord->Print();
+  if (wDebugPrint)
+    fRecord->Print();
 }
 
 //_____________________________________________________________________________
