@@ -45,6 +45,7 @@ void AlignmentSpec::init(InitContext& ic)
   mAlignment->setAllowedVariationDeltaY(alignConfigParam.allowedVarDeltaY);
   mAlignment->setAllowedVariationDeltaZ(alignConfigParam.allowedVarDeltaZ);
   mAlignment->setAllowedVariationDeltaRz(alignConfigParam.allowedVarDeltaRz);
+  mAlignment->setChi2CutFactor(alignConfigParam.chi2CutFactor);
   for (int sw = 0; sw < NStopWatches; sw++) {
     mTimer[sw].Stop();
     mTimer[sw].Reset();

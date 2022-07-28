@@ -63,6 +63,7 @@ class Alignment
   void setAllowedVariationDeltaY(const double value) { mAllowVar[1] = value; }
   void setAllowedVariationDeltaZ(const double value) { mAllowVar[3] = value; }
   void setAllowedVariationDeltaRz(const double value) { mAllowVar[2] = value; }
+  void setChi2CutFactor(const double value) { mStartFac = value; }
 
   /// \brief set pointer to geometry prepared outside of the class i.e. already had fillMatrixCache()
   void setGeometry(const o2::mft::GeometryTGeo* geom) { mGeometry = geom; }
@@ -97,7 +98,7 @@ class Alignment
   Double_t mGlobalDerivatives[mNumberOfGlobalParam];                             ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
   Double_t mLocalDerivatives[mNumberOfTrackParam];                               ///< Array of local derivatives {dX0, dTx, dY0, dTz}
   std::array<Double_t, mNDofPerSensor> mAllowVar;                                ///< "Encouraged" variation for degrees of freedom {dx, dy, dRz, dz}
-  double mStartFac = 256;                                                        ///< Initial value for chi2 cut (if > 1, iterations in Millepede are turned on)
+  double mStartFac = 256;                                                        ///< Initial value for chi2 cut, used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * chi2CutFactor (if > 1, iterations in Millepede are turned on)
   Int_t mChi2CutNStdDev = 3;                                                     ///< Number of standard deviations for chi2 cut
   Double_t mResCutInitial = 100.;                                                ///< Cut on residual on first iteration
   Double_t mResCut = 100.;                                                       ///< Cut on residual for other iterations

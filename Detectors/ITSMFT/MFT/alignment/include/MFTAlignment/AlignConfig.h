@@ -37,6 +37,7 @@ struct AlignConfig : public o2::conf::ConfigurableParamHelper<AlignConfig> {
   Double_t allowedVarDeltaY = 0.5;     ///< allowed max delta in y-translation (cm)
   Double_t allowedVarDeltaZ = 0.5;     ///< allowed max delta in z-translation (cm)
   Double_t allowedVarDeltaRz = 0.01;   ///< allowed max delta in rotation around z-axis (rad)
+  Double_t chi2CutFactor = 256.;       ///< used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor
 
   O2ParamDef(AlignConfig, "MFTAlignment");
 };
