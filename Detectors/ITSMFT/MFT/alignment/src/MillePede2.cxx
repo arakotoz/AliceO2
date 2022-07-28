@@ -774,8 +774,8 @@ Int_t MillePede2::LocalFit(double* localParams)
   if (fNStdDev != 0 && nDoF > 0 && lChi2 > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor) { // check final chi2
     if (fLocFitAdd)
       fNLocFitsRejected++;
-    LOGF(info, "MillePede2 - reject chi2 %+e record %5ld: (nDOF %d)", lChi2, fCurrRecDataID, nDoF); // A.R. comment
-    fRecord->Print();                                                                               // A.R. comment
+    LOGF(debug, "MillePede2 - reject chi2 %+e record %5ld: (nDOF %d)", lChi2, fCurrRecDataID, nDoF); // A.R. comment
+    // fRecord->Print();                                                                                // A.R. comment
     return 0;
   }
 
