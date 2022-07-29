@@ -57,6 +57,9 @@ void AlignSensorHelper::setGeometry()
 {
   if (mGeometry == nullptr) {
     mGeometry = o2::mft::GeometryTGeo::Instance();
+    mGeometry->fillMatrixCache(
+      o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                               o2::math_utils::TransformType::L2G));
     mGeoSymbolicName = mGeometry->composeSymNameMFT();
   }
 }
