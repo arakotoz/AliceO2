@@ -237,9 +237,9 @@ void Alignment::globalFit()
 
   // allocate memory in arrays to temporarily store the results of the global fit
 
-  Double_t* params = new Double_t[mNumberOfGlobalParam];
-  Double_t* paramsErrors = new Double_t[mNumberOfGlobalParam];
-  Double_t* paramsPulls = new Double_t[mNumberOfGlobalParam];
+  double* params = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
+  double* paramsErrors = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
+  double* paramsPulls = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
 
   // initialise the content of each array
 
@@ -285,9 +285,9 @@ void Alignment::globalFit()
 
   // free allocated memory
 
-  delete[] params;
-  delete[] paramsErrors;
-  delete[] paramsPulls;
+  free(params);
+  free(paramsErrors);
+  free(paramsPulls);
 }
 
 //__________________________________________________________________________
