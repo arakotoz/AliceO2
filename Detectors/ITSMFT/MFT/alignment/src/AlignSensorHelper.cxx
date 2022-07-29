@@ -135,6 +135,9 @@ void AlignSensorHelper::setSymName()
   if (mGeometry == nullptr) {
     mGeometry = o2::mft::GeometryTGeo::Instance();
   }
+  mGeometry->fillMatrixCache(
+    o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                             o2::math_utils::TransformType::L2G));
   mGeometry->getSensorID(mChipIndexInMft, hf, dk, lr, sr);
   mLadderInHalfDisk = lr;
   bool isIdVerified = true;
@@ -159,6 +162,9 @@ void AlignSensorHelper::extractSensorTransform()
   if (mGeometry == nullptr) {
     mGeometry = o2::mft::GeometryTGeo::Instance();
   }
+  mGeometry->fillMatrixCache(
+    o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                             o2::math_utils::TransformType::L2G));
   mTransform = mGeometry->getMatrixL2G(mChipIndexInMft);
 
   Double_t* tra = mTransform.GetTranslation();

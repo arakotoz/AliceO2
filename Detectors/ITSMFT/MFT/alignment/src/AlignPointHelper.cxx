@@ -37,7 +37,12 @@ AlignPointHelper::AlignPointHelper()
     mGlobalMeasuredPosition(0., 0., 0.),
     mLocalResidual(0., 0., 0.)
 {
+
   mGeometry = o2::mft::GeometryTGeo::Instance();
+  mGeometry->fillMatrixCache(
+    o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                             o2::math_utils::TransformType::L2G));
+
   mTrackInitialParam.X0 = 0.;
   mTrackInitialParam.Y0 = 0.;
   mTrackInitialParam.Z0 = 0.;
@@ -231,12 +236,15 @@ void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT mftTrack)
 void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT mftTrack)
 {
   mIsAlignPointSet = false;
+  LOGF(info,
+       "setGlobalRecoPosition(): x = %.3e, y = %.3e, z = %.3e",
+       mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mGlobalRecoPosition.SetXYZ(mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mIsAlignPointSet = true;
 }
 
 //__________________________________________________________________________
-void AlignPointHelper::setMeasuredPosition(o2::itsmft::CompClusterExt mftCluster,
+void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mftCluster,
                                            std::vector<unsigned char>::iterator& pattIt)
 {
   if (mDictionary == nullptr) {
@@ -270,14 +278,20 @@ void AlignPointHelper::setMeasuredPosition(o2::itsmft::CompClusterExt mftCluster
   if (mGeometry == nullptr) {
     mGeometry = o2::mft::GeometryTGeo::Instance();
   }
+  mGeometry->fillMatrixCache(
+    o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                             o2::math_utils::TransformType::L2G));
   mGlobalMeasuredPosition = mGeometry->getMatrixL2G(chipID) * mLocalMeasuredPosition;
   mLocalMeasuredPositionSigma.SetX(sigmaX);
   mLocalMeasuredPositionSigma.SetZ(sigmaZ);
   mIsAlignPointSet &= mChipHelper->setSensor(chipID);
+  LOGF(info,
+       "setMeasuredPosition(): x = %.3e, y = %.3e, z = %.3e",
+       mGlobalMeasuredPosition.X(), mGlobalMeasuredPosition.Y(), mGlobalMeasuredPosition.Z());
 }
 
 //__________________________________________________________________________
-void AlignPointHelper::setMeasuredPosition(o2::itsmft::CompClusterExt mftCluster,
+void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mftCluster,
                                            gsl::span<const unsigned char>::iterator& pattIt)
 {
   if (mDictionary == nullptr) {
@@ -310,22 +324,29 @@ void AlignPointHelper::setMeasuredPosition(o2::itsmft::CompClusterExt mftCluster
   if (mGeometry == nullptr) {
     mGeometry = o2::mft::GeometryTGeo::Instance();
   }
+  mGeometry->fillMatrixCache(
+    o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                             o2::math_utils::TransformType::L2G));
   mGlobalMeasuredPosition = mGeometry->getMatrixL2G(chipID) * mLocalMeasuredPosition;
   mLocalMeasuredPositionSigma.SetX(sigmaX);
   mLocalMeasuredPositionSigma.SetZ(sigmaZ);
   mIsAlignPointSet &= mChipHelper->setSensor(chipID);
+  LOGF(debug,
+       "setMeasuredPosition(): x = %.3e, y = %.3e, z = %.3e",
+       mGlobalMeasuredPosition.X(), mGlobalMeasuredPosition.Y(), mGlobalMeasuredPosition.Z());
 }
 
 //__________________________________________________________________________
 void AlignPointHelper::setLocalResidual()
 {
   if (mGeometry == nullptr) {
-    LOGF(error,
-         "AlignPointHelper::setLocalResidual() - no geometry found !");
-    return;
+    mGeometry = o2::mft::GeometryTGeo::Instance();
   }
 
   if (mIsAlignPointSet) {
+    mGeometry->fillMatrixCache(
+      o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
+                               o2::math_utils::TransformType::L2G));
     mLocalRecoPosition = mGeometry->getMatrixL2G(getSensorId()).ApplyInverse(mGlobalRecoPosition);
     mLocalResidual.SetXYZ(
       mLocalMeasuredPosition.X() - mLocalRecoPosition.X(),
@@ -360,6 +381,12 @@ bool AlignPointHelper::computeLocalDerivativeX()
     mLocalDerivativeX.mdTy = (mGlobalRecoPosition.Z() - mTrackInitialParam.Z0) *
                              ((mChipHelper->sinRx() * mChipHelper->sinRy() * mChipHelper->cosRz()) +
                               (mChipHelper->cosRx() * mChipHelper->sinRz()));
+    LOGF(info,
+         "computeLocalDerivativeX(): dX0 = %.3e, dTx = %.3e, dY0 = %.3e, dTy = %.3e",
+         mLocalDerivativeX.mdX0,
+         mLocalDerivativeX.mdTx,
+         mLocalDerivativeX.mdY0,
+         mLocalDerivativeX.mdTy);
     return true;
   } else {
     LOGF(error,
@@ -383,6 +410,12 @@ bool AlignPointHelper::computeLocalDerivativeY()
     mLocalDerivativeY.mdTy = (mGlobalRecoPosition.Z() - mTrackInitialParam.Z0) *
                              ((mChipHelper->cosRx() * mChipHelper->cosRz()) -
                               (mChipHelper->sinRx() * mChipHelper->sinRy() * mChipHelper->sinRz()));
+    LOGF(info,
+         "computeLocalDerivativeY(): dX0 = %.3e, dTx = %.3e, dY0 = %.3e, dTy = %.3e",
+         mLocalDerivativeY.mdX0,
+         mLocalDerivativeY.mdTx,
+         mLocalDerivativeY.mdY0,
+         mLocalDerivativeY.mdTy);
     return true;
   } else {
     LOGF(error,
@@ -402,6 +435,12 @@ bool AlignPointHelper::computeLocalDerivativeZ()
     mLocalDerivativeZ.mdY0 = (-1.) * mChipHelper->sinRx() * mChipHelper->cosRy();
 
     mLocalDerivativeZ.mdTy = (-1.) * (mGlobalRecoPosition.Z() - mTrackInitialParam.Z0) * mChipHelper->sinRx() * mChipHelper->cosRy();
+    LOGF(info,
+         "computeLocalDerivativeZ(): dX0 = %.3e, dTx = %.3e, dY0 = %.3e, dTy = %.3e",
+         mLocalDerivativeZ.mdX0,
+         mLocalDerivativeZ.mdTx,
+         mLocalDerivativeZ.mdY0,
+         mLocalDerivativeZ.mdTy);
     return true;
   } else {
     LOGF(error,

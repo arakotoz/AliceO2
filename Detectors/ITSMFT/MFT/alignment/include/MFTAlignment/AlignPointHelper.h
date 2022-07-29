@@ -159,8 +159,8 @@ class AlignPointHelper
   void recordTrackInitialParam(o2::mft::TrackMFT mftTrack);
   void setClusterDictionary(const o2::itsmft::TopologyDictionary* d) { mDictionary = d; }
   void setGlobalRecoPosition(o2::mft::TrackMFT mftTrack);
-  void setMeasuredPosition(o2::itsmft::CompClusterExt mftCluster, std::vector<unsigned char>::iterator& pattIt);
-  void setMeasuredPosition(o2::itsmft::CompClusterExt mftCluster, gsl::span<const unsigned char>::iterator& pattIt);
+  void setMeasuredPosition(const o2::itsmft::CompClusterExt& mftCluster, std::vector<unsigned char>::iterator& pattIt);
+  void setMeasuredPosition(const o2::itsmft::CompClusterExt& mftCluster, gsl::span<const unsigned char>::iterator& pattIt);
   void setLocalResidual();
   void setGlobalResidual();
 

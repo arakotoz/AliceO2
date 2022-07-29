@@ -133,10 +133,10 @@ class Alignment
   bool setGlobalDerivative(Int_t index, Double_t value);
 
   /// \brief reset the array of the Local derivative
-  void resetLocalDerivative();
+  bool resetLocalDerivative();
 
   /// \brief reset the array of the Global derivative
-  void resetGlocalDerivative();
+  bool resetGlocalDerivative();
 
   /// \brief set the first component of the local equation vector for a given alignment point
   bool setLocalEquationX();

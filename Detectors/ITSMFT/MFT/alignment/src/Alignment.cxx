@@ -158,7 +158,7 @@ void Alignment::processRecoTracks()
     return;
   }
 
-  for (auto oneTrack : mMFTTracks) { // track loop
+  for (const auto& oneTrack : mMFTTracks) { // track loop
 
     // Skip the track if not enough clusters
     auto ncls = oneTrack.getNumberOfPoints();
@@ -187,13 +187,15 @@ void Alignment::processRecoTracks()
 
       // Store measured positions
       auto clsEntry = mMFTTrackClusIdx[offset + icls];
-      mAlignPoint->setMeasuredPosition(mMFTClusters[clsEntry], pattIt);
+      const auto compCluster = mMFTClusters[clsEntry];
+      mAlignPoint->setMeasuredPosition(compCluster, pattIt);
 
       // Propagate track to the current z plane of this cluster
-      oneTrack.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());
+      auto track = oneTrack;
+      track.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());
 
       // Store reco positions
-      mAlignPoint->setGlobalRecoPosition(oneTrack);
+      mAlignPoint->setGlobalRecoPosition(track);
 
       // compute residuals
       mAlignPoint->setLocalResidual();
@@ -335,19 +337,21 @@ bool Alignment::setGlobalDerivative(Int_t index, Double_t value)
 }
 
 //__________________________________________________________________________
-void Alignment::resetLocalDerivative()
+bool Alignment::resetLocalDerivative()
 {
   for (int i = 0; i < mNumberOfTrackParam; ++i) {
     mLocalDerivatives[i] = 0.0;
   }
+  return true;
 }
 
 //__________________________________________________________________________
-void Alignment::resetGlocalDerivative()
+bool Alignment::resetGlocalDerivative()
 {
   for (int i = 0; i < mNumberOfGlobalParam; ++i) {
     mGlobalDerivatives[i] = 0.0;
   }
+  return true;
 }
 
 //__________________________________________________________________________
@@ -361,12 +365,12 @@ bool Alignment::setLocalEquationX()
   if (!mAlignPoint->isLocalDerivativeDone())
     return false;
 
+  bool success = true;
+
   // clean slate for the local equation for this measurement
 
-  resetGlocalDerivative();
-  resetLocalDerivative();
-
-  bool success = true;
+  success &= resetGlocalDerivative();
+  success &= resetLocalDerivative();
 
   // local derivatives
   // index [0 .. 3] for {dX0, dTx, dY0, dTz}
@@ -420,12 +424,12 @@ bool Alignment::setLocalEquationY()
   if (!mAlignPoint->isLocalDerivativeDone())
     return false;
 
+  bool success = true;
+
   // clean slate for the local equation for this measurement
 
-  resetGlocalDerivative();
-  resetLocalDerivative();
-
-  bool success = true;
+  success &= resetGlocalDerivative();
+  success &= resetLocalDerivative();
 
   // local derivatives
   // index [0 .. 3] for {dX0, dTx, dY0, dTz}
@@ -480,12 +484,12 @@ bool Alignment::setLocalEquationZ()
   if (!mAlignPoint->isLocalDerivativeDone())
     return false;
 
+  bool success = true;
+
   // clean slate for the local equation for this measurement
 
-  resetGlocalDerivative();
-  resetLocalDerivative();
-
-  bool success = true;
+  success &= resetGlocalDerivative();
+  success &= resetLocalDerivative();
 
   // local derivatives
   // index [0 .. 3] for {dX0, dTx, dY0, dTz}
