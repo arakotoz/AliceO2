@@ -92,8 +92,8 @@ class Alignment
   static o2::itsmft::ChipMappingMFT mChipMapping;                                ///< MFT chip <-> ladder, layer, disk, half mapping
   static constexpr int mNumberOfSensors = mChipMapping.getNChips();              ///< Total number of sensors (detection elements) in the MFT
   static constexpr int mNumberOfGlobalParam = mNDofPerSensor * mNumberOfSensors; ///< Number of alignment (= global) parameters
-  Double_t* mGlobalDerivatives = nullptr;                                        ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
-  Double_t* mLocalDerivatives = nullptr;                                         ///< Array of local derivatives {dX0, dTx, dY0, dTz}
+  double* mGlobalDerivatives = nullptr;                                          ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+  double* mLocalDerivatives = nullptr;                                           ///< Array of local derivatives {dX0, dTx, dY0, dTz}
   std::array<Double_t, mNDofPerSensor> mAllowVar;                                ///< "Encouraged" variation for degrees of freedom {dx, dy, dRz, dz}
   double mStartFac = 256;                                                        ///< Initial value for chi2 cut, used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * chi2CutFactor (if > 1, iterations in Millepede are turned on)
   Int_t mChi2CutNStdDev = 3;                                                     ///< Number of standard deviations for chi2 cut
@@ -109,7 +109,7 @@ class Alignment
   std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;              ///< Alignment point helper
   std::vector<o2::detectors::AlignParam> mAlignParams;                           ///< vector of alignment parameters computed by Millepede global fit
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
-  Int_t* mGlobalParameterStatus = nullptr;                                       ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
+  int* mGlobalParameterStatus = nullptr;                                         ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
 
   // used to fix some degrees of freedom
 
