@@ -167,6 +167,12 @@ void Alignment::processRecoTracks()
       continue;
     }
 
+    // Skip presumably quite low momentum track
+    if (!oneTrack.isLTF()) {
+      mCounterSkippedTracks++;
+      continue;
+    }
+
     auto offset = oneTrack.getExternalClusterIndexOffset();
 
     mTrackRecord.Reset();
