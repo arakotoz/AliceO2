@@ -153,7 +153,6 @@ class AlignPointHelper
   TrackParam getTrackInitialParam() const { return mTrackInitialParam; }
 
   void resetAlignPoint();
-  void resetDerivatives();
   void resetTrackInitialParam();
 
   void recordTrackInitialParam(o2::mft::TrackMFT mftTrack);
@@ -192,6 +191,9 @@ class AlignPointHelper
 
   o2::math_utils::Point3D<double> mLocalResidual;  ///< residual between track x-ing point and cluster in local ref. system
   o2::math_utils::Point3D<double> mGlobalResidual; ///< residual between track x-ing point and cluster in global ref. system
+
+  void resetLocalDerivatives();
+  void resetGlobalDerivatives();
 
   /// \brief compute X component of the local derivatives
   bool computeLocalDerivativeX();

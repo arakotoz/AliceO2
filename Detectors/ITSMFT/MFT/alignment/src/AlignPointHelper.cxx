@@ -44,16 +44,10 @@ AlignPointHelper::AlignPointHelper()
     o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
                              o2::math_utils::TransformType::L2G));
 
-  mTrackInitialParam.X0 = 0.;
-  mTrackInitialParam.Y0 = 0.;
-  mTrackInitialParam.Z0 = 0.;
-  mTrackInitialParam.Tx = 0.;
-  mTrackInitialParam.Ty = 0.;
-
-  mLocalMeasuredPositionSigma.SetXYZ(
-    o2::mft::ioutils::DefClusErrorRow,
-    o2::itsmft::SegmentationAlpide::SensorLayerThicknessEff * 0.5,
-    o2::mft::ioutils::DefClusErrorCol);
+  resetLocalDerivatives();
+  resetGlobalDerivatives();
+  resetTrackInitialParam();
+  resetAlignPoint();
 
   mChipHelper = std::make_unique<AlignSensorHelper>();
   LOGF(info, "AlignPointHelper instantiated");
@@ -62,7 +56,7 @@ AlignPointHelper::AlignPointHelper()
 //__________________________________________________________________________
 void AlignPointHelper::computeLocalDerivatives()
 {
-  mIsLocalDerivativeDone = false;
+  resetLocalDerivatives();
   if (mChipHelper == nullptr) {
     LOGF(error,
          "AlignPointHelper::computeLocalDerivatives() - no AlignSensorHelper found !");
@@ -88,7 +82,7 @@ void AlignPointHelper::computeLocalDerivatives()
 //__________________________________________________________________________
 void AlignPointHelper::computeGlobalDerivatives()
 {
-  mIsGlobalDerivativeDone = false;
+  resetGlobalDerivatives();
   if (mChipHelper == nullptr) {
     LOGF(error,
          "AlignPointHelper::computeGlobalDerivatives() - no AlignSensorHelper found !");
@@ -193,17 +187,22 @@ void AlignPointHelper::resetAlignPoint()
 }
 
 //__________________________________________________________________________
-void AlignPointHelper::resetDerivatives()
+void AlignPointHelper::resetLocalDerivatives()
 {
   mLocalDerivativeX.reset();
   mLocalDerivativeY.reset();
   mLocalDerivativeZ.reset();
 
+  mIsLocalDerivativeDone = false;
+}
+
+//__________________________________________________________________________
+void AlignPointHelper::resetGlobalDerivatives()
+{
   mGlobalDerivativeX.reset();
   mGlobalDerivativeY.reset();
   mGlobalDerivativeZ.reset();
 
-  mIsLocalDerivativeDone = false;
   mIsGlobalDerivativeDone = false;
 }
 
@@ -251,13 +250,15 @@ void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT mftTrack)
 void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mftCluster,
                                            std::vector<unsigned char>::iterator& pattIt)
 {
+  // method to be used in a macro
+
   if (mDictionary == nullptr) {
     LOGF(error,
          "AlignPointHelper::setMeasuredPosition() - no dictionary found !");
     return;
   }
 
-  /// convert a compact cluster to 3D spacepoint stored into a Hit
+  // convert a compact cluster to 3D spacepoint stored into a Hit
   // lines from Detectors/ITSMFT/MFT/tracking/src/IOUtils.cxx
   auto chipID = mftCluster.getChipID();
   auto pattID = mftCluster.getPatternID();
@@ -298,12 +299,14 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
 void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mftCluster,
                                            gsl::span<const unsigned char>::iterator& pattIt)
 {
+  // method to be used in a workflow
+
   if (mDictionary == nullptr) {
     LOGF(error,
          "AlignPointHelper::setMeasuredPosition() - no dictionary found !");
     return;
   }
-  /// convert a compact cluster to 3D spacepoint stored into a Hit
+  // convert a compact cluster to 3D spacepoint stored into a Hit
   // lines from Detectors/ITSMFT/MFT/tracking/src/IOUtils.cxx
   auto chipID = mftCluster.getChipID();
   auto pattID = mftCluster.getPatternID();
