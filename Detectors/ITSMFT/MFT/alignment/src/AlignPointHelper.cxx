@@ -11,6 +11,7 @@
 
 /// @file AlignPointHelper.cxx
 
+#include <math.h>
 #include <Rtypes.h>
 #include "Framework/Logger.h"
 #include "DataFormatsMFT/TrackMFT.h"
@@ -99,7 +100,7 @@ void AlignPointHelper::computeGlobalDerivatives()
     return;
   }
   if (!mIsAlignPointSet) {
-    LOGF(error, "AlignPointHelper::computeLocalDerivatives() - no align point coordinates set !");
+    LOGF(error, "AlignPointHelper::computeGlobalDerivatives() - no align point coordinates set !");
     return;
   }
   bool success = true;
@@ -241,6 +242,9 @@ void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT mftTrack)
        mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mGlobalRecoPosition.SetXYZ(mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mIsAlignPointSet = true;
+  if (isnan(mGlobalRecoPosition.X()) || isnan(mGlobalRecoPosition.Y()) || isnan(mGlobalRecoPosition.Z())) {
+    mIsAlignPointSet = false;
+  }
 }
 
 //__________________________________________________________________________
