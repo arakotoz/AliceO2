@@ -25,7 +25,7 @@ using namespace o2::mft;
 ClassImp(o2::mft::AlignSensorHelper);
 
 //__________________________________________________________________________
-AlignSensorHelper::AlignSensorHelper(const o2::mft::GeometryTGeo* geom)
+AlignSensorHelper::AlignSensorHelper()
   : mChipIndexOnLadder(0),
     mChipIndexInMft(0),
     mLadderInHalfDisk(0),
@@ -48,15 +48,15 @@ AlignSensorHelper::AlignSensorHelper(const o2::mft::GeometryTGeo* geom)
     mCosRz(0),
     mIsTransformExtracted(false)
 {
-  setGeometry(geom);
+  setGeometry();
   LOGF(info, "AlignSensorHelper instantiated");
 }
 
 //__________________________________________________________________________
-void AlignSensorHelper::setGeometry(const o2::mft::GeometryTGeo* geom)
+void AlignSensorHelper::setGeometry()
 {
   if (mGeometry == nullptr) {
-    mGeometry = geom;
+    mGeometry = o2::mft::GeometryTGeo::Instance();
     mGeoSymbolicName = mGeometry->composeSymNameMFT();
   }
 }
@@ -128,23 +128,23 @@ void AlignSensorHelper::setSensorUid(const int chipIndex)
 //__________________________________________________________________________
 void AlignSensorHelper::setSymName()
 {
-  int hf = 0, dk = 0, sr = 0;
-  if (mGeometry) {
-    mGeometry->getSensorID(mChipIndexInMft, hf, dk, mLadderInHalfDisk, sr);
-    bool isIdVerified = true;
-    isIdVerified &= (hf == (int)mHalf);
-    isIdVerified &= (dk == (int)mDisk);
-    isIdVerified &= (sr == (int)mChipIndexOnLadder);
-    if (isIdVerified) {
-      mGeoSymbolicName = mGeometry->composeSymNameChip(mHalf,
-                                                       mDisk,
-                                                       mLadderInHalfDisk,
-                                                       mChipIndexOnLadder);
-    } else {
-      LOGF(error, "AlignSensorHelper::setSymName() - mismatch in some index");
-    }
+  int hf = 0, dk = 0, lr = 0, sr = 0;
+  if (mGeometry == nullptr) {
+    mGeometry = o2::mft::GeometryTGeo::Instance();
+  }
+  mGeometry->getSensorID(mChipIndexInMft, hf, dk, lr, sr);
+  mLadderInHalfDisk = lr;
+  bool isIdVerified = true;
+  isIdVerified &= (hf == (int)mHalf);
+  isIdVerified &= (dk == (int)mDisk);
+  isIdVerified &= (sr == (int)mChipIndexOnLadder);
+  if (isIdVerified) {
+    mGeoSymbolicName = mGeometry->composeSymNameChip(mHalf,
+                                                     mDisk,
+                                                     mLadderInHalfDisk,
+                                                     mChipIndexOnLadder);
   } else {
-    LOGF(error, "AlignSensorHelper::setSymName() - nullptr to geometry");
+    LOGF(error, "AlignSensorHelper::setSymName() - mismatch in some index");
   }
 }
 
@@ -153,42 +153,39 @@ void AlignSensorHelper::extractSensorTransform()
 {
   if (mIsTransformExtracted)
     return;
-  if (mGeometry) {
-    mTransform = mGeometry->getMatrixL2G(mChipIndexInMft);
-
-    Double_t* tra = mTransform.GetTranslation();
-    mTranslation.SetX(tra[0]);
-    mTranslation.SetY(tra[1]);
-    mTranslation.SetZ(tra[2]);
-
-    Double_t* rot = mTransform.GetRotationMatrix();
-    mRx = std::atan2(-rot[5], rot[8]);
-    mRy = std::asin(rot[2]);
-    mRz = std::atan2(-rot[1], rot[0]);
-
-    // force the value of some calculations of sin, cos to avoid numerical errors
-
-    // for MFT sensors, Rx = - Pi/2, or + Pi/2
-    if (mRx > 0)
-      mSinRx = 1.0; // std::sin(mRx)
-    else
-      mSinRx = -1.0; // std::sin(mRx)
-    mCosRx = 0.0;    // std::cos(mRx)
-
-    // for MFT sensors, Ry = 0
-    mSinRy = 0.0; // std::sin(mRy);
-    mCosRy = 1.0; // std::cos(mRy);
-
-    // for MFT sensors, Rz = 0 or Pi
-    mSinRz = 0.0; // std::sin(mRz);
-    mCosRz = std::cos(mRz);
-
-    mIsTransformExtracted = true;
-  } else {
-    resetSensorTransformInfo();
-    LOGF(error,
-         "AlignSensorHelper::extractSensorTransform() - nullptr to geometry");
+  if (mGeometry == nullptr) {
+    mGeometry = o2::mft::GeometryTGeo::Instance();
   }
+  mTransform = mGeometry->getMatrixL2G(mChipIndexInMft);
+
+  Double_t* tra = mTransform.GetTranslation();
+  mTranslation.SetX(tra[0]);
+  mTranslation.SetY(tra[1]);
+  mTranslation.SetZ(tra[2]);
+
+  Double_t* rot = mTransform.GetRotationMatrix();
+  mRx = std::atan2(-rot[5], rot[8]);
+  mRy = std::asin(rot[2]);
+  mRz = std::atan2(-rot[1], rot[0]);
+
+  // force the value of some calculations of sin, cos to avoid numerical errors
+
+  // for MFT sensors, Rx = - Pi/2, or + Pi/2
+  if (mRx > 0)
+    mSinRx = 1.0; // std::sin(mRx)
+  else
+    mSinRx = -1.0; // std::sin(mRx)
+  mCosRx = 0.0;    // std::cos(mRx)
+
+  // for MFT sensors, Ry = 0
+  mSinRy = 0.0; // std::sin(mRy);
+  mCosRy = 1.0; // std::cos(mRy);
+
+  // for MFT sensors, Rz = 0 or Pi
+  mSinRz = 0.0; // std::sin(mRz);
+  mCosRz = std::cos(mRz);
+
+  mIsTransformExtracted = true;
 }
 
 //__________________________________________________________________________

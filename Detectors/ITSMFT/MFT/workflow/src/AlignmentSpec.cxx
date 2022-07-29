@@ -107,7 +107,6 @@ void AlignmentSpec::updateTimeDependentParams(ProcessingContext& pc)
     geom->fillMatrixCache(o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L,
                                                    o2::math_utils::TransformType::T2GRot,
                                                    o2::math_utils::TransformType::T2G));
-    mAlignment->setGeometry(geom);
     auto& alignConfigParam = o2::mft::AlignConfig::Instance();
     auto field = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField());
     double centerMFT[3] = {0, 0, -61.4}; // Field at center of MFT

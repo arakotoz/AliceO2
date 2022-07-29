@@ -64,12 +64,13 @@ void Alignment::init()
 {
   if (mIsInitDone)
     return;
-  if (mGeometry == nullptr) {
-    LOGF(fatal, "Alignment::init() failed because no geometry is defined");
+  if (mDictionary == nullptr) {
+    LOGF(fatal, "Alignment::init() failed because no cluster dictionary is defined");
     mIsInitDone = false;
     return;
   }
-  mAlignPoint = std::make_unique<AlignPointHelper>(mGeometry);
+  mAlignPoint = std::make_unique<AlignPointHelper>();
+  mAlignPoint->setClusterDictionary(mDictionary);
   mMillepede->InitMille(mNumberOfGlobalParam,
                         mNumberOfTrackParam,
                         mChi2CutNStdDev,
@@ -123,10 +124,6 @@ void Alignment::processTimeFrame(o2::framework::ProcessingContext& ctx)
   mMFTClustersROF = ctx.inputs().get<gsl::span<o2::itsmft::ROFRecord>>("clustersrofs");
   mMFTClusterPatterns = ctx.inputs().get<gsl::span<unsigned char>>("patterns");
   pattIt = mMFTClusterPatterns.begin();
-  mMFTClustersGlobal.clear();
-  mMFTClustersGlobal.reserve(mMFTClusters.size());
-  o2::mft::ioutils::convertCompactClusters(
-    mMFTClusters, pattIt, mMFTClustersGlobal, mDictionary);
 }
 
 //__________________________________________________________________________
@@ -164,18 +161,19 @@ void Alignment::processRecoTracks()
       mAlignPoint->resetDerivatives();
       mAlignPoint->resetAlignPoint();
 
+      // Store measured positions
       auto clsEntry = mMFTTrackClusIdx[offset + icls];
-      auto globalCluster = mMFTClustersGlobal[clsEntry];
+      mAlignPoint->setMeasuredPosition(mMFTClusters[clsEntry], pattIt);
 
       // Propagate track to the current z plane of this cluster
-      oneTrack.propagateParamToZlinear(globalCluster.getZ());
+      oneTrack.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());
 
-      // Store reco and measured positions
+      // Store reco positions
       mAlignPoint->setGlobalRecoPosition(oneTrack);
-      mAlignPoint->setLocalMeasuredPosition(globalCluster);
 
       // compute residuals
       mAlignPoint->setLocalResidual();
+      mAlignPoint->setGlobalResidual();
 
       // Compute derivatives
       mAlignPoint->computeLocalDerivatives();
@@ -237,7 +235,7 @@ void Alignment::globalFit()
   LOGF(info, "Alignment: done fitting global parameters");
   LOGF(info, "sensor info, dx (cm), dy (cm), dz (cm), dRz (rad)");
 
-  AlignSensorHelper chipHelper(mGeometry);
+  AlignSensorHelper chipHelper;
   double dRx = 0., dRy = 0., dRz = 0.; // delta rotations
   double dx = 0., dy = 0., dz = 0.;    // delta translations
   bool global = true;                  // delta in global ref. system
@@ -373,14 +371,14 @@ bool Alignment::setLocalEquationX()
            mGlobalDerivatives[chipId * mNDofPerSensor + 1],
            mGlobalDerivatives[chipId * mNDofPerSensor + 2],
            mGlobalDerivatives[chipId * mNDofPerSensor + 3],
-           mAlignPoint->getLocalMeasuredPosition().X(),
-           mAlignPoint->getMeasuredPositionSigma().X());
+           mAlignPoint->getLocalResidual().X(),
+           mAlignPoint->getLocalMeasuredPositionSigma().X());
 
     mMillepede->SetLocalEquation(
       mGlobalDerivatives,
       mLocalDerivatives,
-      mAlignPoint->getLocalMeasuredPosition().X(),
-      mAlignPoint->getMeasuredPositionSigma().X());
+      mAlignPoint->getLocalResidual().X(),
+      mAlignPoint->getLocalMeasuredPositionSigma().X());
   } else {
     mCounterLocalEquationFailed++;
   }
@@ -432,14 +430,14 @@ bool Alignment::setLocalEquationY()
            mGlobalDerivatives[chipId * mNDofPerSensor + 1],
            mGlobalDerivatives[chipId * mNDofPerSensor + 2],
            mGlobalDerivatives[chipId * mNDofPerSensor + 3],
-           mAlignPoint->getLocalMeasuredPosition().Y(),
-           mAlignPoint->getMeasuredPositionSigma().Y());
+           mAlignPoint->getLocalResidual().Y(),
+           mAlignPoint->getLocalMeasuredPositionSigma().Y());
 
     mMillepede->SetLocalEquation(
       mGlobalDerivatives,
       mLocalDerivatives,
-      mAlignPoint->getLocalMeasuredPosition().Y(),
-      mAlignPoint->getMeasuredPositionSigma().Y());
+      mAlignPoint->getLocalResidual().Y(),
+      mAlignPoint->getLocalMeasuredPositionSigma().Y());
   } else {
     mCounterLocalEquationFailed++;
   }
@@ -492,14 +490,14 @@ bool Alignment::setLocalEquationZ()
            mGlobalDerivatives[chipId * mNDofPerSensor + 1],
            mGlobalDerivatives[chipId * mNDofPerSensor + 2],
            mGlobalDerivatives[chipId * mNDofPerSensor + 3],
-           mAlignPoint->getLocalMeasuredPosition().Z(),
-           mAlignPoint->getMeasuredPositionSigma().Z());
+           mAlignPoint->getLocalResidual().Z(),
+           mAlignPoint->getLocalMeasuredPositionSigma().Z());
 
     mMillepede->SetLocalEquation(
       mGlobalDerivatives,
       mLocalDerivatives,
-      mAlignPoint->getLocalMeasuredPosition().Z(),
-      mAlignPoint->getMeasuredPositionSigma().Z());
+      mAlignPoint->getLocalResidual().Z(),
+      mAlignPoint->getLocalMeasuredPositionSigma().Z());
   } else {
     mCounterLocalEquationFailed++;
   }

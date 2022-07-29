@@ -65,9 +65,6 @@ class Alignment
   void setAllowedVariationDeltaRz(const double value) { mAllowVar[2] = value; }
   void setChi2CutFactor(const double value) { mStartFac = value; }
 
-  /// \brief set pointer to geometry prepared outside of the class i.e. already had fillMatrixCache()
-  void setGeometry(const o2::mft::GeometryTGeo* geom) { mGeometry = geom; }
-
   /// \brief access mft tracks and clusters in the timeframe
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
 
@@ -111,7 +108,6 @@ class Alignment
   const o2::itsmft::TopologyDictionary* mDictionary = nullptr;                   ///< cluster patterns dictionary
   std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;              ///< Alignment point helper
   std::vector<o2::detectors::AlignParam> mAlignParams;                           ///< vector of alignment parameters computed by Millepede global fit
-  const o2::mft::GeometryTGeo* mGeometry = nullptr;                              ///< geometry that must be initialised outside of Alignment
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
 
   // access these data from CTFs
@@ -123,7 +119,6 @@ class Alignment
   gsl::span<const o2::itsmft::ROFRecord> mMFTClustersROF;
   gsl::span<const unsigned char> mMFTClusterPatterns;
   gsl::span<const unsigned char>::iterator pattIt;
-  std::vector<o2::BaseCluster<float>> mMFTClustersGlobal;
 
   /// \brief set array of local derivatives
   bool setLocalDerivative(Int_t index, Double_t value);
