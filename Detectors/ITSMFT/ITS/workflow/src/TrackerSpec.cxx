@@ -66,7 +66,6 @@ void TrackerDPL::init(InitContext& ic)
   mRunVertexer = true;
   mCosmicsProcessing = false;
   std::vector<TrackingParameters> trackParams;
-  std::vector<MemoryParameters> memParams;
 
   if (mMode == "async") {
 
@@ -76,7 +75,6 @@ void TrackerDPL::init(InitContext& ic)
     trackParams[2].TrackletMinPt = 0.1f;
     trackParams[2].CellDeltaTanLambdaSigma *= 4.;
     trackParams[2].MinTrackLength = 4;
-    memParams.resize(3);
     LOG(info) << "Initializing tracker in async. phase reconstruction with " << trackParams.size() << " passes";
 
   } else if (mMode == "sync_misaligned") {
@@ -98,18 +96,15 @@ void TrackerDPL::init(InitContext& ic)
     trackParams[2] = trackParams[0];
     trackParams[1].MinTrackLength = 6;
     trackParams[2].MinTrackLength = 4;
-    memParams.resize(3);
     LOG(info) << "Initializing tracker in misaligned sync. phase reconstruction with " << trackParams.size() << " passes";
 
   } else if (mMode == "sync") {
-    memParams.resize(1);
     trackParams.resize(1);
     LOG(info) << "Initializing tracker in sync. phase reconstruction with " << trackParams.size() << " passes";
   } else if (mMode == "cosmics") {
     mCosmicsProcessing = true;
     mRunVertexer = false;
     trackParams.resize(1);
-    memParams.resize(1);
     trackParams[0].MinTrackLength = 4;
     trackParams[0].CellDeltaTanLambdaSigma *= 10;
     trackParams[0].PhiBins = 4;
@@ -135,7 +130,7 @@ void TrackerDPL::init(InitContext& ic)
   for (auto& params : trackParams) {
     params.CorrType = o2::base::PropagatorImpl<float>::MatCorrType::USEMatCorrLUT;
   }
-  mTracker->setParameters(memParams, trackParams);
+  mTracker->setParameters(trackParams);
 }
 
 void TrackerDPL::run(ProcessingContext& pc)
@@ -214,11 +209,10 @@ void TrackerDPL::run(ProcessingContext& pc)
   std::vector<bool> processingMask;
   int cutVertexMult{0}, cutRandomMult = int(rofs.size()) - multEst.selectROFs(rofs, compClusters, physTriggers, processingMask);
   timeFrame->setMultiplicityCutMask(processingMask);
-
   float vertexerElapsedTime{0.f};
   if (mRunVertexer) {
     // Run seeding vertexer
-    vertexerElapsedTime = mVertexer->clustersToVertices(false, logger);
+    vertexerElapsedTime = mVertexer->clustersToVertices(logger);
   }
   const auto& multEstConf = FastMultEstConfig::Instance(); // parameters for mult estimation and cuts
   for (auto iRof{0}; iRof < rofspan.size(); ++iRof) {
@@ -263,13 +257,13 @@ void TrackerDPL::run(ProcessingContext& pc)
   } else {
 
     timeFrame->setMultiplicityCutMask(processingMask);
+    // Run CA tracker
     mTracker->clustersToTracks(logger, errorLogger);
     if (timeFrame->hasBogusClusters()) {
       LOG(warning) << fmt::format(" - The processed timeframe had {} clusters with wild z coordinates, check the dictionaries", timeFrame->hasBogusClusters());
     }
 
     for (unsigned int iROF{0}; iROF < rofs.size(); ++iROF) {
-
       auto& rof{rofs[iROF]};
       tracks = timeFrame->getTracks(iROF);
       trackLabels = timeFrame->getTracksLabel(iROF);
