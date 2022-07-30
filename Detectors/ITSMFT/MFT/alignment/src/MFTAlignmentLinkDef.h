@@ -15,6 +15,7 @@
 #pragma link off all classes;
 #pragma link off all functions;
 
+#pragma link C++ class o2::mft::AlignHelper + ;
 #pragma link C++ class o2::mft::AlignPointHelper + ;
 #pragma link C++ class o2::mft::AlignSensorHelper + ;
 #pragma link C++ class o2::mft::Alignment + ;
