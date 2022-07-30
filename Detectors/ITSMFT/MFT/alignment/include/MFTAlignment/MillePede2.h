@@ -244,6 +244,7 @@ class MillePede2 : public TObject
   const Char_t* GetDataRecFName() const { return fDataRecFName.Data(); }
   void SetConsRecFName(const char* flname) { fConstrRecFName = flname; }
   const Char_t* GetConsRecFName() const { return fConstrRecFName.Data(); }
+  const Char_t* GetRecChi2FName() const { return fRecChi2FName.Data(); }
   //
   void SetRecDataTreeName(const char* name = 0)
   {
@@ -385,6 +386,14 @@ class MillePede2 : public TObject
   TString fRecConsTreeName;   ///< Name of constraints records tree
   TString fRecDataBranchName; ///< Name of data records branch name
   TString fRecConsBranchName; ///< Name of constraints records branch name
+
+  TFile* fRecChi2File;
+  TString fRecChi2FName;
+  TString fRecChi2TreeName; ///< Name of chi2 per record tree
+  TTree* fTreeChi2;
+  float fSumChi2;
+  bool fIsChi2BelowLimit;
+  int fRecNDoF;
 
   TString fDataRecFName;    ///< Name of File for data records
   MillePedeRecord* fRecord; ///< Buffer of measurements records

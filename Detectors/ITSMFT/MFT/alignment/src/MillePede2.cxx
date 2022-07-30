@@ -93,6 +93,13 @@ MillePede2::MillePede2()
     fRecConsTreeName("MillePedeRecords_Consaints"),
     fRecDataBranchName("Record_Data"),
     fRecConsBranchName("Record_Consaints"),
+    fRecChi2File(0),
+    fRecChi2FName("chi2_records.root"),
+    fRecChi2TreeName("chi2Records"),
+    fTreeChi2(0),
+    fSumChi2(0.),
+    fIsChi2BelowLimit(true),
+    fRecNDoF(0),
     fDataRecFName("/tmp/mp2_data_records.root"),
     fRecord(0),
     fDataRecFile(0),
@@ -161,6 +168,13 @@ MillePede2::MillePede2(const MillePede2& src)
     fRecConsTreeName(0),
     fRecDataBranchName(0),
     fRecConsBranchName(0),
+    fRecChi2File(0),
+    fRecChi2FName("chi2_records.root"),
+    fRecChi2TreeName("chi2Records"),
+    fTreeChi2(0),
+    fSumChi2(0.),
+    fIsChi2BelowLimit(true),
+    fRecNDoF(0),
     fDataRecFName(0),
     fRecord(0),
     fDataRecFile(0),
@@ -362,6 +376,11 @@ Bool_t MillePede2::InitDataRecStorage(Bool_t read)
     fTreeData->SetBranchAddress(GetRecDataBranchName(), &fRecord);
     LOGF(info, "MillePede2 - Found %lld derivatives records", nent);
   }
+  fRecChi2File = TFile::Open(GetRecChi2FName(), "recreate");
+  fTreeChi2 = new TTree(fRecChi2TreeName.Data(), "Sum of chi2 per records");
+  fTreeChi2->Branch("sumChi2", &fSumChi2, "fSumChi2/F");
+  fTreeChi2->Branch("accepted", &fIsChi2BelowLimit, "fIsChi2BelowLimit/O");
+  fTreeChi2->Branch("nDoF", &fRecNDoF, "fRecNDoF/I");
   fCurrRecDataID = -1;
   fRecFileStatus = read ? 1 : 2;
 
@@ -419,6 +438,19 @@ void MillePede2::CloseDataRecStorage()
       fDataRecFile->Close();
       delete fDataRecFile;
       fDataRecFile = 0;
+    }
+  }
+  if (fTreeChi2) {
+    if (fRecChi2File && fRecChi2File->IsWritable()) {
+      fRecChi2File->cd();
+      fTreeChi2->Write();
+    }
+    delete fTreeChi2;
+    fTreeChi2 = 0;
+    if (fRecChi2File) {
+      fRecChi2File->Close();
+      delete fRecChi2File;
+      fRecChi2File = 0;
     }
   }
   fRecFileStatus = 0;
@@ -595,6 +627,7 @@ Int_t MillePede2::LocalFit(double* localParams)
   //  static TArrayI refLoc,refGlo,nrefLoc,nrefGlo;
   static Int_t *refLoc = 0, *refGlo = 0, *nrefLoc = 0, *nrefGlo = 0;
   int nPoints = 0;
+  fIsChi2BelowLimit = true;
 
   SymMatrix& matCLoc = *fMatCLoc;
   MatrixSq& matCGlo = *fMatCGlo;
@@ -755,8 +788,7 @@ Int_t MillePede2::LocalFit(double* localParams)
 
     // reject the track if the residual is too large (outlier)
     double absres = TMath::Abs(resid);
-    if ((absres >= fResCutInit && fIter == 1) ||
-        (absres >= fResCut && fIter > 1)) {
+    if ((absres >= fResCutInit && fIter == 1) || (absres >= fResCut && fIter > 1)) {
       if (fLocFitAdd)
         fNLocFitsRejected++;
       LOGF(info, "MillePede2 - reject res %+e in record %5ld ", resid, fCurrRecDataID); // A.R. comment
@@ -770,8 +802,13 @@ Int_t MillePede2::LocalFit(double* localParams)
   lChi2 /= gloWgh;
   int nDoF = nEq - maxLocUsed;
   lChi2 = (nDoF > 0) ? lChi2 / nDoF : 0; // Chi^2/dof
+  fSumChi2 = lChi2;
+  fRecNDoF = nDoF;
 
   if (fNStdDev != 0 && nDoF > 0 && lChi2 > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor) { // check final chi2
+    fIsChi2BelowLimit = false;
+    if (GetCurrentIteration() == 1)
+      fTreeChi2->Fill();
     if (fLocFitAdd)
       fNLocFitsRejected++;
     LOGF(debug, "MillePede2 - reject chi2 %+e record %5ld: (nDOF %d)", lChi2, fCurrRecDataID, nDoF); // A.R. comment
@@ -917,6 +954,8 @@ Int_t MillePede2::LocalFit(double* localParams)
   }
   //
   //---------------------------------------------------- <<<
+  if (GetCurrentIteration() == 1)
+    fTreeChi2->Fill();
   return 1;
 }
 
