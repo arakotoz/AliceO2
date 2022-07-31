@@ -19,6 +19,9 @@
 #include <Rtypes.h>
 #include <array>
 #include <TString.h>
+#include <TChain.h>
+#include <TFile.h>
+#include <TTree.h>
 
 #include "Framework/ProcessingContext.h"
 #include "DataFormatsITSMFT/TopologyDictionary.h"
@@ -64,12 +67,16 @@ class Alignment
   void setAllowedVariationDeltaZ(const double value) { mAllowVar[3] = value; }
   void setAllowedVariationDeltaRz(const double value) { mAllowVar[2] = value; }
   void setChi2CutFactor(const double value) { mStartFac = value; }
+  void setWithControl(const bool choice) { mWithControl = choice; }
 
-  /// \brief access mft tracks and clusters in the timeframe
+  /// \brief access mft tracks and clusters in the timeframe provided by the workflow
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
 
-  /// \brief use valid tracks to build Mille records
+  /// \brief use valid tracks (and associated clusters) from the workflow to build Mille records
   void processRecoTracks();
+
+  /// \brief  access mft tracks and clusters provided by ROOT files, process all ROFs
+  void processROFs(TChain* mfttrackChain, TChain* mftclusterChain);
 
   /// \brief perform the simultaneous fit of track and alignement parameters
   void globalFit();
@@ -84,6 +91,8 @@ class Alignment
   int mRunNumber = 0;                                                            ///< run number
   float mBz = 0;                                                                 ///< magnetic field status
   int mNumberTFs = 0;                                                            ///< number of timeframes processed
+  int mNumberOfClusterChainROFs = 0;                                             ///< number of ROFs in the cluster chain
+  int mNumberOfTrackChainROFs = 0;                                               ///< number of ROFs in the track chain
   int mCounterLocalEquationFailed = 0;                                           ///< count how many times we failed to set a local equation
   int mCounterSkippedTracks = 0;                                                 ///< count how many tracks did not met the cut on the min. nb of clusters
   int mCounterUsedTracks = 0;                                                    ///< count how many tracks were used to make Mille records
@@ -110,6 +119,7 @@ class Alignment
   std::vector<o2::detectors::AlignParam> mAlignParams;                           ///< vector of alignment parameters computed by Millepede global fit
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
   int* mGlobalParameterStatus = nullptr;                                         ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
+  bool mWithControl = false;                                                     ///< boolean to set the use of the control tree
 
   // used to fix some degrees of freedom
 
@@ -125,6 +135,15 @@ class Alignment
   gsl::span<const o2::itsmft::ROFRecord> mMFTClustersROF;
   gsl::span<const unsigned char> mMFTClusterPatterns;
   gsl::span<const unsigned char>::iterator pattIt;
+
+  // about the control tree
+
+  TFile* mControlFile = nullptr;
+  TTree* mControlTree = nullptr;
+  AlignPoint mPointInfo;
+  void initControlTree();
+  void closeControlTree();
+  void fillControlTree();
 
   /// \brief set array of local derivatives
   bool setLocalDerivative(Int_t index, Double_t value);
