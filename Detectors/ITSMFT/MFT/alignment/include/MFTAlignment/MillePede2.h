@@ -430,36 +430,6 @@ class MillePede2 : public TObject
   ClassDef(MillePede2, 1);
 };
 
-//_____________________________________________________________________________
-inline void MillePede2::ReadRecordData(Long_t recID)
-{
-  fTreeData->GetEntry(recID);
-  fCurrRecDataID = recID;
-}
-
-//_____________________________________________________________________________
-inline void MillePede2::ReadRecordConstraint(Long_t recID)
-{
-  fTreeConstr->GetEntry(recID);
-  fCurrRecConstrID = recID;
-}
-
-//_____________________________________________________________________________
-inline void MillePede2::SaveRecordData()
-{
-  fTreeData->Fill();
-  fRecord->Reset();
-  fCurrRecDataID++;
-}
-
-//_____________________________________________________________________________
-inline void MillePede2::SaveRecordConstraint()
-{
-  fTreeConstr->Fill();
-  fRecord->Reset();
-  fCurrRecConstrID++;
-}
-
 } // namespace mft
 } // namespace o2
 

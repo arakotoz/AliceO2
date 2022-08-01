@@ -340,13 +340,13 @@ Bool_t MillePede2::InitDataRecStorage(Bool_t read, const Int_t nEntriesAutoSave)
       LOGF(fatal, "MillePede2 - Failed to initialize data records file %s", GetDataRecFName());
       return kFALSE;
     }
-    LOGF(info, "MillePede2 - File %s used for derivatives records", GetDataRecFName());
     fTreeData = new TTree(GetRecDataTreeName(), "Data Records for MillePede2");
+    // fTreeData->Branch(GetRecDataBranchName(), "o2::mft::MillePedeRecord", &fRecord, 32000, 99);
     fTreeData->Branch(GetRecDataBranchName(), "MillePedeRecord", &fRecord, 32000, 99);
     fTreeData->SetAutoSave(nEntriesAutoSave); // flush the TTree to disk every N entries
     fTreeData->SetDirectory(fDataRecFile);
     fTreeData->SetImplicitMT(true);
-
+    LOGF(info, "MillePede2 - File %s used for derivatives records", GetDataRecFName());
   } else { // use chain
     TChain* ch = new TChain(GetRecDataTreeName());
     if (fDataRecFName.EndsWith(".root"))
@@ -437,12 +437,9 @@ void MillePede2::CloseDataRecStorage()
       fDataRecFile->cd();
       fTreeData->Write();
     }
-    delete fTreeData;
-    fTreeData = 0;
     if (fDataRecFile) {
       fDataRecFile->Close();
       delete fDataRecFile;
-      fDataRecFile = 0;
     }
   }
   if (fTreeChi2) {
@@ -450,12 +447,9 @@ void MillePede2::CloseDataRecStorage()
       fRecChi2File->cd();
       fTreeChi2->Write();
     }
-    delete fTreeChi2;
-    fTreeChi2 = 0;
     if (fRecChi2File) {
       fRecChi2File->Close();
       delete fRecChi2File;
-      fRecChi2File = 0;
     }
   }
   fRecFileStatus = 0;
@@ -469,11 +463,8 @@ void MillePede2::CloseConsRecStorage()
       fConsRecFile->cd();
       fTreeConstr->Write();
     }
-    delete fTreeConstr;
-    fTreeConstr = 0;
     fConsRecFile->Close();
     delete fConsRecFile;
-    fConsRecFile = 0;
   }
 }
 
@@ -1668,4 +1659,34 @@ void MillePede2::SetSigmaPar(Int_t i, Double_t par)
   if (id < 0)
     return;
   fSigmaPar[id] = par;
+}
+
+//_____________________________________________________________________________
+void MillePede2::ReadRecordData(Long_t recID)
+{
+  fTreeData->GetEntry(recID);
+  fCurrRecDataID = recID;
+}
+
+//_____________________________________________________________________________
+void MillePede2::ReadRecordConstraint(Long_t recID)
+{
+  fTreeConstr->GetEntry(recID);
+  fCurrRecConstrID = recID;
+}
+
+//_____________________________________________________________________________
+void MillePede2::SaveRecordData()
+{
+  fTreeData->Fill();
+  fRecord->Reset();
+  fCurrRecDataID++;
+}
+
+//_____________________________________________________________________________
+void MillePede2::SaveRecordConstraint()
+{
+  fTreeConstr->Fill();
+  fRecord->Reset();
+  fCurrRecConstrID++;
 }
