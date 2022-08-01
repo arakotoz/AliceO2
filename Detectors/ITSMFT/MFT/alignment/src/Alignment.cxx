@@ -58,7 +58,8 @@ Alignment::Alignment()
     mGlobalParameterStatus(nullptr),
     mWithControl(false),
     mControlFile(nullptr),
-    mControlTree(nullptr)
+    mControlTree(nullptr),
+    mNEntriesAutoSave(10000)
 {
   // default allowed variations w.r.t. global system coordinates
   mAllowVar[0] = 0.5;  // delta translation in x (cm)
@@ -132,8 +133,8 @@ void Alignment::init()
   mMillepede->SetDataRecFName(mMilleRecordsFileName.Data());
   mMillepede->SetConsRecFName(mMilleConstraintsRecFileName.Data());
 
-  bool read = true;
-  mMillepede->InitDataRecStorage(read);
+  bool read = false;
+  mMillepede->InitDataRecStorage(read, mNEntriesAutoSave);
   LOG(info) << "-------------- Alignment configured with -----------------";
   LOGF(info, "Chi2CutNStdDev = %d", mChi2CutNStdDev);
   LOGF(info, "ResidualCutInitial = %.3f", mResCutInitial);
@@ -247,7 +248,7 @@ void Alignment::processRecoTracks()
       success &= setLocalEquationY();
       success &= setLocalEquationZ();
       if (!success) {
-        LOGF(error, "track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
+        LOGF(error, "Alignment::processRecoTracks() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
              mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
              mAlignPoint->getLocalMeasuredPosition().X(), mAlignPoint->getLocalMeasuredPosition().Y(), mAlignPoint->getLocalMeasuredPosition().Z(),
              mAlignPoint->getGlobalMeasuredPosition().X(), mAlignPoint->getGlobalMeasuredPosition().Y(), mAlignPoint->getGlobalMeasuredPosition().Z(),
@@ -364,7 +365,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
           fillControlTree();
         isTrackUsed &= success;
         if (!success) {
-          LOGF(error, "track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
+          LOGF(error, "Alignment::processROFs() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
                mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
                mAlignPoint->getLocalMeasuredPosition().X(), mAlignPoint->getLocalMeasuredPosition().Y(), mAlignPoint->getLocalMeasuredPosition().Z(),
                mAlignPoint->getGlobalMeasuredPosition().X(), mAlignPoint->getGlobalMeasuredPosition().Y(), mAlignPoint->getGlobalMeasuredPosition().Z(),
@@ -375,9 +376,11 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 
       if (isTrackUsed) {
         // copy track record
+        /*
         mMillepede->SetRecordRun(mRunNumber);
         mMillepede->SetRecordWeight(mWeightRecord);
         mMillepede->SaveRecordData();
+        */
         mCounterUsedTracks++;
       }
     } // end of loop on tracks
@@ -727,6 +730,9 @@ void Alignment::initControlTree()
 
   if (mControlTree == nullptr) {
     mControlTree = new TTree("point", "the align point info tree");
+    mControlTree->SetDirectory(mControlFile);
+    mControlTree->SetAutoSave(mNEntriesAutoSave); // flush the TTree to disk every N entries
+    mControlTree->SetImplicitMT(true);
     mControlTree->Branch("sensor", &mPointInfo.sensor, "sensor/s");
     mControlTree->Branch("layer", &mPointInfo.layer, "layer/s");
     mControlTree->Branch("disk", &mPointInfo.disk, "disk/s");
@@ -797,10 +803,11 @@ void Alignment::fillControlTree()
     mPointInfo.recoLocalZ = mAlignPoint->getLocalRecoPosition().Z();
 
     if (mCounterUsedTracks < 7000) {
-      LOGF(debug, "track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e",
+      LOGF(debug, "Alignment::fillControlTree() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
            mCounterUsedTracks, mPointInfo.half, mPointInfo.disk, mPointInfo.layer, mPointInfo.sensor,
            mPointInfo.measuredLocalX, mPointInfo.measuredLocalY, mPointInfo.measuredLocalZ,
-           mPointInfo.measuredGlobalX, mPointInfo.measuredGlobalY, mPointInfo.measuredGlobalZ);
+           mPointInfo.measuredGlobalX, mPointInfo.measuredGlobalY, mPointInfo.measuredGlobalZ,
+           mPointInfo.recoGlobalX, mPointInfo.recoGlobalY, mPointInfo.recoGlobalZ);
     }
     mControlTree->Fill();
   }

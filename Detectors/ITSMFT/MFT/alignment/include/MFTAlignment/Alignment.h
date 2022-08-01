@@ -68,6 +68,7 @@ class Alignment
   void setAllowedVariationDeltaRz(const double value) { mAllowVar[2] = value; }
   void setChi2CutFactor(const double value) { mStartFac = value; }
   void setWithControl(const bool choice) { mWithControl = choice; }
+  void setNEntriesAutoSave(const int value) { mNEntriesAutoSave = value; }
 
   /// \brief access mft tracks and clusters in the timeframe provided by the workflow
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
@@ -119,6 +120,7 @@ class Alignment
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
   int* mGlobalParameterStatus = nullptr;                                         ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
   bool mWithControl = false;                                                     ///< boolean to set the use of the control tree
+  int mNEntriesAutoSave = 10000;                                                 ///< number of entries needed to call AutoSave for the output TTrees
 
   // used to fix some degrees of freedom
 

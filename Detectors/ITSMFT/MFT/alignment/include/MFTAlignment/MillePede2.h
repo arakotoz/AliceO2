@@ -276,7 +276,7 @@ class MillePede2 : public TObject
   const char* GetRecConsBranchName() const { return fRecConsBranchName.Data(); }
 
   /// \brief initialize the buffer for processed measurements records
-  Bool_t InitDataRecStorage(Bool_t read = kFALSE);
+  Bool_t InitDataRecStorage(Bool_t read = kFALSE, const Int_t nEntriesAutoSave = 10000);
 
   /// \brief initialize the buffer for processed measurements records
   Bool_t InitConsRecStorage(Bool_t read = kFALSE);

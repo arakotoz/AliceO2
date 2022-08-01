@@ -323,7 +323,7 @@ Bool_t MillePede2::ImposeConsRecFile(const char* fname)
 }
 
 //_____________________________________________________________________________
-Bool_t MillePede2::InitDataRecStorage(Bool_t read)
+Bool_t MillePede2::InitDataRecStorage(Bool_t read, const Int_t nEntriesAutoSave)
 {
   if (fTreeData) {
     LOG(warning) << "MillePede2 - Data Records File is already initialized";
@@ -334,6 +334,7 @@ Bool_t MillePede2::InitDataRecStorage(Bool_t read)
     fRecord = new MillePedeRecord();
 
   if (!read) { // write mode: cannot use chain
+
     fDataRecFile = TFile::Open(GetDataRecFName(), "recreate");
     if (!fDataRecFile) {
       LOGF(fatal, "MillePede2 - Failed to initialize data records file %s", GetDataRecFName());
@@ -342,6 +343,10 @@ Bool_t MillePede2::InitDataRecStorage(Bool_t read)
     LOGF(info, "MillePede2 - File %s used for derivatives records", GetDataRecFName());
     fTreeData = new TTree(GetRecDataTreeName(), "Data Records for MillePede2");
     fTreeData->Branch(GetRecDataBranchName(), "MillePedeRecord", &fRecord, 32000, 99);
+    fTreeData->SetAutoSave(nEntriesAutoSave); // flush the TTree to disk every N entries
+    fTreeData->SetDirectory(fDataRecFile);
+    fTreeData->SetImplicitMT(true);
+
   } else { // use chain
     TChain* ch = new TChain(GetRecDataTreeName());
     if (fDataRecFName.EndsWith(".root"))
