@@ -219,7 +219,7 @@ void AlignPointHelper::resetTrackInitialParam()
 }
 
 //__________________________________________________________________________
-void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT mftTrack)
+void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT& mftTrack)
 {
   mIsTrackInitialParamSet = false;
   mTrackInitialParam.X0 = mftTrack.getX();
@@ -233,15 +233,19 @@ void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT mftTrack)
 }
 
 //__________________________________________________________________________
-void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT mftTrack)
+void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT& mftTrack)
 {
   mIsAlignPointSet = false;
-  LOGF(info,
+  LOGF(debug,
        "setGlobalRecoPosition(): x = %.3e, y = %.3e, z = %.3e",
        mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mGlobalRecoPosition.SetXYZ(mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mIsAlignPointSet = true;
   if (isnan(mGlobalRecoPosition.X()) || isnan(mGlobalRecoPosition.Y()) || isnan(mGlobalRecoPosition.Z())) {
+    LOGF(error,
+         "setGlobalRecoPosition(): track x = %.3e, y = %.3e, z = %.3e, point x = %.3e, y = %.3e, z = %.3e",
+         mftTrack.getX(), mftTrack.getY(), mftTrack.getZ(),
+         mGlobalRecoPosition.X(), mGlobalRecoPosition.Y(), mGlobalRecoPosition.Z());
     mIsAlignPointSet = false;
   }
 }
@@ -290,7 +294,7 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
   mLocalMeasuredPositionSigma.SetX(sigmaX);
   mLocalMeasuredPositionSigma.SetZ(sigmaZ);
   mIsAlignPointSet &= mChipHelper->setSensor(chipID);
-  LOGF(info,
+  LOGF(debug,
        "setMeasuredPosition(): x = %.3e, y = %.3e, z = %.3e",
        mGlobalMeasuredPosition.X(), mGlobalMeasuredPosition.Y(), mGlobalMeasuredPosition.Z());
 }
@@ -359,6 +363,9 @@ void AlignPointHelper::setLocalResidual()
       mLocalMeasuredPosition.X() - mLocalRecoPosition.X(),
       mLocalMeasuredPosition.Y() - mLocalRecoPosition.Y(),
       mLocalMeasuredPosition.Z() - mLocalRecoPosition.Z());
+  } else {
+    LOGF(error,
+         "AlignPointHelper::setLocalResidual() - no align point coordinates set !");
   }
 }
 
@@ -370,6 +377,9 @@ void AlignPointHelper::setGlobalResidual()
       mGlobalMeasuredPosition.X() - mGlobalRecoPosition.X(),
       mGlobalMeasuredPosition.Y() - mGlobalRecoPosition.Y(),
       mGlobalMeasuredPosition.Z() - mGlobalRecoPosition.Z());
+  } else {
+    LOGF(error,
+         "AlignPointHelper::setGlobalResidual() - no align point coordinates set !");
   }
 }
 
@@ -388,7 +398,7 @@ bool AlignPointHelper::computeLocalDerivativeX()
     mLocalDerivativeX.mdTy = (mGlobalRecoPosition.Z() - mTrackInitialParam.Z0) *
                              ((mChipHelper->sinRx() * mChipHelper->sinRy() * mChipHelper->cosRz()) +
                               (mChipHelper->cosRx() * mChipHelper->sinRz()));
-    LOGF(info,
+    LOGF(debug,
          "computeLocalDerivativeX(): dX0 = %.3e, dTx = %.3e, dY0 = %.3e, dTy = %.3e",
          mLocalDerivativeX.mdX0,
          mLocalDerivativeX.mdTx,
@@ -417,7 +427,7 @@ bool AlignPointHelper::computeLocalDerivativeY()
     mLocalDerivativeY.mdTy = (mGlobalRecoPosition.Z() - mTrackInitialParam.Z0) *
                              ((mChipHelper->cosRx() * mChipHelper->cosRz()) -
                               (mChipHelper->sinRx() * mChipHelper->sinRy() * mChipHelper->sinRz()));
-    LOGF(info,
+    LOGF(debug,
          "computeLocalDerivativeY(): dX0 = %.3e, dTx = %.3e, dY0 = %.3e, dTy = %.3e",
          mLocalDerivativeY.mdX0,
          mLocalDerivativeY.mdTx,
@@ -442,7 +452,7 @@ bool AlignPointHelper::computeLocalDerivativeZ()
     mLocalDerivativeZ.mdY0 = (-1.) * mChipHelper->sinRx() * mChipHelper->cosRy();
 
     mLocalDerivativeZ.mdTy = (-1.) * (mGlobalRecoPosition.Z() - mTrackInitialParam.Z0) * mChipHelper->sinRx() * mChipHelper->cosRy();
-    LOGF(info,
+    LOGF(debug,
          "computeLocalDerivativeZ(): dX0 = %.3e, dTx = %.3e, dY0 = %.3e, dTy = %.3e",
          mLocalDerivativeZ.mdX0,
          mLocalDerivativeZ.mdTx,

@@ -109,7 +109,6 @@ class Alignment
   Double_t mResCutInitial = 100.;                                                ///< Cut on residual on first iteration
   Double_t mResCut = 100.;                                                       ///< Cut on residual for other iterations
   int mMinNumberClusterCut = 6;                                                  ///< Minimum number of clusters in the track to be used for alignment
-  o2::mft::MillePedeRecord mTrackRecord;                                         ///< running MillePede Track record
   double mWeightRecord = 1.;                                                     ///< the weight given to a single Mille record in Millepede algorithm
   TString mMilleRecordsFileName;                                                 ///< output file name when saving the Mille records
   TString mMilleConstraintsRecFileName;                                          ///< output file name when saving the records of the constraints

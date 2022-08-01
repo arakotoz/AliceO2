@@ -132,7 +132,7 @@ void Alignment::init()
   mMillepede->SetDataRecFName(mMilleRecordsFileName.Data());
   mMillepede->SetConsRecFName(mMilleConstraintsRecFileName.Data());
 
-  bool read = false;
+  bool read = true;
   mMillepede->InitDataRecStorage(read);
   LOG(info) << "-------------- Alignment configured with -----------------";
   LOGF(info, "Chi2CutNStdDev = %d", mChi2CutNStdDev);
@@ -190,7 +190,7 @@ void Alignment::processRecoTracks()
     return;
   }
 
-  for (const auto& oneTrack : mMFTTracks) { // track loop
+  for (auto& oneTrack : mMFTTracks) { // track loop
 
     // Skip the track if not enough clusters
     auto ncls = oneTrack.getNumberOfPoints();
@@ -207,14 +207,14 @@ void Alignment::processRecoTracks()
 
     auto offset = oneTrack.getExternalClusterIndexOffset();
 
-    mTrackRecord.Reset();
     if (mMillepede->GetRecord()) {
       mMillepede->GetRecord()->Reset();
     }
 
     // Store the initial track parameters
+    auto track = oneTrack;
     mAlignPoint->resetTrackInitialParam();
-    mAlignPoint->recordTrackInitialParam(oneTrack);
+    mAlignPoint->recordTrackInitialParam(track);
 
     bool isTrackUsed = true;
 
@@ -228,7 +228,6 @@ void Alignment::processRecoTracks()
       mAlignPoint->setMeasuredPosition(compCluster, pattIt);
 
       // Propagate track to the current z plane of this cluster
-      auto track = oneTrack;
       track.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());
 
       // Store reco positions
@@ -247,6 +246,13 @@ void Alignment::processRecoTracks()
       success &= setLocalEquationX();
       success &= setLocalEquationY();
       success &= setLocalEquationZ();
+      if (!success) {
+        LOGF(error, "track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
+             mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
+             mAlignPoint->getLocalMeasuredPosition().X(), mAlignPoint->getLocalMeasuredPosition().Y(), mAlignPoint->getLocalMeasuredPosition().Z(),
+             mAlignPoint->getGlobalMeasuredPosition().X(), mAlignPoint->getGlobalMeasuredPosition().Y(), mAlignPoint->getGlobalMeasuredPosition().Z(),
+             mAlignPoint->getGlobalRecoPosition().X(), mAlignPoint->getGlobalRecoPosition().Y(), mAlignPoint->getGlobalRecoPosition().Z());
+      }
       isTrackUsed &= success;
 
     } // end of loop on clusters
@@ -254,8 +260,7 @@ void Alignment::processRecoTracks()
     if (isTrackUsed) {
       mMillepede->SetRecordRun(mRunNumber);
       mMillepede->SetRecordWeight(mWeightRecord);
-      mTrackRecord = *mMillepede->GetRecord(); // copy track record (A.R. why ?)
-      mMillepede->SaveRecordData();            // save record data
+      mMillepede->SaveRecordData(); // save record data
       mCounterUsedTracks++;
     }
   } // end of loop on tracks
@@ -300,7 +305,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
     assert(mNumberOfTrackChainROFs == mNumberOfClusterChainROFs);
 
     //______________________________________________________
-    for (const auto& oneTrack : *mftTracks) { // track loop
+    for (auto& oneTrack : *mftTracks) { // track loop
 
       // Skip the track if not enough clusters
       auto ncls = oneTrack.getNumberOfPoints();
@@ -317,7 +322,6 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 
       auto offset = oneTrack.getExternalClusterIndexOffset();
 
-      mTrackRecord.Reset();
       if (mMillepede->GetRecord()) {
         mMillepede->GetRecord()->Reset();
       }
@@ -338,17 +342,14 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         mAlignPoint->setMeasuredPosition(compCluster, pattIterator);
 
         // Propagate track to the current z plane of this cluster
-        auto track = oneTrack;
-        track.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());
+        oneTrack.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());
 
         // Store reco positions
-        mAlignPoint->setGlobalRecoPosition(track);
+        mAlignPoint->setGlobalRecoPosition(oneTrack);
 
         // compute residuals
         mAlignPoint->setLocalResidual();
         mAlignPoint->setGlobalResidual();
-        if (mWithControl)
-          fillControlTree();
 
         // Compute derivatives
         mAlignPoint->computeLocalDerivatives();
@@ -359,7 +360,16 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         success &= setLocalEquationX();
         success &= setLocalEquationY();
         success &= setLocalEquationZ();
+        if (mWithControl && success)
+          fillControlTree();
         isTrackUsed &= success;
+        if (!success) {
+          LOGF(error, "track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
+               mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
+               mAlignPoint->getLocalMeasuredPosition().X(), mAlignPoint->getLocalMeasuredPosition().Y(), mAlignPoint->getLocalMeasuredPosition().Z(),
+               mAlignPoint->getGlobalMeasuredPosition().X(), mAlignPoint->getGlobalMeasuredPosition().Y(), mAlignPoint->getGlobalMeasuredPosition().Z(),
+               mAlignPoint->getGlobalRecoPosition().X(), mAlignPoint->getGlobalRecoPosition().Y(), mAlignPoint->getGlobalRecoPosition().Z());
+        }
 
       } // end of loop on clusters
 
@@ -367,7 +377,6 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         // copy track record
         mMillepede->SetRecordRun(mRunNumber);
         mMillepede->SetRecordWeight(mWeightRecord);
-        mTrackRecord = *mMillepede->GetRecord();
         mMillepede->SaveRecordData();
         mCounterUsedTracks++;
       }
@@ -414,7 +423,7 @@ void Alignment::globalFit()
   // post-treatment:
   // debug output + save Millepede global fit result in AlignParam vector
 
-  LOGF(info, "Alignment: done fitting global parameters");
+  LOGF(info, "Alignment::globalFit() - done, results below");
   LOGF(info, "sensor info, dx (cm), dy (cm), dz (cm), dRz (rad)");
 
   AlignSensorHelper chipHelper;
@@ -527,8 +536,11 @@ bool Alignment::resetGlocalDerivative()
 bool Alignment::setLocalEquationX()
 {
 
-  if (!mAlignPoint->isAlignPointSet())
+  if (!mAlignPoint->isAlignPointSet()) {
+    LOGF(error,
+         "Alignment::setLocalEquationX() - no align point coordinates set !");
     return false;
+  }
   if (!mAlignPoint->isGlobalDerivativeDone())
     return false;
   if (!mAlignPoint->isLocalDerivativeDone())
@@ -586,8 +598,11 @@ bool Alignment::setLocalEquationX()
 //__________________________________________________________________________
 bool Alignment::setLocalEquationY()
 {
-  if (!mAlignPoint->isAlignPointSet())
+  if (!mAlignPoint->isAlignPointSet()) {
+    LOGF(error,
+         "Alignment::setLocalEquationY() - no align point coordinates set !");
     return false;
+  }
   if (!mAlignPoint->isGlobalDerivativeDone())
     return false;
   if (!mAlignPoint->isLocalDerivativeDone())
@@ -645,9 +660,11 @@ bool Alignment::setLocalEquationY()
 //__________________________________________________________________________
 bool Alignment::setLocalEquationZ()
 {
-
-  if (!mAlignPoint->isAlignPointSet())
+  if (!mAlignPoint->isAlignPointSet()) {
+    LOGF(error,
+         "Alignment::setLocalEquationZ() - no align point coordinates set !");
     return false;
+  }
   if (!mAlignPoint->isGlobalDerivativeDone())
     return false;
   if (!mAlignPoint->isLocalDerivativeDone())
@@ -679,7 +696,7 @@ bool Alignment::setLocalEquationZ()
 
   if (success) {
     if (mCounterUsedTracks < 5)
-      LOGF(info,
+      LOGF(debug,
            "Alignment::setLocalEquationZ(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Z %.3e sigma %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
@@ -749,7 +766,7 @@ void Alignment::closeControlTree()
       delete mControlFile;
     }
   }
-  LOG(info) << "Closed file align_point.root";
+  LOG(info) << "Alignment - Closed file align_point.root";
 }
 
 //__________________________________________________________________________
@@ -779,8 +796,8 @@ void Alignment::fillControlTree()
     mPointInfo.recoLocalY = mAlignPoint->getLocalRecoPosition().Y();
     mPointInfo.recoLocalZ = mAlignPoint->getLocalRecoPosition().Z();
 
-    if (mCounterUsedTracks < 5) {
-      LOGF(info, "track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e",
+    if (mCounterUsedTracks < 7000) {
+      LOGF(debug, "track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e",
            mCounterUsedTracks, mPointInfo.half, mPointInfo.disk, mPointInfo.layer, mPointInfo.sensor,
            mPointInfo.measuredLocalX, mPointInfo.measuredLocalY, mPointInfo.measuredLocalZ,
            mPointInfo.measuredGlobalX, mPointInfo.measuredGlobalY, mPointInfo.measuredGlobalZ);
