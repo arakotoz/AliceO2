@@ -236,7 +236,7 @@ void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT& mftTrack)
 void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT& mftTrack)
 {
   mIsAlignPointSet = false;
-  LOGF(debug,
+  LOGF(info,
        "setGlobalRecoPosition(): x = %.3e, y = %.3e, z = %.3e",
        mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mGlobalRecoPosition.SetXYZ(mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());

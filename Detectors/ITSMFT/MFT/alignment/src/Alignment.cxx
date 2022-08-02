@@ -296,6 +296,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
     {mftClusterChainReader, "MFTClusterPatt"};
 
   bool firstEntry = true;
+  int nCounterAllTracks = 0;
   while (mftTrackChainReader.Next() && mftClusterChainReader.Next()) {
 
     if (firstEntry)
@@ -307,6 +308,8 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 
     //______________________________________________________
     for (auto& oneTrack : *mftTracks) { // track loop
+
+      LOGF(info, "Processing track # %5d", nCounterAllTracks);
 
       // Skip the track if not enough clusters
       auto ncls = oneTrack.getNumberOfPoints();
@@ -381,6 +384,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         mMillepede->SaveRecordData();
         mCounterUsedTracks++;
       }
+      nCounterAllTracks++;
     } // end of loop on tracks
 
     firstEntry = false;
