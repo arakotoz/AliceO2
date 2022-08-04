@@ -31,8 +31,11 @@
 #include "ITSMFTReconstruction/ChipMappingMFT.h"
 #include "ReconstructionDataFormats/BaseCluster.h"
 #include "MFTAlignment/MillePedeRecord.h"
+#include "MFTAlignment/MilleRecordReader.h"
+#include "MFTAlignment/MilleRecordWriter.h"
 #include "MFTAlignment/MillePede2.h"
 #include "MFTAlignment/AlignPointHelper.h"
+#include "MFTAlignment/AlignPointControl.h"
 #include "MFTBase/GeometryTGeo.h"
 #include "DetectorsCommonDataFormats/AlignParam.h"
 
@@ -69,6 +72,10 @@ class Alignment
   void setChi2CutFactor(const double value) { mStartFac = value; }
   void setWithControl(const bool choice) { mWithControl = choice; }
   void setNEntriesAutoSave(const int value) { mNEntriesAutoSave = value; }
+  void setWithRecordWriter(const bool choice) { mWithRecordWriter = choice; }
+  void setWithConstraintsRecWriter(const bool choice) { mWithConstraintsRecWriter = choice; }
+  void setWithRecordReader(const bool choice) { mWithRecordReader = choice; }
+  void setWithConstraintsRecReader(const bool choice) { mWithConstraintsRecReader = choice; }
 
   /// \brief access mft tracks and clusters in the timeframe provided by the workflow
   void processTimeFrame(o2::framework::ProcessingContext& ctx);
@@ -88,44 +95,71 @@ class Alignment
   /// \brief provide access to the AlignParam vector
   void getAlignParams(std::vector<o2::detectors::AlignParam>& alignParams) { alignParams = mAlignParams; }
 
+  /// \brief init all related to writing data records and its control tree
+  void startRecordWriter();
+
+  /// \brief end all related to writing data records and its control tree
+  void endRecordWriter();
+
+  /// \brief init all related to writing constraints records
+  void startConstraintsRecWriter();
+
+  /// \brief end all related to writing constraints records
+  void endConstraintsRecWriter();
+
+  /// \brief connect data record reader to input TChain of records
+  void connectRecordReaderToChain(TChain* ch);
+
+  /// \brief conect constraints record reader to input TChain of constraints record
+  void connectConstraintsRecReaderToChain(TChain* ch);
+
  protected:
-  int mRunNumber = 0;                                                            ///< run number
-  float mBz = 0;                                                                 ///< magnetic field status
-  int mNumberTFs = 0;                                                            ///< number of timeframes processed
-  int mNumberOfClusterChainROFs = 0;                                             ///< number of ROFs in the cluster chain
-  int mNumberOfTrackChainROFs = 0;                                               ///< number of ROFs in the track chain
-  int mCounterLocalEquationFailed = 0;                                           ///< count how many times we failed to set a local equation
-  int mCounterSkippedTracks = 0;                                                 ///< count how many tracks did not met the cut on the min. nb of clusters
-  int mCounterUsedTracks = 0;                                                    ///< count how many tracks were used to make Mille records
+  int mRunNumber;                                                                ///< run number
+  float mBz;                                                                     ///< magnetic field status
+  int mNumberTFs;                                                                ///< number of timeframes processed
+  int mNumberOfClusterChainROFs;                                                 ///< number of ROFs in the cluster chain
+  int mNumberOfTrackChainROFs;                                                   ///< number of ROFs in the track chain
+  int mCounterLocalEquationFailed;                                               ///< count how many times we failed to set a local equation
+  int mCounterSkippedTracks;                                                     ///< count how many tracks did not met the cut on the min. nb of clusters
+  int mCounterUsedTracks;                                                        ///< count how many tracks were used to make Mille records
   static constexpr int mNumberOfTrackParam = 4;                                  ///< Number of track (= local) parameters (X0, Tx, Y0, Ty)
   static constexpr int mNDofPerSensor = 4;                                       ///< translation in global x, y, z, and rotation Rz around global z-axis
   static o2::itsmft::ChipMappingMFT mChipMapping;                                ///< MFT chip <-> ladder, layer, disk, half mapping
   static constexpr int mNumberOfSensors = mChipMapping.getNChips();              ///< Total number of sensors (detection elements) in the MFT
   static constexpr int mNumberOfGlobalParam = mNDofPerSensor * mNumberOfSensors; ///< Number of alignment (= global) parameters
-  double* mGlobalDerivatives = nullptr;                                          ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
-  double* mLocalDerivatives = nullptr;                                           ///< Array of local derivatives {dX0, dTx, dY0, dTz}
-  std::array<Double_t, mNDofPerSensor> mAllowVar;                                ///< "Encouraged" variation for degrees of freedom {dx, dy, dRz, dz}
-  double mStartFac = 256;                                                        ///< Initial value for chi2 cut, used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * chi2CutFactor (if > 1, iterations in Millepede are turned on)
-  Int_t mChi2CutNStdDev = 3;                                                     ///< Number of standard deviations for chi2 cut
-  Double_t mResCutInitial = 100.;                                                ///< Cut on residual on first iteration
-  Double_t mResCut = 100.;                                                       ///< Cut on residual for other iterations
-  int mMinNumberClusterCut = 6;                                                  ///< Minimum number of clusters in the track to be used for alignment
-  double mWeightRecord = 1.;                                                     ///< the weight given to a single Mille record in Millepede algorithm
+  double* mGlobalDerivatives;                                                    ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+  double* mLocalDerivatives;                                                     ///< Array of local derivatives {dX0, dTx, dY0, dTz}
+  std::array<double, mNDofPerSensor> mAllowVar;                                  ///< "Encouraged" variation for degrees of freedom {dx, dy, dRz, dz}
+  double mStartFac;                                                              ///< Initial value for chi2 cut, used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * chi2CutFactor (if > 1, iterations in Millepede are turned on)
+  int mChi2CutNStdDev;                                                           ///< Number of standard deviations for chi2 cut
+  double mResCutInitial;                                                         ///< Cut on residual on first iteration
+  double mResCut;                                                                ///< Cut on residual for other iterations
+  int mMinNumberClusterCut;                                                      ///< Minimum number of clusters in the track to be used for alignment
+  double mWeightRecord;                                                          ///< the weight given to a single Mille record in Millepede algorithm
   TString mMilleRecordsFileName;                                                 ///< output file name when saving the Mille records
   TString mMilleConstraintsRecFileName;                                          ///< output file name when saving the records of the constraints
-  std::unique_ptr<o2::mft::MillePede2> mMillepede = nullptr;                     ///< Millepede2 implementation copied from AliROOT
-  const o2::itsmft::TopologyDictionary* mDictionary = nullptr;                   ///< cluster patterns dictionary
-  std::unique_ptr<o2::mft::AlignPointHelper> mAlignPoint = nullptr;              ///< Alignment point helper
+  std::unique_ptr<o2::mft::MillePede2> mMillepede;                               ///< Millepede2 implementation copied from AliROOT
+  const o2::itsmft::TopologyDictionary* mDictionary;                             ///< cluster patterns dictionary
+  std::shared_ptr<o2::mft::AlignPointHelper> mAlignPoint;                        ///< Alignment point helper
   std::vector<o2::detectors::AlignParam> mAlignParams;                           ///< vector of alignment parameters computed by Millepede global fit
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
-  int* mGlobalParameterStatus = nullptr;                                         ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
-  bool mWithControl = false;                                                     ///< boolean to set the use of the control tree
-  int mNEntriesAutoSave = 10000;                                                 ///< number of entries needed to call AutoSave for the output TTrees
+  int* mGlobalParameterStatus;                                                   ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
+  bool mWithControl;                                                             ///< boolean to set the use of the control tree
+  long mNEntriesAutoSave = 10000;                                                ///< number of entries needed to call AutoSave for the output TTrees
+  o2::mft::AlignPointControl mPointControl;                                      ///< AlignPointControl handles the control tree
+  bool mWithRecordWriter;
+  std::shared_ptr<o2::mft::MilleRecordWriter> mRecordWriter;
+  bool mWithConstraintsRecWriter;
+  std::shared_ptr<o2::mft::MilleRecordWriter> mConstraintsRecWriter;
+  bool mWithRecordReader;
+  std::shared_ptr<o2::mft::MilleRecordReader> mRecordReader;
+  bool mWithConstraintsRecReader;
+  std::shared_ptr<o2::mft::MilleRecordReader> mConstraintsRecReader;
 
   // used to fix some degrees of freedom
 
-  static constexpr Int_t mFixedParId = -1;
-  static constexpr Int_t mFreeParId = mFixedParId - 1;
+  static constexpr int mFixedParId = -1;
+  static constexpr int mFreeParId = mFixedParId - 1;
 
   // access these data from CTFs
 
@@ -136,15 +170,6 @@ class Alignment
   gsl::span<const o2::itsmft::ROFRecord> mMFTClustersROF;
   gsl::span<const unsigned char> mMFTClusterPatterns;
   gsl::span<const unsigned char>::iterator pattIt;
-
-  // about the control tree
-
-  TFile* mControlFile = nullptr;
-  TTree* mControlTree = nullptr;
-  AlignPoint mPointInfo;
-  void initControlTree();
-  void closeControlTree();
-  void fillControlTree();
 
   /// \brief set array of local derivatives
   bool setLocalDerivative(Int_t index, Double_t value);

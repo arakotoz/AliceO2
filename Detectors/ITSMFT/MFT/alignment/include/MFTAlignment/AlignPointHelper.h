@@ -31,31 +31,6 @@ namespace o2
 namespace mft
 {
 
-struct AlignPoint {
-  UShort_t sensor;          // sensor id
-  UShort_t layer;           // layer id
-  UShort_t disk;            // disk id
-  UShort_t half;            // half id
-  Double_t measuredGlobalX; // cluster x, global frame (cm)
-  Double_t measuredGlobalY; // cluster y, global frame (cm)
-  Double_t measuredGlobalZ; // cluster z, global frame (cm)
-  Double_t measuredLocalX;  // cluster x, local frame (cm)
-  Double_t measuredLocalY;  // cluster y, local frame (cm)
-  Double_t measuredLocalZ;  // cluster z, local frame (cm)
-  Double_t residualX;       // track global x - cluster global x (cm)
-  Double_t residualY;       // track global y - cluster global y (cm)
-  Double_t residualZ;       // track global z - cluster global z (cm)
-  Double_t residualLocalX;  // track local x - cluster local x (cm)
-  Double_t residualLocalY;  // track local y - cluster local y (cm)
-  Double_t residualLocalZ;  // track local z - cluster local z (cm)
-  Double_t recoGlobalX;     // track x, global frame (cm)
-  Double_t recoGlobalY;     // track y, global frame (cm)
-  Double_t recoGlobalZ;     // track z, global frame (cm)
-  Double_t recoLocalX;      // track x, local frame (cm)
-  Double_t recoLocalY;      // track y, local frame (cm)
-  Double_t recoLocalZ;      // track z, local frame (cm)
-};
-
 class TrackMFT;
 
 /// \class GlobalDerivative

@@ -11,13 +11,16 @@
 
 o2_add_library(MFTAlignment
         SOURCES src/AlignConfig.cxx
+                src/Alignment.cxx
+                src/AlignPointControl.cxx
                 src/AlignPointHelper.cxx
                 src/AlignSensorHelper.cxx
-                src/Alignment.cxx
                 src/MatrixSparse.cxx
                 src/MatrixSq.cxx
                 src/MillePede2.cxx
                 src/MillePedeRecord.cxx
+                src/MilleRecordReader.cxx
+                src/MilleRecordWriter.cxx
                 src/MinResSolve.cxx
                 src/RectMatrix.cxx
                 src/SymBDMatrix.cxx
@@ -31,13 +34,16 @@ o2_add_library(MFTAlignment
 
 o2_target_root_dictionary(MFTAlignment
         HEADERS include/MFTAlignment/AlignConfig.h
+                include/MFTAlignment/Alignment.h
+                include/MFTAlignment/AlignPointControl.h
                 include/MFTAlignment/AlignPointHelper.h
                 include/MFTAlignment/AlignSensorHelper.h
-                include/MFTAlignment/Alignment.h
                 include/MFTAlignment/MatrixSparse.h
                 include/MFTAlignment/MatrixSq.h
                 include/MFTAlignment/MillePede2.h
                 include/MFTAlignment/MillePedeRecord.h
+                include/MFTAlignment/MilleRecordReader.h
+                include/MFTAlignment/MilleRecordWriter.h
                 include/MFTAlignment/MinResSolve.h
                 include/MFTAlignment/RectMatrix.h
                 include/MFTAlignment/SymBDMatrix.h

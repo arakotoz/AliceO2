@@ -193,21 +193,21 @@ class AlignSensorHelper
   std::stringstream getSensorFullName(bool wSymName = true);
 
  protected:
-  static o2::itsmft::ChipMappingMFT mChipMapping;                   ///< MFT chip <-> ladder, layer, disk, half mapping
-  o2::mft::GeometryTGeo* mGeometry = nullptr;                       ///< MFT geometry
-  static constexpr int mNumberOfSensors = mChipMapping.getNChips(); ///< Total number of sensors (detection elements) in the MFT
-  UShort_t mChipIndexOnLadder = 0;                                  ///< sensor index within the ladder [0, 4]
-  UShort_t mChipIndexInMft = 0;                                     ///< sensor sw index within the MFT [0, 935]
-  UShort_t mLadderInHalfDisk = 0;                                   ///< ladder geo index in this half MFT disk [0, 33]
-  UShort_t mConnector = 0;                                          ///< connector index to which the ladder is plugged in the zone [0, 4]
-  UShort_t mTransceiver = 0;                                        ///< transceiver id to which the sensor is connected in the zone [0, 24]
-  UShort_t mLayer = 0;                                              ///< layer id [0, 9]
-  UShort_t mZone = 0;                                               ///< zone id [0,3]
-  UShort_t mDisk = 0;                                               ///< disk id [0, 4]
-  UShort_t mHalf = 0;                                               ///< half id [0, 1]
-  Int_t mChipUniqueId = 0;                                          ///< ALICE global unique id of the sensor
-  TGeoHMatrix mTransform;                                           ///< sensor transformation matrix L2G
-  o2::math_utils::Point3D<double> mTranslation;                     ///< coordinates of the translation between the local system origin (the center of the sensor) and the global origin
+  o2::itsmft::ChipMappingMFT mChipMapping;         ///< MFT chip <-> ladder, layer, disk, half mapping
+  o2::mft::GeometryTGeo* mGeometry = nullptr;      ///< MFT geometry
+  int mNumberOfSensors = mChipMapping.getNChips(); ///< Total number of sensors (detection elements) in the MFT
+  UShort_t mChipIndexOnLadder = 0;                 ///< sensor index within the ladder [0, 4]
+  UShort_t mChipIndexInMft = 0;                    ///< sensor sw index within the MFT [0, 935]
+  UShort_t mLadderInHalfDisk = 0;                  ///< ladder geo index in this half MFT disk [0, 33]
+  UShort_t mConnector = 0;                         ///< connector index to which the ladder is plugged in the zone [0, 4]
+  UShort_t mTransceiver = 0;                       ///< transceiver id to which the sensor is connected in the zone [0, 24]
+  UShort_t mLayer = 0;                             ///< layer id [0, 9]
+  UShort_t mZone = 0;                              ///< zone id [0,3]
+  UShort_t mDisk = 0;                              ///< disk id [0, 4]
+  UShort_t mHalf = 0;                              ///< half id [0, 1]
+  Int_t mChipUniqueId = 0;                         ///< ALICE global unique id of the sensor
+  TGeoHMatrix mTransform;                          ///< sensor transformation matrix L2G
+  o2::math_utils::Point3D<double> mTranslation;    ///< coordinates of the translation between the local system origin (the center of the sensor) and the global origin
   // Euler angles extracted from the sensor transform
   double mRx = 0; ///< rotation angle aroung global x-axis (radian)
   double mRy = 0; ///< rotation angle aroung global y-axis (radian)

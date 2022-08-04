@@ -41,6 +41,8 @@ Alignment::Alignment()
   : mRunNumber(0),
     mBz(0),
     mNumberTFs(0),
+    mNumberOfClusterChainROFs(0),
+    mNumberOfTrackChainROFs(0),
     mCounterLocalEquationFailed(0),
     mCounterSkippedTracks(0),
     mCounterUsedTracks(0),
@@ -54,12 +56,21 @@ Alignment::Alignment()
     mWeightRecord(1.),
     mMilleRecordsFileName("mft_mille_records.root"),
     mMilleConstraintsRecFileName("mft_mille_constraints.root"),
+    mMillepede(nullptr),
+    mDictionary(nullptr),
+    mAlignPoint(nullptr),
     mIsInitDone(false),
     mGlobalParameterStatus(nullptr),
     mWithControl(false),
-    mControlFile(nullptr),
-    mControlTree(nullptr),
-    mNEntriesAutoSave(10000)
+    mNEntriesAutoSave(10000),
+    mWithRecordWriter(true),
+    mRecordWriter(nullptr),
+    mWithConstraintsRecWriter(false),
+    mConstraintsRecWriter(nullptr),
+    mWithRecordReader(false),
+    mRecordReader(nullptr),
+    mWithConstraintsRecReader(false),
+    mConstraintsRecReader(nullptr)
 {
   // default allowed variations w.r.t. global system coordinates
   mAllowVar[0] = 0.5;  // delta translation in x (cm)
@@ -67,39 +78,17 @@ Alignment::Alignment()
   mAllowVar[2] = 0.01; // rotation angle Rz around z-axis (rad)
   mAllowVar[3] = 0.5;  // delta translation in z (cm)
 
+  // allocate memory for local and global derivatives
   mGlobalDerivatives = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
-  mLocalDerivatives = new Double_t[mNumberOfTrackParam];
+  mLocalDerivatives = new double[mNumberOfTrackParam];
+  mGlobalParameterStatus = (int*)malloc(sizeof(int) * mNumberOfGlobalParam);
 
   // initialise the content of each array
   resetGlocalDerivative();
   resetLocalDerivative();
-
-  mGlobalParameterStatus = (int*)malloc(sizeof(int) * mNumberOfGlobalParam);
   for (int iPar = 0; iPar < mNumberOfGlobalParam; iPar++) {
     mGlobalParameterStatus[iPar] = mFreeParId;
   }
-  mPointInfo.sensor = 0;
-  mPointInfo.layer = 0;
-  mPointInfo.disk = 0;
-  mPointInfo.half = 0;
-  mPointInfo.measuredGlobalX = 0;
-  mPointInfo.measuredGlobalY = 0;
-  mPointInfo.measuredGlobalZ = 0;
-  mPointInfo.measuredLocalX = 0;
-  mPointInfo.measuredLocalY = 0;
-  mPointInfo.measuredLocalZ = 0;
-  mPointInfo.residualX = 0;
-  mPointInfo.residualY = 0;
-  mPointInfo.residualZ = 0;
-  mPointInfo.residualLocalX = 0;
-  mPointInfo.residualLocalY = 0;
-  mPointInfo.residualLocalZ = 0;
-  mPointInfo.recoGlobalX = 0;
-  mPointInfo.recoGlobalY = 0;
-  mPointInfo.recoGlobalZ = 0;
-  mPointInfo.recoLocalX = 0;
-  mPointInfo.recoLocalY = 0;
-  mPointInfo.recoLocalZ = 0;
   LOGF(info, "Alignment instantiated");
 }
 
@@ -121,20 +110,36 @@ void Alignment::init()
     mIsInitDone = false;
     return;
   }
+
   mMillepede = std::make_unique<MillePede2>();
-  mAlignPoint = std::make_unique<AlignPointHelper>();
+  if (mWithRecordWriter) {
+    mRecordWriter = std::make_shared<MilleRecordWriter>();
+    mRecordWriter->setCyclicAutoSave(mNEntriesAutoSave);
+    mRecordWriter->setDataFileName(mMilleRecordsFileName);
+    mMillepede->SetRecordWriter(mRecordWriter);
+  }
+  if (mWithConstraintsRecWriter) {
+    mConstraintsRecWriter = std::make_shared<MilleRecordWriter>();
+    mConstraintsRecWriter->setCyclicAutoSave(mNEntriesAutoSave);
+    mConstraintsRecWriter->setDataFileName(mMilleConstraintsRecFileName);
+    mMillepede->SetConstraintsRecWriter(mConstraintsRecWriter);
+  }
+  if (mWithRecordReader) {
+    mRecordReader = std::make_shared<MilleRecordReader>();
+    mMillepede->SetRecordReader(mRecordReader);
+  }
+  if (mWithConstraintsRecReader) {
+    mConstraintsRecReader = std::make_shared<MilleRecordReader>();
+    mMillepede->SetConstraintsRecReader(mConstraintsRecReader);
+  }
+  mAlignPoint = std::make_shared<AlignPointHelper>();
   mAlignPoint->setClusterDictionary(mDictionary);
   mMillepede->InitMille(mNumberOfGlobalParam,
                         mNumberOfTrackParam,
                         mChi2CutNStdDev,
                         mResCut,
                         mResCutInitial);
-  // filenames for the processed tracks and constraints records
-  mMillepede->SetDataRecFName(mMilleRecordsFileName.Data());
-  mMillepede->SetConsRecFName(mMilleConstraintsRecFileName.Data());
 
-  bool read = false;
-  mMillepede->InitDataRecStorage(read, mNEntriesAutoSave);
   LOG(info) << "-------------- Alignment configured with -----------------";
   LOGF(info, "Chi2CutNStdDev = %d", mChi2CutNStdDev);
   LOGF(info, "ResidualCutInitial = %.3f", mResCutInitial);
@@ -157,10 +162,6 @@ void Alignment::init()
   if (mStartFac > 1) {
     mMillepede->SetIterations(mStartFac);
   }
-
-  // init tree to record local measurements and residuals
-  if (mWithControl)
-    initControlTree();
 
   LOGF(info, "Alignment init done");
   mIsInitDone = true;
@@ -187,7 +188,11 @@ void Alignment::processTimeFrame(o2::framework::ProcessingContext& ctx)
 void Alignment::processRecoTracks()
 {
   if (!mIsInitDone) {
-    LOGF(fatal, "Alignment::processRecoTracks() aborted because init was not done!");
+    LOGF(fatal, "Alignment::processRecoTracks() aborted because init was not done !");
+    return;
+  }
+  if (!mWithRecordWriter || !mRecordWriter || !mRecordWriter->isInitOk()) {
+    LOGF(fatal, "Alignment::processRecoTracks() aborted because uninitialised mRecordWriter !");
     return;
   }
 
@@ -208,9 +213,7 @@ void Alignment::processRecoTracks()
 
     auto offset = oneTrack.getExternalClusterIndexOffset();
 
-    if (mMillepede->GetRecord()) {
-      mMillepede->GetRecord()->Reset();
-    }
+    mRecordWriter->getRecord()->Reset();
 
     // Store the initial track parameters
     auto track = oneTrack;
@@ -259,9 +262,9 @@ void Alignment::processRecoTracks()
     } // end of loop on clusters
 
     if (isTrackUsed) {
-      mMillepede->SetRecordRun(mRunNumber);
-      mMillepede->SetRecordWeight(mWeightRecord);
-      mMillepede->SaveRecordData(); // save record data
+      mRecordWriter->setRecordRun(mRunNumber);
+      mRecordWriter->setRecordWeight(mWeightRecord);
+      mRecordWriter->fillRecordTree(); // save record data
       mCounterUsedTracks++;
     }
   } // end of loop on tracks
@@ -271,7 +274,12 @@ void Alignment::processRecoTracks()
 void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 {
   if (!mIsInitDone) {
-    LOGF(fatal, "Alignment::processROFs() aborted because init was not done!");
+    LOGF(fatal, "Alignment::processROFs() aborted because init was not done !");
+    return;
+  }
+
+  if (!mWithRecordWriter || !mRecordWriter || !mRecordWriter->isInitOk()) {
+    LOGF(fatal, "Alignment::processROFs() aborted because uninitialised mRecordWriter !");
     return;
   }
 
@@ -326,9 +334,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 
       auto offset = oneTrack.getExternalClusterIndexOffset();
 
-      if (mMillepede->GetRecord()) {
-        mMillepede->GetRecord()->Reset();
-      }
+      mRecordWriter->getRecord()->Reset();
 
       // Store the initial track parameters
       mAlignPoint->resetTrackInitialParam();
@@ -365,7 +371,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         success &= setLocalEquationY();
         success &= setLocalEquationZ();
         if (mWithControl && success)
-          fillControlTree();
+          mPointControl.fill(mAlignPoint, mCounterUsedTracks);
         isTrackUsed &= success;
         if (!success) {
           LOGF(error, "Alignment::processROFs() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
@@ -379,9 +385,10 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 
       if (isTrackUsed) {
         // copy track record
-        mMillepede->SetRecordRun(mRunNumber);
-        mMillepede->SetRecordWeight(mWeightRecord);
-        mMillepede->SaveRecordData();
+        mRecordWriter->setRecordRun(mRunNumber);
+        mRecordWriter->setRecordWeight(mWeightRecord);
+        const bool doPrint = false;
+        mRecordWriter->fillRecordTree(doPrint); // save record data
         mCounterUsedTracks++;
       }
       nCounterAllTracks++;
@@ -398,14 +405,19 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 void Alignment::globalFit()
 {
   if (!mIsInitDone) {
-    LOGF(fatal, "Alignment::globalFit() aborted because init was not done!");
+    LOGF(fatal, "Alignment::globalFit() aborted because init was not done !");
+    return;
+  }
+  if (!mWithRecordReader || !mRecordReader ||
+      !mRecordReader->isReaderOk() || !mRecordReader->getNEntries()) {
+    LOGF(fatal, "Alignment::globalFit() aborted because no data record can be read !");
     return;
   }
 
-  if (!mCounterUsedTracks) {
-    LOGF(fatal, "Alignment::globalFit() aborted because no reco track was used!");
-    return;
-  }
+  // initialize the file and tree to store chi2 from Millepede LocalFit()
+
+  if (mWithControl)
+    mMillepede->InitChi2Storage(mNEntriesAutoSave);
 
   // allocate memory in arrays to temporarily store the results of the global fit
 
@@ -424,6 +436,9 @@ void Alignment::globalFit()
   // perform the simultaneous fit of track and alignement parameters
 
   mMillepede->GlobalFit(params, paramsErrors, paramsPulls);
+
+  if (mWithControl)
+    mMillepede->CloseChi2Storage();
 
   // post-treatment:
   // debug output + save Millepede global fit result in AlignParam vector
@@ -465,6 +480,9 @@ void Alignment::globalFit()
 //__________________________________________________________________________
 void Alignment::printProcessTrackSummary()
 {
+  if (!mWithRecordWriter)
+    return;
+
   LOGF(info, "Alignment processRecoTracks() summary: ");
   if (mNumberOfTrackChainROFs) {
     LOGF(info,
@@ -476,6 +494,79 @@ void Alignment::printProcessTrackSummary()
          "n TFs = %d, used tracks = %d, skipped tracks = %d, local equations failed = %d",
          mNumberTFs, mCounterUsedTracks,
          mCounterSkippedTracks, mCounterLocalEquationFailed);
+  }
+}
+
+//__________________________________________________________________________
+void Alignment::startRecordWriter()
+{
+  if (!mWithRecordWriter)
+    return;
+
+  if (mRecordWriter)
+    mRecordWriter->init();
+  if (mWithControl) {
+    mPointControl.setCyclicAutoSave(mNEntriesAutoSave);
+    mPointControl.init();
+  }
+}
+
+//__________________________________________________________________________
+void Alignment::endRecordWriter()
+{
+  if (!mWithRecordWriter)
+    return;
+
+  if (mRecordWriter) {
+    mRecordWriter->terminate(); // write record tree and close output file
+  }
+  if (mWithControl)
+    mPointControl.terminate();
+}
+
+//__________________________________________________________________________
+void Alignment::startConstraintsRecWriter()
+{
+  if (!mWithConstraintsRecWriter)
+    return;
+
+  if (mConstraintsRecWriter) {
+    mConstraintsRecWriter->changeDataBranchName();
+    mConstraintsRecWriter->init();
+  }
+}
+
+//__________________________________________________________________________
+void Alignment::endConstraintsRecWriter()
+{
+  if (!mWithConstraintsRecWriter)
+    return;
+
+  if (mConstraintsRecWriter) {
+    mConstraintsRecWriter->terminate();
+  }
+}
+
+//__________________________________________________________________________
+void Alignment::connectRecordReaderToChain(TChain* ch)
+{
+  if (!mWithRecordReader)
+    return;
+
+  if (mRecordReader) {
+    mRecordReader->connectToChain(ch);
+  }
+}
+
+//__________________________________________________________________________
+void Alignment::connectConstraintsRecReaderToChain(TChain* ch)
+{
+  if (!mWithConstraintsRecReader)
+    return;
+
+  if (mConstraintsRecReader) {
+    mConstraintsRecReader->changeDataBranchName();
+    mConstraintsRecReader->connectToChain(ch);
   }
 }
 
@@ -722,95 +813,4 @@ bool Alignment::setLocalEquationZ()
   }
 
   return success;
-}
-
-//__________________________________________________________________________
-void Alignment::initControlTree()
-{
-  if (mControlFile == nullptr)
-    mControlFile = TFile::Open("align_point.root", "recreate", "", 505);
-
-  if (mControlTree == nullptr) {
-    mControlTree = new TTree("point", "the align point info tree");
-    mControlTree->SetDirectory(mControlFile);
-    mControlTree->SetAutoSave(mNEntriesAutoSave); // flush the TTree to disk every N entries
-    mControlTree->SetImplicitMT(true);
-    mControlTree->Branch("sensor", &mPointInfo.sensor, "sensor/s");
-    mControlTree->Branch("layer", &mPointInfo.layer, "layer/s");
-    mControlTree->Branch("disk", &mPointInfo.disk, "disk/s");
-    mControlTree->Branch("half", &mPointInfo.half, "half/s");
-    mControlTree->Branch("measuredGlobalX", &mPointInfo.measuredGlobalX, "measuredGlobalX/D");
-    mControlTree->Branch("measuredGlobalY", &mPointInfo.measuredGlobalY, "measuredGlobalY/D");
-    mControlTree->Branch("measuredGlobalZ", &mPointInfo.measuredGlobalZ, "measuredGlobalZ/D");
-    mControlTree->Branch("measuredLocalX", &mPointInfo.measuredLocalX, "measuredLocalX/D");
-    mControlTree->Branch("measuredLocalY", &mPointInfo.measuredLocalY, "measuredLocalY/D");
-    mControlTree->Branch("measuredLocalZ", &mPointInfo.measuredLocalZ, "measuredLocalZ/D");
-    mControlTree->Branch("residualX", &mPointInfo.residualX, "residualX/D");
-    mControlTree->Branch("residualY", &mPointInfo.residualY, "residualY/D");
-    mControlTree->Branch("residualZ", &mPointInfo.residualZ, "residualZ/D");
-    mControlTree->Branch("residualLocalX", &mPointInfo.residualLocalX, "residualLocalX/D");
-    mControlTree->Branch("residualLocalY", &mPointInfo.residualLocalY, "residualLocalY/D");
-    mControlTree->Branch("residualLocalZ", &mPointInfo.residualLocalZ, "residualLocalZ/D");
-    mControlTree->Branch("recoGlobalX", &mPointInfo.recoGlobalX, "recoGlobalX/D");
-    mControlTree->Branch("recoGlobalY", &mPointInfo.recoGlobalY, "recoGlobalY/D");
-    mControlTree->Branch("recoGlobalZ", &mPointInfo.recoGlobalZ, "recoGlobalZ/D");
-    mControlTree->Branch("recoLocalX", &mPointInfo.recoLocalX, "recoLocalX/D");
-    mControlTree->Branch("recoLocalY", &mPointInfo.recoLocalY, "recoLocalY/D");
-    mControlTree->Branch("recoLocalZ", &mPointInfo.recoLocalZ, "recoLocalZ/D");
-  }
-}
-
-//__________________________________________________________________________
-void Alignment::closeControlTree()
-{
-  if (mControlTree) {
-    if (mControlFile && mControlFile->IsWritable()) {
-      mControlFile->cd();
-      mControlTree->Write();
-    }
-    delete mControlTree;
-    if (mControlFile) {
-      mControlFile->Close();
-      delete mControlFile;
-    }
-  }
-  LOG(info) << "Alignment - Closed file align_point.root";
-}
-
-//__________________________________________________________________________
-void Alignment::fillControlTree()
-{
-  if (mControlTree) {
-    mPointInfo.sensor = mAlignPoint->getSensorId();
-    mPointInfo.layer = mAlignPoint->layer();
-    mPointInfo.disk = mAlignPoint->disk();
-    mPointInfo.half = mAlignPoint->half();
-    mPointInfo.measuredGlobalX = mAlignPoint->getGlobalMeasuredPosition().X();
-    mPointInfo.measuredGlobalY = mAlignPoint->getGlobalMeasuredPosition().Y();
-    mPointInfo.measuredGlobalZ = mAlignPoint->getGlobalMeasuredPosition().Z();
-    mPointInfo.measuredLocalX = mAlignPoint->getLocalMeasuredPosition().X();
-    mPointInfo.measuredLocalY = mAlignPoint->getLocalMeasuredPosition().Y();
-    mPointInfo.measuredLocalZ = mAlignPoint->getLocalMeasuredPosition().Z();
-    mPointInfo.residualX = mAlignPoint->getGlobalResidual().X();
-    mPointInfo.residualY = mAlignPoint->getGlobalResidual().Y();
-    mPointInfo.residualZ = mAlignPoint->getGlobalResidual().Z();
-    mPointInfo.residualLocalX = mAlignPoint->getLocalResidual().X();
-    mPointInfo.residualLocalY = mAlignPoint->getLocalResidual().Y();
-    mPointInfo.residualLocalZ = mAlignPoint->getLocalResidual().Z();
-    mPointInfo.recoGlobalX = mAlignPoint->getGlobalRecoPosition().X();
-    mPointInfo.recoGlobalY = mAlignPoint->getGlobalRecoPosition().Y();
-    mPointInfo.recoGlobalZ = mAlignPoint->getGlobalRecoPosition().Z();
-    mPointInfo.recoLocalX = mAlignPoint->getLocalRecoPosition().X();
-    mPointInfo.recoLocalY = mAlignPoint->getLocalRecoPosition().Y();
-    mPointInfo.recoLocalZ = mAlignPoint->getLocalRecoPosition().Z();
-
-    if (mCounterUsedTracks < 7000) {
-      LOGF(debug, "Alignment::fillControlTree() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
-           mCounterUsedTracks, mPointInfo.half, mPointInfo.disk, mPointInfo.layer, mPointInfo.sensor,
-           mPointInfo.measuredLocalX, mPointInfo.measuredLocalY, mPointInfo.measuredLocalZ,
-           mPointInfo.measuredGlobalX, mPointInfo.measuredGlobalY, mPointInfo.measuredGlobalZ,
-           mPointInfo.recoGlobalX, mPointInfo.recoGlobalY, mPointInfo.recoGlobalZ);
-    }
-    mControlTree->Fill();
-  }
 }

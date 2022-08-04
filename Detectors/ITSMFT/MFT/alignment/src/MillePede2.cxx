@@ -13,6 +13,7 @@
 /// @file MillePede2.cxx
 
 #include "MFTAlignment/MillePede2.h"
+#include "MFTAlignment/MilleRecordWriter.h"
 #include "Framework/Logger.h"
 #include <TStopwatch.h>
 #include <TFile.h>
@@ -52,7 +53,8 @@ Int_t MillePede2::fgNKrylovV = 240;                    // default number of Kryl
 
 //_____________________________________________________________________________
 MillePede2::MillePede2()
-  : fNLocPar(0),
+  : TObject(),
+    fNLocPar(0),
     fNGloPar(0),
     fNGloParIni(0),
     fNGloSize(0),
@@ -89,25 +91,14 @@ MillePede2::MillePede2()
     fMatCGloLoc(0),
     fFillIndex(0),
     fFillValue(0),
-    fRecDataTreeName("MillePedeRecords_Data"),
-    fRecConsTreeName("MillePedeRecords_Consaints"),
-    fRecDataBranchName("Record_Data"),
-    fRecConsBranchName("Record_Consaints"),
-    fRecChi2File(0),
+    fRecChi2File(nullptr),
     fRecChi2FName("chi2_records.root"),
     fRecChi2TreeName("chi2Records"),
-    fTreeChi2(0),
+    fTreeChi2(nullptr),
     fSumChi2(0.),
     fIsChi2BelowLimit(true),
     fRecNDoF(0),
-    fDataRecFName("/tmp/mp2_data_records.root"),
     fRecord(0),
-    fDataRecFile(0),
-    fTreeData(0),
-    fRecFileStatus(0),
-    fConstrRecFName("/tmp/mp2_constraints_records.root"),
-    fTreeConstr(0),
-    fConsRecFile(0),
     fCurrRecDataID(0),
     fCurrRecConstrID(0),
     fLocFitAdd(kTRUE),
@@ -119,7 +110,11 @@ MillePede2::MillePede2()
     fAccRunList(0),
     fAccRunListWgh(0),
     fRunWgh(1),
-    fkReGroup(0)
+    fkReGroup(0),
+    fRecordWriter(nullptr),
+    fConstraintsRecWriter(nullptr),
+    fRecordReader(nullptr),
+    fConstraintsRecReader(nullptr)
 {
   fWghScl[0] = fWghScl[1] = -1;
 }
@@ -164,25 +159,14 @@ MillePede2::MillePede2(const MillePede2& src)
     fMatCGloLoc(0),
     fFillIndex(0),
     fFillValue(0),
-    fRecDataTreeName(0),
-    fRecConsTreeName(0),
-    fRecDataBranchName(0),
-    fRecConsBranchName(0),
-    fRecChi2File(0),
+    fRecChi2File(nullptr),
     fRecChi2FName("chi2_records.root"),
     fRecChi2TreeName("chi2Records"),
-    fTreeChi2(0),
+    fTreeChi2(nullptr),
     fSumChi2(0.),
     fIsChi2BelowLimit(true),
     fRecNDoF(0),
-    fDataRecFName(0),
     fRecord(0),
-    fDataRecFile(0),
-    fTreeData(0),
-    fRecFileStatus(0),
-    fConstrRecFName(0),
-    fTreeConstr(0),
-    fConsRecFile(0),
     fCurrRecDataID(0),
     fCurrRecConstrID(0),
     fLocFitAdd(kTRUE),
@@ -194,7 +178,11 @@ MillePede2::MillePede2(const MillePede2& src)
     fAccRunList(0),
     fAccRunListWgh(0),
     fRunWgh(1),
-    fkReGroup(0)
+    fkReGroup(0),
+    fRecordWriter(nullptr),
+    fConstraintsRecWriter(nullptr),
+    fRecordReader(nullptr),
+    fConstraintsRecReader(nullptr)
 {
   fWghScl[0] = src.fWghScl[0];
   fWghScl[1] = src.fWghScl[1];
@@ -204,8 +192,6 @@ MillePede2::MillePede2(const MillePede2& src)
 //_____________________________________________________________________________
 MillePede2::~MillePede2()
 {
-  CloseDataRecStorage();
-  CloseConsRecStorage();
   delete[] fParamGrID;
   delete[] fProcPnt;
   delete[] fVecBLoc;
@@ -220,7 +206,6 @@ MillePede2::~MillePede2()
   delete[] fConstrUsed;
   delete[] fFillIndex;
   delete[] fFillValue;
-  delete fRecord;
   delete fMatCLoc;
   delete fMatCGlo;
   delete fMatCGloLoc;
@@ -307,210 +292,62 @@ Int_t MillePede2::InitMille(int nGlo, int nLoc, int lNStdDev, double lResCut, do
 }
 
 //_____________________________________________________________________________
-Bool_t MillePede2::ImposeDataRecFile(const char* fname)
+Bool_t MillePede2::InitChi2Storage(const int nEntriesAutoSave)
 {
-  CloseDataRecStorage();
-  SetDataRecFName(fname);
-  return InitDataRecStorage(kTRUE); // open in read mode
-}
-
-//_____________________________________________________________________________
-Bool_t MillePede2::ImposeConsRecFile(const char* fname)
-{
-  CloseConsRecStorage();
-  SetConsRecFName(fname);
-  return InitConsRecStorage(kTRUE); // open in read mode
-}
-
-//_____________________________________________________________________________
-Bool_t MillePede2::InitDataRecStorage(Bool_t read, const Int_t nEntriesAutoSave)
-{
-  if (fTreeData) {
-    LOG(warning) << "MillePede2 - Data Records File is already initialized";
-    return kFALSE;
-  }
-
-  if (!fRecord)
-    fRecord = new MillePedeRecord();
-
-  if (!read) { // write mode: cannot use chain
-
-    fDataRecFile = TFile::Open(GetDataRecFName(), "recreate");
-    if (!fDataRecFile) {
-      LOGF(fatal, "MillePede2 - Failed to initialize data records file %s", GetDataRecFName());
-      return kFALSE;
-    }
-    fTreeData = new TTree(GetRecDataTreeName(), "Data Records for MillePede2");
-    // fTreeData->Branch(GetRecDataBranchName(), "o2::mft::MillePedeRecord", &fRecord, 32000, 99);
-    fTreeData->Branch(GetRecDataBranchName(), "MillePedeRecord", &fRecord, 32000, 99);
-    fTreeData->SetAutoSave(nEntriesAutoSave); // flush the TTree to disk every N entries
-    fTreeData->SetDirectory(fDataRecFile);
-    fTreeData->SetImplicitMT(true);
-    LOGF(info, "MillePede2 - File %s used for derivatives records", GetDataRecFName());
-  } else { // use chain
-    TChain* ch = new TChain(GetRecDataTreeName());
-    if (fDataRecFName.EndsWith(".root"))
-      ch->AddFile(fDataRecFName);
-    else { // assume text file with list of filenames
-      ifstream inpf(fDataRecFName.Data());
-      if (!inpf.good()) {
-        LOGF(info, "MillePede2 - Failed on input records list %s\n", fDataRecFName.Data());
-        return kFALSE;
-      }
-      TString recfName;
-      while (!(recfName.ReadLine(inpf)).eof()) {
-        recfName = recfName.Strip(TString::kBoth, ' ');
-        if (recfName.BeginsWith("//") || recfName.BeginsWith("#") || !recfName.EndsWith(".root")) { // comment
-          LOGF(info, "MillePede2 - Skip %s\n", recfName.Data());
-          continue;
-        }
-        recfName = recfName.Strip(TString::kBoth, ',');
-        recfName = recfName.Strip(TString::kBoth, '"');
-        gSystem->ExpandPathName(recfName);
-        LOGF(info, "MillePede2 - Adding %s\n", recfName.Data());
-        ch->AddFile(recfName.Data());
-      }
-    }
-
-    Long64_t nent = ch->GetEntries();
-    if (nent < 1) {
-      LOG(info) << "MillePede2 - Obtained chain is empty";
-      return kFALSE;
-    }
-    fTreeData = ch;
-    fTreeData->SetBranchAddress(GetRecDataBranchName(), &fRecord);
-    LOGF(info, "MillePede2 - Found %lld derivatives records", nent);
-  }
-  fRecChi2File = TFile::Open(GetRecChi2FName(), "recreate");
-  fTreeChi2 = new TTree(fRecChi2TreeName.Data(), "Sum of chi2 per records");
-  fTreeChi2->Branch("sumChi2", &fSumChi2, "fSumChi2/F");
-  fTreeChi2->Branch("accepted", &fIsChi2BelowLimit, "fIsChi2BelowLimit/O");
-  fTreeChi2->Branch("nDoF", &fRecNDoF, "fRecNDoF/I");
-  fCurrRecDataID = -1;
-  fRecFileStatus = read ? 1 : 2;
-
-  return kTRUE;
-}
-
-//_____________________________________________________________________________
-Bool_t MillePede2::InitConsRecStorage(Bool_t read)
-{
-  if (fConsRecFile) {
-    LOG(warning) << "MillePede2 - Constraints Records File is already initialized";
-    return kFALSE;
-  }
-
-  if (!fRecord)
-    fRecord = new MillePedeRecord();
-
-  fConsRecFile = TFile::Open(GetConsRecFName(), read ? "" : "recreate");
-  if (!fConsRecFile) {
-    LOGF(info, "MillePede2 - Failed to initialize constraints records file %s", GetConsRecFName());
-    return kFALSE;
-  }
-
-  LOGF(info, "MillePede2 - File %s used for constraints records", GetConsRecFName());
-  if (read) {
-    fTreeConstr = (TTree*)fConsRecFile->Get(GetRecConsTreeName());
-    if (!fTreeConstr) {
-      LOGF(info, "MillePede2 - Did not find constraints records tree in %s", GetConsRecFName());
-      return kFALSE;
-    }
-    fTreeConstr->SetBranchAddress(GetRecConsBranchName(), &fRecord);
-    LOGF(info, "MillePede2 - Found %lld constraints records", fTreeConstr->GetEntries());
-
-  } else {
-
-    fTreeConstr = new TTree(GetRecConsTreeName(), "Constraints Records for MillePede2");
-    fTreeConstr->Branch(GetRecConsBranchName(), "MillePedeRecord", &fRecord, 32000, 99);
-  }
-  fCurrRecConstrID = -1;
-
-  return kTRUE;
-}
-
-//_____________________________________________________________________________
-void MillePede2::CloseDataRecStorage()
-{
-  if (fTreeData) {
-    if (fDataRecFile && fDataRecFile->IsWritable()) {
-      fDataRecFile->cd();
-      fTreeData->Write();
-    }
-    if (fDataRecFile) {
-      fDataRecFile->Close();
-      delete fDataRecFile;
-    }
-  }
   if (fTreeChi2) {
-    if (fRecChi2File && fRecChi2File->IsWritable()) {
-      fRecChi2File->cd();
-      fTreeChi2->Write();
-    }
-    if (fRecChi2File) {
-      fRecChi2File->Close();
-      delete fRecChi2File;
-    }
-  }
-  fRecFileStatus = 0;
-}
-
-//_____________________________________________________________________________
-void MillePede2::CloseConsRecStorage()
-{
-  if (fTreeConstr) {
-    if (fConsRecFile->IsWritable()) {
-      fConsRecFile->cd();
-      fTreeConstr->Write();
-    }
-    fConsRecFile->Close();
-    delete fConsRecFile;
-  }
-}
-
-//_____________________________________________________________________________
-Bool_t MillePede2::ReadNextRecordData()
-{
-  if (!fTreeData || ++fCurrRecDataID >= fTreeData->GetEntries()) {
-    fCurrRecDataID--;
+    LOG(warning) << "MillePede2::InitChi2Storage() - output tree already initialized";
     return kFALSE;
   }
-  fTreeData->GetEntry(fCurrRecDataID);
+  if (fRecChi2File == nullptr)
+    fRecChi2File = std::make_unique<TFile>(GetRecChi2FName(), "recreate", "", 505);
+  if ((!fRecChi2File) || (fRecChi2File->IsZombie())) {
+    LOGF(error,
+         "MillePede2::InitChi2Storage() - failed to initialise chi2 storage file %s!",
+         GetRecChi2FName());
+    return kFALSE;
+  }
+  if (fTreeChi2 == nullptr) {
+    fTreeChi2 = std::make_unique<TTree>(fRecChi2TreeName.Data(), "Sum of chi2 per records");
+    fTreeChi2->SetAutoSave(nEntriesAutoSave); // flush the TTree to disk every N entries
+    fTreeChi2->SetImplicitMT(true);
+    fTreeChi2->Branch("sumChi2", &fSumChi2, "fSumChi2/F");
+    fTreeChi2->Branch("accepted", &fIsChi2BelowLimit, "fIsChi2BelowLimit/O");
+    fTreeChi2->Branch("nDoF", &fRecNDoF, "fRecNDoF/I");
+  }
+  if (!fTreeChi2) {
+    LOG(error) << "MillePede2::InitChi2Storage() - failed to initialise TTree !";
+    return kFALSE;
+  }
   return kTRUE;
 }
 
 //_____________________________________________________________________________
-Bool_t MillePede2::ReadNextRecordConstraint()
+void MillePede2::CloseChi2Storage()
 {
-  if (!fTreeConstr || ++fCurrRecConstrID >= fTreeConstr->GetEntries()) {
-    fCurrRecConstrID--;
-    return kFALSE;
+  if (fRecChi2File && fRecChi2File->IsWritable() && fTreeChi2) {
+    fTreeChi2->Write();
+    LOG(info) << "MillePede2::CloseChi2Storage() - wrote tree "
+              << fRecChi2TreeName.Data();
   }
-  fTreeConstr->GetEntry(fCurrRecConstrID);
-  return kTRUE;
+  if (fRecChi2File) {
+    fRecChi2File->Close();
+    LOG(info) << "MillePede2::CloseChi2Storage() - Closed file "
+              << GetRecChi2FName();
+  }
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetRecordWeight(double wgh)
+void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma)
 {
-  if (fRecFileStatus < 2)
-    InitDataRecStorage(); // create a buffer to store the data
-  fRecord->SetWeight(wgh);
-}
-
-//_____________________________________________________________________________
-void MillePede2::SetRecordRun(Int_t run)
-{
-  if (fRecFileStatus < 2)
-    InitDataRecStorage(); // create a buffer to store the data
-  fRecord->SetRunID(run);
-}
-
-//_____________________________________________________________________________
-void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma, bool wDebugPrint)
-{
-  if (fRecFileStatus < 2)
-    InitDataRecStorage(); // create a buffer to store the data
+  if (!fRecordWriter) {
+    LOG(fatal) << "MillePede2::SetLocalEquation() - aborted: null pointer to record writer";
+    return;
+  }
+  if (!fRecordWriter->isInitOk()) {
+    LOG(fatal) << "MillePede2::SetLocalEquation() - aborted: unintialised record writer";
+    return;
+  }
+  SetRecord(fRecordWriter->getRecord());
 
   // write data of single measurement
   if (lSigma <= 0.0) { // If parameter is fixed, then no equation
@@ -540,14 +377,22 @@ void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, do
       int idrg = GetRGId(i);
       fRecord->MarkGroup(idrg < 0 ? -1 : fParamGrID[i]);
     }
-  if (wDebugPrint)
-    fRecord->Print();
 }
 
 //_____________________________________________________________________________
 void MillePede2::SetLocalEquation(int* indgb, double* dergb, int ngb, int* indlc,
                                   double* derlc, int nlc, double lMeas, double lSigma)
 {
+  if (!fRecordWriter) {
+    LOG(fatal) << "MillePede2::SetLocalEquation() - aborted: null pointer to record writer";
+    return;
+  }
+  if (!fRecordWriter->isInitOk()) {
+    LOG(fatal) << "MillePede2::SetLocalEquation() - aborted: unintialised record writer";
+    return;
+  }
+  SetRecord(fRecordWriter->getRecord());
+
   if (lSigma <= 0.0) { // If parameter is fixed, then no equation
     for (int i = nlc; i--;)
       derlc[i] = 0.0;
@@ -555,9 +400,6 @@ void MillePede2::SetLocalEquation(int* indgb, double* dergb, int ngb, int* indlc
       dergb[i] = 0.0;
     return;
   }
-
-  if (fRecFileStatus < 2)
-    InitDataRecStorage(); // create a buffer to store the data
 
   fRecord->AddResidual(lMeas);
 
@@ -581,10 +423,17 @@ void MillePede2::SetLocalEquation(int* indgb, double* dergb, int ngb, int* indlc
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetGlobalConstraint(const double* dergb, double val, double sigma)
+void MillePede2::SetGlobalConstraint(const double* dergb, double val, double sigma, const bool doPrint)
 {
-  if (!fConsRecFile || !fConsRecFile->IsWritable())
-    InitConsRecStorage(); // create a buffer to store the data
+  if (!fConstraintsRecWriter) {
+    LOG(fatal) << "MillePede2::SetGlobalConstraint() - aborted: null pointer to record writer";
+    return;
+  }
+  if (!fConstraintsRecWriter->isInitOk()) {
+    LOG(fatal) << "MillePede2::SetGlobalConstraint() - aborted: unintialised record writer";
+    return;
+  }
+  SetRecord(fConstraintsRecWriter->getRecord());
 
   fRecord->Reset();
   fRecord->AddResidual(val);
@@ -595,15 +444,25 @@ void MillePede2::SetGlobalConstraint(const double* dergb, double val, double sig
   fNGloConstraints++;
   if (IsZero(sigma))
     fNLagrangeConstraints++;
-  //  LOG(info) << "MillePede2 - NewConstraint:"; fRecord->Print(); //RRR
-  SaveRecordConstraint();
+  if (doPrint) {
+    LOG(info) << "MillePede2::SetGlobalConstraint() - new constraints added";
+  }
+  fConstraintsRecWriter->fillRecordTree(doPrint);
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetGlobalConstraint(const int* indgb, const double* dergb, int ngb, double val, double sigma)
+void MillePede2::SetGlobalConstraint(const int* indgb, const double* dergb, int ngb, double val, double sigma, const bool doPrint)
 {
-  if (!fConsRecFile || !fConsRecFile->IsWritable())
-    InitConsRecStorage(); // create a buffer to store the data
+  if (!fConstraintsRecWriter) {
+    LOG(fatal) << "MillePede2::SetGlobalConstraint() - aborted: null pointer to record writer";
+    return;
+  }
+  if (!fConstraintsRecWriter->isInitOk()) {
+    LOG(fatal) << "MillePede2::SetGlobalConstraint() - aborted: unintialised record writer";
+    return;
+  }
+  SetRecord(fConstraintsRecWriter->getRecord());
+
   fRecord->Reset();
   fRecord->AddResidual(val);
   fRecord->AddWeight(sigma); // dummy
@@ -613,7 +472,34 @@ void MillePede2::SetGlobalConstraint(const int* indgb, const double* dergb, int 
   fNGloConstraints++;
   if (IsZero(sigma))
     fNLagrangeConstraints++;
-  SaveRecordConstraint();
+  if (doPrint) {
+    LOG(info) << "MillePede2::SetGlobalConstraint() - new constraints added";
+  }
+  fConstraintsRecWriter->fillRecordTree(doPrint);
+}
+
+//_____________________________________________________________________________
+void MillePede2::ReadRecordData(Long_t recID, bool doPrint)
+{
+  if (fRecordReader == nullptr) {
+    LOG(error) << "MillePede2::ReadRecordData() - aborted, input record reader is a null pointer";
+    return;
+  }
+  SetRecord(fRecordReader->getRecord());
+  fRecordReader->readEntry(recID, doPrint);
+  fCurrRecDataID = recID;
+}
+
+//_____________________________________________________________________________
+void MillePede2::ReadRecordConstraint(Long_t recID, bool doPrint)
+{
+  if (fConstraintsRecReader == nullptr) {
+    LOG(error) << "MillePede2::ReadRecordConstraint() - aborted, input record reader is a null pointer";
+    return;
+  }
+  SetRecord(fConstraintsRecReader->getRecord());
+  fConstraintsRecReader->readEntry(recID, doPrint);
+  fCurrRecConstrID = recID;
 }
 
 //_____________________________________________________________________________
@@ -803,7 +689,7 @@ Int_t MillePede2::LocalFit(double* localParams)
 
   if (fNStdDev != 0 && nDoF > 0 && lChi2 > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor) { // check final chi2
     fIsChi2BelowLimit = false;
-    if (GetCurrentIteration() == 1)
+    if (GetCurrentIteration() == 1 && fTreeChi2)
       fTreeChi2->Fill();
     if (fLocFitAdd)
       fNLocFitsRejected++;
@@ -950,7 +836,7 @@ Int_t MillePede2::LocalFit(double* localParams)
   }
   //
   //---------------------------------------------------- <<<
-  if (GetCurrentIteration() == 1)
+  if (GetCurrentIteration() == 1 && fTreeChi2)
     fTreeChi2->Fill();
   return 1;
 }
@@ -958,6 +844,10 @@ Int_t MillePede2::LocalFit(double* localParams)
 //_____________________________________________________________________________
 Int_t MillePede2::GlobalFit(Double_t* par, Double_t* error, Double_t* pull)
 {
+  if (fRecordReader == nullptr) {
+    LOG(fatal) << "MillePede2::GlobalFit() - aborted, input record reader is a null pointer";
+    return 1;
+  }
   fIter = 1;
 
   TStopwatch sw;
@@ -1007,8 +897,12 @@ Int_t MillePede2::GlobalFitIteration()
 {
   LOGF(info, "MillePede2 - Global Fit Iteration#%2d (Local Fit Chi^2 cut factor: %.2f)", fIter, fChi2CutFactor);
 
-  if (!fNGloPar || !fTreeData) {
-    LOG(info) << "MillePede2 - No data was stored, stopping iteration";
+  if (!fRecordReader) {
+    LOG(info) << "MillePede2::GlobalFitIteration() - no record is accessible, stopping iteration";
+    return 0;
+  }
+  if (!fNGloPar) {
+    LOG(info) << "MillePede2::GlobalFitIteration() - zero global parameter, stopping iteration";
     return 0;
   }
   TStopwatch sw, sws;
@@ -1024,12 +918,14 @@ Int_t MillePede2::GlobalFitIteration()
   matCGlo.Reset();
   memset(fProcPnt, 0, fNGloPar * sizeof(Int_t));
 
-  fNGloConstraints = fTreeConstr ? fTreeConstr->GetEntries() : 0;
+  fNGloConstraints = fConstraintsRecReader ? fConstraintsRecReader->getNEntries() : 0;
 
   // count number of Lagrange constraints: they need new row/cols to be added
   fNLagrangeConstraints = 0;
   for (int i = 0; i < fNGloConstraints; i++) {
     ReadRecordConstraint(i);
+    if (!fConstraintsRecReader->isReadEntryOk())
+      continue;
     if (IsZero(fRecord->GetValue(1)))
       fNLagrangeConstraints++; // exact constraint (no error) -> Lagrange multiplier
   }
@@ -1047,7 +943,7 @@ Int_t MillePede2::GlobalFitIteration()
   fNLocEquations = 0;
 
   //  Process data records and build the matrices
-  Long_t ndr = fTreeData->GetEntries();
+  Long_t ndr = fRecordReader->getNEntries();
   Long_t first = fSelFirst > 0 ? fSelFirst : 0;
   Long_t last = fSelLast < 1 ? ndr : (fSelLast >= ndr ? ndr : fSelLast + Long_t(1));
   ndr = last - first;
@@ -1062,7 +958,7 @@ Int_t MillePede2::GlobalFitIteration()
   for (Long_t i = 0; i < ndr; i++) {
     Long_t iev = i + first;
     ReadRecordData(iev);
-    if (!IsRecordAcceptable())
+    if (!IsRecordAcceptable() || !fRecordReader->isReadEntryOk())
       continue;
     LocalFit();
     if ((i % int(0.2 * ndr)) == 0)
@@ -1154,7 +1050,7 @@ Int_t MillePede2::GlobalFitIteration()
     for (Long_t i = 0; i < ndr; i++) {
       Long_t iev = i + first;
       ReadRecordData(iev);
-      if (!IsRecordAcceptable())
+      if (!IsRecordAcceptable() || !fRecordReader->isReadEntryOk())
         continue;
       Bool_t suppr = kFALSE;
       for (int ifx = nFixedGroups; ifx--;)
@@ -1196,6 +1092,8 @@ Int_t MillePede2::GlobalFitIteration()
   int nVar = fNGloPar; // Current size of global matrix
   for (int i = 0; i < fNGloConstraints; i++) {
     ReadRecordConstraint(i);
+    if (!fConstraintsRecReader->isReadEntryOk())
+      continue;
     double val = fRecord->GetValue(0);
     double sig = fRecord->GetValue(1);
     int* indV = fRecord->GetIndex() + 2;
@@ -1659,34 +1557,4 @@ void MillePede2::SetSigmaPar(Int_t i, Double_t par)
   if (id < 0)
     return;
   fSigmaPar[id] = par;
-}
-
-//_____________________________________________________________________________
-void MillePede2::ReadRecordData(Long_t recID)
-{
-  fTreeData->GetEntry(recID);
-  fCurrRecDataID = recID;
-}
-
-//_____________________________________________________________________________
-void MillePede2::ReadRecordConstraint(Long_t recID)
-{
-  fTreeConstr->GetEntry(recID);
-  fCurrRecConstrID = recID;
-}
-
-//_____________________________________________________________________________
-void MillePede2::SaveRecordData()
-{
-  fTreeData->Fill();
-  fRecord->Reset();
-  fCurrRecDataID++;
-}
-
-//_____________________________________________________________________________
-void MillePede2::SaveRecordConstraint()
-{
-  fTreeConstr->Fill();
-  fRecord->Reset();
-  fCurrRecConstrID++;
 }

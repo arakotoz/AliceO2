@@ -26,7 +26,8 @@ ClassImp(o2::mft::AlignSensorHelper);
 
 //__________________________________________________________________________
 AlignSensorHelper::AlignSensorHelper()
-  : mChipIndexOnLadder(0),
+  : mNumberOfSensors(0),
+    mChipIndexOnLadder(0),
     mChipIndexInMft(0),
     mLadderInHalfDisk(0),
     mConnector(0),
@@ -48,6 +49,7 @@ AlignSensorHelper::AlignSensorHelper()
     mCosRz(0),
     mIsTransformExtracted(false)
 {
+  mNumberOfSensors = mChipMapping.getNChips();
   setGeometry();
   LOGF(info, "AlignSensorHelper instantiated");
 }

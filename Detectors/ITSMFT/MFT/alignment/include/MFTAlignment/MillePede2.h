@@ -28,6 +28,8 @@
 #include "MFTAlignment/RectMatrix.h"
 #include "MFTAlignment/MatrixSparse.h"
 #include "MFTAlignment/MatrixSq.h"
+#include "MFTAlignment/MilleRecordWriter.h"
+#include "MFTAlignment/MilleRecordReader.h"
 
 class TFile;
 class TStopwatch;
@@ -218,97 +220,39 @@ class MillePede2 : public TObject
   // constraints
 
   /// \brief define a constraint equation
-  void SetGlobalConstraint(const double* dergb, double val, double sigma = 0);
+  void SetGlobalConstraint(const double* dergb, double val, double sigma = 0, const bool doPrint = false);
 
   /// \brief define a constraint equation
-  void SetGlobalConstraint(const int* indgb, const double* dergb, int ngb, double val, double sigma = 0);
-
-  // processing of the local measurement
-
-  /// \brief assign run
-  void SetRecordRun(Int_t run);
-
-  /// \brief assign weight
-  void SetRecordWeight(double wgh);
+  void SetGlobalConstraint(const int* indgb, const double* dergb, int ngb, double val, double sigma = 0, const bool doPrint = false);
 
   /// \brief assing derivs of loc.eq.
-  void SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma, bool wDebugPrint = false);
+  void SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma);
 
   /// \brief write data of single measurement.
   ///        Note: the records ignore regrouping, store direct parameters
   void SetLocalEquation(int* indgb, double* dergb, int ngb, int* indlc,
                         double* derlc, int nlc, double lMeas, double lSigma);
 
-  // manipilation with processed data and costraints records and its buffer
-  void SetDataRecFName(const char* flname) { fDataRecFName = flname; }
-  const Char_t* GetDataRecFName() const { return fDataRecFName.Data(); }
-  void SetConsRecFName(const char* flname) { fConstrRecFName = flname; }
-  const Char_t* GetConsRecFName() const { return fConstrRecFName.Data(); }
+  /// \brief return file name where is stored chi2 from LocalFit()
   const Char_t* GetRecChi2FName() const { return fRecChi2FName.Data(); }
-  //
-  void SetRecDataTreeName(const char* name = 0)
-  {
-    fRecDataTreeName = name;
-    if (fRecDataTreeName.IsNull())
-      fRecDataTreeName = "MillePedeRecords_Data";
-  }
-  void SetRecConsTreeName(const char* name = 0)
-  {
-    fRecConsTreeName = name;
-    if (fRecConsTreeName.IsNull())
-      fRecConsTreeName = "MillePedeRecords_Consaints";
-  }
-  void SetRecDataBranchName(const char* name = 0)
-  {
-    fRecDataBranchName = name;
-    if (fRecDataBranchName.IsNull())
-      fRecDataBranchName = "Record_Data";
-  }
-  void SetRecConsBranchName(const char* name = 0)
-  {
-    fRecConsBranchName = name;
-    if (fRecConsBranchName.IsNull())
-      fRecConsBranchName = "Record_Consaints";
-  }
-  const char* GetRecDataTreeName() const { return fRecDataTreeName.Data(); }
-  const char* GetRecConsTreeName() const { return fRecConsTreeName.Data(); }
-  const char* GetRecDataBranchName() const { return fRecDataBranchName.Data(); }
-  const char* GetRecConsBranchName() const { return fRecConsBranchName.Data(); }
 
-  /// \brief initialize the buffer for processed measurements records
-  Bool_t InitDataRecStorage(Bool_t read = kFALSE, const Int_t nEntriesAutoSave = 10000);
+  /// \brief initialize the file and tree to store chi2 from LocalFit()
+  Bool_t InitChi2Storage(const int nEntriesAutoSave = 10000);
 
-  /// \brief initialize the buffer for processed measurements records
-  Bool_t InitConsRecStorage(Bool_t read = kFALSE);
+  /// \brief write tree and close file where are stored chi2 from LocalFit()
+  void CloseChi2Storage();
 
-  /// \brief set filename for records
-  Bool_t ImposeDataRecFile(const char* fname);
-
-  /// \brief set filename for constraints
-  Bool_t ImposeConsRecFile(const char* fname);
-
-  /// \brief close records file
-  void CloseDataRecStorage();
-
-  /// \brief close constraints file
-  void CloseConsRecStorage();
-
-  void ReadRecordData(Long_t recID);
-  void ReadRecordConstraint(Long_t recID);
-
-  /// \brief read next data record (if any)
-  Bool_t ReadNextRecordData();
-
-  /// \brief read next constraint record (if any)
-  Bool_t ReadNextRecordConstraint();
-
-  void SaveRecordData();
-  void SaveRecordConstraint();
   MillePedeRecord* GetRecord() const { return fRecord; }
   Long_t GetSelFirst() const { return fSelFirst; }
   Long_t GetSelLast() const { return fSelLast; }
   void SetSelFirst(Long_t v) { fSelFirst = v; }
   void SetSelLast(Long_t v) { fSelLast = v; }
+
+  void SetRecord(MillePedeRecord* aRecord) { fRecord = aRecord; }
+  void SetRecordWriter(std::shared_ptr<MilleRecordWriter> myP) { fRecordWriter = myP; }
+  void SetConstraintsRecWriter(std::shared_ptr<MilleRecordWriter> myP) { fConstraintsRecWriter = myP; }
+  void SetRecordReader(std::shared_ptr<MilleRecordReader> myP) { fRecordReader = myP; }
+  void SetConstraintsRecReader(std::shared_ptr<MilleRecordReader> myP) { fConstraintsRecReader = myP; }
 
   /// \brief return the limit in chi^2/nd for n sigmas stdev authorized
   ///
@@ -327,6 +271,12 @@ class MillePede2 : public TObject
   }
 
  protected:
+  /// \brief read data record (if any) at entry recID
+  void ReadRecordData(Long_t recID, const bool doPrint = false);
+
+  /// \brief read constraint record (if any) at entry id recID
+  void ReadRecordConstraint(Long_t recID, const bool doPrint = false);
+
   /// \brief Perform local parameters fit once all the local equations have been set
   ///
   /// localParams = (if !=0) will contain the fitted track parameters and related errors
@@ -381,29 +331,16 @@ class MillePede2 : public TObject
   Int_t* fFillIndex;                ///< [fNGloPar] auxilary index array for fast matrix fill
   Double_t* fFillValue;             ///< [fNGloPar] auxilary value array for fast matrix fill
 
-  // processed data record bufferization
-  TString fRecDataTreeName;   ///< Name of data records tree
-  TString fRecConsTreeName;   ///< Name of constraints records tree
-  TString fRecDataBranchName; ///< Name of data records branch name
-  TString fRecConsBranchName; ///< Name of constraints records branch name
-
-  TFile* fRecChi2File;
+  std::unique_ptr<TFile> fRecChi2File;
   TString fRecChi2FName;
   TString fRecChi2TreeName; ///< Name of chi2 per record tree
-  TTree* fTreeChi2;
+  std::unique_ptr<TTree> fTreeChi2;
   float fSumChi2;
   bool fIsChi2BelowLimit;
   int fRecNDoF;
 
-  TString fDataRecFName;    ///< Name of File for data records
   MillePedeRecord* fRecord; ///< Buffer of measurements records
-  TFile* fDataRecFile;      ///< File of processed measurements records
-  TTree* fTreeData;         ///< Tree of processed measurements records
-  Int_t fRecFileStatus;     ///< state of the record file (0-no, 1-read, 2-rw)
 
-  TString fConstrRecFName; ///< Name of File for constraints records
-  TTree* fTreeConstr;      //! Tree of constraint records
-  TFile* fConsRecFile;     //! File of processed constraints records
   Long_t fCurrRecDataID;   ///< ID of the current data record
   Long_t fCurrRecConstrID; ///< ID of the current constraint record
   Bool_t fLocFitAdd;       ///< Add contribution of carrent track (and not eliminate it)
@@ -426,6 +363,12 @@ class MillePede2 : public TObject
   static Int_t fgMinResMaxIter;   ///< Max number of iterations for the MinRes method
   static Int_t fgIterSol;         ///< type of iterative solution: MinRes or FGMRES
   static Int_t fgNKrylovV;        ///< size of Krylov vectors buffer in FGMRES
+
+  // processed data record bufferization
+  std::shared_ptr<MilleRecordWriter> fRecordWriter;         //! data record writer
+  std::shared_ptr<MilleRecordWriter> fConstraintsRecWriter; //! constraints record writer
+  std::shared_ptr<MilleRecordReader> fRecordReader;         //! data record reader
+  std::shared_ptr<MilleRecordReader> fConstraintsRecReader; //! constraints record reader
 
   ClassDef(MillePede2, 1);
 };
