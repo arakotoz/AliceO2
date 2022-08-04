@@ -211,6 +211,8 @@ void Alignment::processRecoTracks()
       continue;
     }
 
+    LOGF(debug, "Processing track # %5d", nCounterAllTracks);
+
     auto offset = oneTrack.getExternalClusterIndexOffset();
 
     mRecordWriter->getRecord()->Reset();
@@ -317,8 +319,6 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
     //______________________________________________________
     for (auto& oneTrack : *mftTracks) { // track loop
 
-      LOGF(info, "Processing track # %5d", nCounterAllTracks);
-
       // Skip the track if not enough clusters
       auto ncls = oneTrack.getNumberOfPoints();
       if (ncls < mMinNumberClusterCut) {
@@ -331,6 +331,8 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         mCounterSkippedTracks++;
         continue;
       }
+
+      LOGF(info, "Processing track # %5d", nCounterAllTracks);
 
       auto offset = oneTrack.getExternalClusterIndexOffset();
 

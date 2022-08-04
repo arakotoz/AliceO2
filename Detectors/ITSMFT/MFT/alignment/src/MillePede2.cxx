@@ -318,6 +318,8 @@ Bool_t MillePede2::InitChi2Storage(const int nEntriesAutoSave)
     LOG(error) << "MillePede2::InitChi2Storage() - failed to initialise TTree !";
     return kFALSE;
   }
+  LOGF(info, "MillePede2::InitChi2Storage() - chi2 storage file %s!",
+       GetRecChi2FName());
   return kTRUE;
 }
 
