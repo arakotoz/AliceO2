@@ -58,6 +58,7 @@ void AlignmentSpec::run(o2::framework::ProcessingContext& pc)
 {
   updateTimeDependentParams(pc);
   mTimer[SWProcessTimeFrame].Start(false);
+  mAlignment->startRecordWriter();
   mAlignment->processTimeFrame(pc);
   mTimer[SWProcessTimeFrame].Stop();
 
@@ -70,6 +71,7 @@ void AlignmentSpec::run(o2::framework::ProcessingContext& pc)
 void AlignmentSpec::endOfStream(o2::framework::EndOfStreamContext& ec)
 {
   mAlignment->printProcessTrackSummary();
+  mAlignment->endRecordWriter();
 
   mTimer[SWGlobalFit].Start(false);
   mAlignment->globalFit();
