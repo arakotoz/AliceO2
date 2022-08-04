@@ -30,7 +30,10 @@ AlignPointHelper::AlignPointHelper()
     mIsGlobalDerivativeDone(false),
     mIsLocalDerivativeDone(false),
     mIsTrackInitialParamSet(false),
+    mIsClusterOk(false),
     mGeometry(nullptr),
+    mDictionary(nullptr),
+    mChipHelper(nullptr),
     mGlobalRecoPosition(0., 0., 0.),
     mLocalRecoPosition(0., 0., 0.),
     mLocalMeasuredPosition(0., 0., 0.),
@@ -229,6 +232,11 @@ void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT& mftTrack)
   double tanLambda = mftTrack.getTanl();
   mTrackInitialParam.Tx = std::cos(phi) / tanLambda;
   mTrackInitialParam.Ty = std::sin(phi) / tanLambda;
+  LOGF(debug,
+       "AlignPointHelper::recordTrackInitialParam - x0 = %.3e, y0 = %.3e, z0 = %.3e, Tx = %.3e, Ty = %.3e",
+       mTrackInitialParam.X0, mTrackInitialParam.Y0, mTrackInitialParam.Z0,
+       mTrackInitialParam.Tx, mTrackInitialParam.Ty);
+
   mIsTrackInitialParamSet = true;
 }
 
@@ -236,14 +244,14 @@ void AlignPointHelper::recordTrackInitialParam(o2::mft::TrackMFT& mftTrack)
 void AlignPointHelper::setGlobalRecoPosition(o2::mft::TrackMFT& mftTrack)
 {
   mIsAlignPointSet = false;
-  LOGF(info,
-       "setGlobalRecoPosition(): x = %.3e, y = %.3e, z = %.3e",
+  LOGF(debug,
+       "AlignPointHelper::setGlobalRecoPosition() - track x = %.3e, y = %.3e, z = %.3e",
        mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mGlobalRecoPosition.SetXYZ(mftTrack.getX(), mftTrack.getY(), mftTrack.getZ());
   mIsAlignPointSet = true;
   if (isnan(mGlobalRecoPosition.X()) || isnan(mGlobalRecoPosition.Y()) || isnan(mGlobalRecoPosition.Z())) {
     LOGF(error,
-         "setGlobalRecoPosition(): track x = %.3e, y = %.3e, z = %.3e, point x = %.3e, y = %.3e, z = %.3e",
+         "AlignPointHelper::setGlobalRecoPosition() - track x = %.3e, y = %.3e, z = %.3e, point x = %.3e, y = %.3e, z = %.3e",
          mftTrack.getX(), mftTrack.getY(), mftTrack.getZ(),
          mGlobalRecoPosition.X(), mGlobalRecoPosition.Y(), mGlobalRecoPosition.Z());
     mIsAlignPointSet = false;
@@ -256,6 +264,7 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
 {
   // method to be used in a macro
 
+  mIsClusterOk = true;
   if (mDictionary == nullptr) {
     LOGF(error,
          "AlignPointHelper::setMeasuredPosition() - no dictionary found !");
@@ -269,21 +278,51 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
   // Dummy COG errors (about half pixel size)
   double sigmaX = o2::mft::ioutils::DefClusErrorRow;
   double sigmaZ = o2::mft::ioutils::DefClusErrorCol;
+
   if (pattID != o2::itsmft::CompCluster::InvalidPatternID) {
+
     // ALPIDE local Y coordinate => MFT global X coordinate (ALPIDE rows)
     sigmaX = mDictionary->getErrX(pattID);
     // ALPIDE local Z coordinate => MFT global Y coordinate (ALPIDE columns)
     sigmaZ = mDictionary->getErrZ(pattID);
+
     if (!mDictionary->isGroup(pattID)) {
+
       mLocalMeasuredPosition = mDictionary->getClusterCoordinates(mftCluster);
+      if (isnan(mLocalMeasuredPosition.X()) || isnan(mLocalMeasuredPosition.Y()) || isnan(mLocalMeasuredPosition.Z())) {
+        mftCluster.print();
+        LOGF(error, "AlignPointHelper::setMeasuredPosition() - sr %4d local x = %.3e, y = %.3e, z = %.3e (a)",
+             chipID, mLocalMeasuredPosition.X(), mLocalMeasuredPosition.Y(), mLocalMeasuredPosition.Z());
+        mIsClusterOk = false;
+        return;
+      }
+
     } else {
+
       o2::itsmft::ClusterPattern cPattern(pattIt);
       mLocalMeasuredPosition = mDictionary->getClusterCoordinates(mftCluster, cPattern);
+      if (isnan(mLocalMeasuredPosition.X()) || isnan(mLocalMeasuredPosition.Y()) || isnan(mLocalMeasuredPosition.Z())) {
+        mftCluster.print();
+        LOGF(error, "AlignPointHelper::setMeasuredPosition() - sr %4d local x = %.3e, y = %.3e, z = %.3e (b)",
+             chipID, mLocalMeasuredPosition.X(), mLocalMeasuredPosition.Y(), mLocalMeasuredPosition.Z());
+        mIsClusterOk = false;
+        return;
+      }
     }
+
   } else {
+
     o2::itsmft::ClusterPattern cPattern(pattIt);
     mLocalMeasuredPosition = mDictionary->getClusterCoordinates(mftCluster, cPattern, false);
+    if (isnan(mLocalMeasuredPosition.X()) || isnan(mLocalMeasuredPosition.Y()) || isnan(mLocalMeasuredPosition.Z())) {
+      mftCluster.print();
+      LOGF(error, "AlignPointHelper::setMeasuredPosition() - sr %4d local x = %.3e, y = %.3e, z = %.3e (c)",
+           chipID, mLocalMeasuredPosition.X(), mLocalMeasuredPosition.Y(), mLocalMeasuredPosition.Z());
+      mIsClusterOk = false;
+      return;
+    }
   }
+
   if (mGeometry == nullptr) {
     mGeometry = o2::mft::GeometryTGeo::Instance();
   }
@@ -294,9 +333,14 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
   mLocalMeasuredPositionSigma.SetX(sigmaX);
   mLocalMeasuredPositionSigma.SetZ(sigmaZ);
   mIsAlignPointSet &= mChipHelper->setSensor(chipID);
-  LOGF(debug,
-       "setMeasuredPosition(): x = %.3e, y = %.3e, z = %.3e",
-       mGlobalMeasuredPosition.X(), mGlobalMeasuredPosition.Y(), mGlobalMeasuredPosition.Z());
+  if (isnan(mGlobalMeasuredPosition.X()) || isnan(mGlobalMeasuredPosition.Y()) || isnan(mGlobalMeasuredPosition.Z())) {
+    LOGF(error,
+         "AlignPointHelper::setMeasuredPosition() - sr %4d global x = %.3e, y = %.3e, z = %.3e",
+         chipID,
+         mGlobalMeasuredPosition.X(), mGlobalMeasuredPosition.Y(), mGlobalMeasuredPosition.Z());
+    mIsClusterOk = false;
+    return;
+  }
 }
 
 //__________________________________________________________________________
@@ -305,6 +349,7 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
 {
   // method to be used in a workflow
 
+  mIsClusterOk = true;
   if (mDictionary == nullptr) {
     LOGF(error,
          "AlignPointHelper::setMeasuredPosition() - no dictionary found !");
@@ -317,21 +362,49 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
   // Dummy COG errors (about half pixel size)
   double sigmaX = o2::mft::ioutils::DefClusErrorRow;
   double sigmaZ = o2::mft::ioutils::DefClusErrorCol;
+
   if (pattID != o2::itsmft::CompCluster::InvalidPatternID) {
+
     // ALPIDE local Y coordinate => MFT global X coordinate (ALPIDE rows)
     sigmaX = mDictionary->getErrX(pattID);
     // ALPIDE local Z coordinate => MFT global Y coordinate (ALPIDE columns)
     sigmaZ = mDictionary->getErrZ(pattID);
+
     if (!mDictionary->isGroup(pattID)) {
+
       mLocalMeasuredPosition = mDictionary->getClusterCoordinates(mftCluster);
+      if (isnan(mLocalMeasuredPosition.X()) || isnan(mLocalMeasuredPosition.Y()) || isnan(mLocalMeasuredPosition.Z())) {
+        mftCluster.print();
+        LOGF(error, "AlignPointHelper::setMeasuredPosition() - sr %4d local x = %.3e, y = %.3e, z = %.3e (a)",
+             chipID, mLocalMeasuredPosition.X(), mLocalMeasuredPosition.Y(), mLocalMeasuredPosition.Z());
+      }
+
     } else {
+
       o2::itsmft::ClusterPattern cPattern(pattIt);
       mLocalMeasuredPosition = mDictionary->getClusterCoordinates(mftCluster, cPattern);
+      if (isnan(mLocalMeasuredPosition.X()) || isnan(mLocalMeasuredPosition.Y()) || isnan(mLocalMeasuredPosition.Z())) {
+        mftCluster.print();
+        LOGF(error, "AlignPointHelper::setMeasuredPosition() - sr %4d local x = %.3e, y = %.3e, z = %.3e (b)",
+             chipID, mLocalMeasuredPosition.X(), mLocalMeasuredPosition.Y(), mLocalMeasuredPosition.Z());
+        mIsClusterOk = false;
+        return;
+      }
     }
+
   } else {
+
     o2::itsmft::ClusterPattern cPattern(pattIt);
     mLocalMeasuredPosition = mDictionary->getClusterCoordinates(mftCluster, cPattern, false);
+    if (isnan(mLocalMeasuredPosition.X()) || isnan(mLocalMeasuredPosition.Y()) || isnan(mLocalMeasuredPosition.Z())) {
+      mftCluster.print();
+      LOGF(error, "AlignPointHelper::setMeasuredPosition() - sr %4d local x = %.3e, y = %.3e, z = %.3e (c)",
+           chipID, mLocalMeasuredPosition.X(), mLocalMeasuredPosition.Y(), mLocalMeasuredPosition.Z());
+      mIsClusterOk = false;
+      return;
+    }
   }
+
   if (mGeometry == nullptr) {
     mGeometry = o2::mft::GeometryTGeo::Instance();
   }
@@ -342,9 +415,14 @@ void AlignPointHelper::setMeasuredPosition(const o2::itsmft::CompClusterExt& mft
   mLocalMeasuredPositionSigma.SetX(sigmaX);
   mLocalMeasuredPositionSigma.SetZ(sigmaZ);
   mIsAlignPointSet &= mChipHelper->setSensor(chipID);
-  LOGF(debug,
-       "setMeasuredPosition(): x = %.3e, y = %.3e, z = %.3e",
-       mGlobalMeasuredPosition.X(), mGlobalMeasuredPosition.Y(), mGlobalMeasuredPosition.Z());
+  if (isnan(mGlobalMeasuredPosition.X()) || isnan(mGlobalMeasuredPosition.Y()) || isnan(mGlobalMeasuredPosition.Z())) {
+    LOGF(error,
+         "AlignPointHelper::setMeasuredPosition() - sr %4d global x = %.3e, y = %.3e, z = %.3e",
+         chipID,
+         mGlobalMeasuredPosition.X(), mGlobalMeasuredPosition.Y(), mGlobalMeasuredPosition.Z());
+    mIsClusterOk = false;
+    return;
+  }
 }
 
 //__________________________________________________________________________

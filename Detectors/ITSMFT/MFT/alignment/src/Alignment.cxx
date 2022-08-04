@@ -200,20 +200,22 @@ void Alignment::processRecoTracks()
 
   for (auto& oneTrack : mMFTTracks) { // track loop
 
+    LOGF(debug, "Processing track # %5d", nCounterAllTracks);
+
     // Skip the track if not enough clusters
     auto ncls = oneTrack.getNumberOfPoints();
     if (ncls < mMinNumberClusterCut) {
+      nCounterAllTracks++;
       mCounterSkippedTracks++;
       continue;
     }
 
     // Skip presumably quite low momentum track
     if (!oneTrack.isLTF()) {
+      nCounterAllTracks++;
       mCounterSkippedTracks++;
       continue;
     }
-
-    LOGF(debug, "Processing track # %5d", nCounterAllTracks);
 
     auto offset = oneTrack.getExternalClusterIndexOffset();
 
@@ -234,6 +236,12 @@ void Alignment::processRecoTracks()
       auto clsEntry = mMFTTrackClusIdx[offset + icls];
       const auto compCluster = mMFTClusters[clsEntry];
       mAlignPoint->setMeasuredPosition(compCluster, pattIt);
+      if (!mAlignPoint->isClusterOk()) {
+        LOGF(info, "Alignment::processRecoTracks() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
+        mCounterSkippedTracks++;
+        isTrackUsed = false;
+        break;
+      }
 
       // Propagate track to the current z plane of this cluster
       track.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());
@@ -322,20 +330,22 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
     //______________________________________________________
     for (auto& oneTrack : *mftTracks) { // track loop
 
+      LOGF(info, "Processing track # %5d", nCounterAllTracks);
+
       // Skip the track if not enough clusters
       auto ncls = oneTrack.getNumberOfPoints();
       if (ncls < mMinNumberClusterCut) {
+        nCounterAllTracks++;
         mCounterSkippedTracks++;
         continue;
       }
 
       // Skip presumably quite low momentum track
       if (!oneTrack.isLTF()) {
+        nCounterAllTracks++;
         mCounterSkippedTracks++;
         continue;
       }
-
-      LOGF(info, "Processing track # %5d", nCounterAllTracks);
 
       auto offset = oneTrack.getExternalClusterIndexOffset();
 
@@ -355,6 +365,12 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         auto clsEntry = (*mftTrackClusIdx)[offset + icls];
         const auto compCluster = (*mftClusters)[clsEntry];
         mAlignPoint->setMeasuredPosition(compCluster, pattIterator);
+        if (!mAlignPoint->isClusterOk()) {
+          LOGF(info, "Alignment::processROFs() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
+          mCounterSkippedTracks++;
+          isTrackUsed = false;
+          break;
+        }
 
         // Propagate track to the current z plane of this cluster
         oneTrack.propagateParamToZlinear(mAlignPoint->getGlobalMeasuredPosition().Z());

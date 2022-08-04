@@ -115,6 +115,7 @@ class AlignPointHelper
   bool isAlignPointSet() const { return mIsAlignPointSet; }
   bool isGlobalDerivativeDone() const { return mIsGlobalDerivativeDone; }
   bool isLocalDerivativeDone() const { return mIsLocalDerivativeDone; }
+  bool isClusterOk() const { return mIsClusterOk; }
 
   GlobalDerivative globalDerivativeX() const { return mGlobalDerivativeX; }
   GlobalDerivative globalDerivativeY() const { return mGlobalDerivativeY; }
@@ -164,14 +165,15 @@ class AlignPointHelper
   void setGlobalResidual();
 
  protected:
-  bool mIsAlignPointSet = false;        ///< boolean to indicate if mGlobalRecoPosition and mLocalMeasuredPosition are set
-  bool mIsGlobalDerivativeDone = false; ///< boolean to indicate if the global derivatives computaion is done
-  bool mIsLocalDerivativeDone = false;  ///< boolean to indicate if the local derivatives computation is done
-  bool mIsTrackInitialParamSet = false; ///< boolean to indicate if the initial track parameters are recorded
+  bool mIsAlignPointSet;        ///< boolean to indicate if mGlobalRecoPosition and mLocalMeasuredPosition are set
+  bool mIsGlobalDerivativeDone; ///< boolean to indicate if the global derivatives computaion is done
+  bool mIsLocalDerivativeDone;  ///< boolean to indicate if the local derivatives computation is done
+  bool mIsTrackInitialParamSet; ///< boolean to indicate if the initial track parameters are recorded
+  bool mIsClusterOk;            ///< boolean to check if cluster was exploitable to get coordinates
 
-  o2::mft::GeometryTGeo* mGeometry = nullptr;                  ///< MFT geometry
-  const o2::itsmft::TopologyDictionary* mDictionary = nullptr; ///< cluster patterns dictionary
-  std::unique_ptr<o2::mft::AlignSensorHelper> mChipHelper = nullptr;
+  o2::mft::GeometryTGeo* mGeometry;                  ///< MFT geometry
+  const o2::itsmft::TopologyDictionary* mDictionary; ///< cluster patterns dictionary
+  std::unique_ptr<o2::mft::AlignSensorHelper> mChipHelper;
 
   LocalDerivative mLocalDerivativeX;
   LocalDerivative mLocalDerivativeY;
