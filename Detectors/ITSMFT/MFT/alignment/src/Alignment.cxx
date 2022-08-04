@@ -196,6 +196,8 @@ void Alignment::processRecoTracks()
     return;
   }
 
+  int nCounterAllTracks = 0;
+
   for (auto& oneTrack : mMFTTracks) { // track loop
 
     // Skip the track if not enough clusters
@@ -269,6 +271,7 @@ void Alignment::processRecoTracks()
       mRecordWriter->fillRecordTree(); // save record data
       mCounterUsedTracks++;
     }
+    nCounterAllTracks++;
   } // end of loop on tracks
 }
 
