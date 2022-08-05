@@ -36,7 +36,7 @@ class MilleRecordReader
   MilleRecordReader();
 
   /// \brief destructor
-  ~MilleRecordReader();
+  virtual ~MilleRecordReader();
 
   /// \brief choose data records filename
   void changeDataBranchName(const bool isConstraintsRec = true);
@@ -76,7 +76,7 @@ class MilleRecordReader
   Long64_t mCurrentDataID;           ///< counter indicating the ID of the current record in the tree
   Long64_t mNEntries;                ///< number of entries in the read TChain
 
-  ClassDefNV(MilleRecordReader, 1);
+  ClassDef(MilleRecordReader, 0);
 };
 } // namespace mft
 } // namespace o2

@@ -66,7 +66,7 @@ class RecordsToAlignParams : public Aligner
   bool mWithConstraintsRecReader;
   std::shared_ptr<o2::mft::MilleRecordReader> mConstraintsRecReader;
 
-  ClassDefNV(RecordsToAlignParams, 3);
+  ClassDef(RecordsToAlignParams, 0);
 };
 
 } // namespace mft

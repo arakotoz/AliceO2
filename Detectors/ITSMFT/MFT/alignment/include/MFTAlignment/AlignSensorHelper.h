@@ -40,7 +40,7 @@ class AlignSensorHelper
   AlignSensorHelper();
 
   /// \brief default destructor
-  ~AlignSensorHelper() = default;
+  virtual ~AlignSensorHelper() = default;
 
   /// \brief set pointer to geometry that should already have done fillMatrixCache()
   void setGeometry();
@@ -236,7 +236,7 @@ class AlignSensorHelper
   /// \brief reset all sensor transform related variables
   void resetSensorTransformInfo();
 
-  ClassDefNV(AlignSensorHelper, 0);
+  ClassDef(AlignSensorHelper, 0);
 };
 
 } // namespace mft

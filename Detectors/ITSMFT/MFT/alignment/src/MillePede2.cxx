@@ -42,19 +42,18 @@ using namespace o2::mft;
 
 ClassImp(MillePede2);
 
-Bool_t MillePede2::fgInvChol = kTRUE;                  // Invert global matrix with Cholesky solver
-Bool_t MillePede2::fgWeightSigma = kTRUE;              // weight local constraint by module statistics
-Bool_t MillePede2::fgIsMatGloSparse = kFALSE;          // use faster dense matrix by default
-Int_t MillePede2::fgMinResCondType = 1;                // Jacoby preconditioner by default
-Double_t MillePede2::fgMinResTol = 1.e-11;             // default tolerance
-Int_t MillePede2::fgMinResMaxIter = 10000;             // default max number of iterations
-Int_t MillePede2::fgIterSol = MinResSolve::kSolMinRes; // default iterative solver
-Int_t MillePede2::fgNKrylovV = 240;                    // default number of Krylov vectors to keep
+bool MillePede2::fgInvChol = true;                   // Invert global matrix with Cholesky solver
+bool MillePede2::fgWeightSigma = true;               // weight local constraint by module statistics
+bool MillePede2::fgIsMatGloSparse = false;           // use faster dense matrix by default
+int MillePede2::fgMinResCondType = 1;                // Jacoby preconditioner by default
+double MillePede2::fgMinResTol = 1.e-11;             // default tolerance
+int MillePede2::fgMinResMaxIter = 10000;             // default max number of iterations
+int MillePede2::fgIterSol = MinResSolve::kSolMinRes; // default iterative solver
+int MillePede2::fgNKrylovV = 240;                    // default number of Krylov vectors to keep
 
 //_____________________________________________________________________________
 MillePede2::MillePede2()
-  : TObject(),
-    fNLocPar(0),
+  : fNLocPar(0),
     fNGloPar(0),
     fNGloParIni(0),
     fNGloSize(0),
@@ -101,8 +100,8 @@ MillePede2::MillePede2()
     fRecord(0),
     fCurrRecDataID(0),
     fCurrRecConstrID(0),
-    fLocFitAdd(kTRUE),
-    fUseRecordWeight(kTRUE),
+    fLocFitAdd(true),
+    fUseRecordWeight(true),
     fMinRecordLength(1),
     fSelFirst(1),
     fSelLast(-1),
@@ -117,12 +116,12 @@ MillePede2::MillePede2()
     fConstraintsRecReader(nullptr)
 {
   fWghScl[0] = fWghScl[1] = -1;
+  LOGF(info, "MillePede2 instantiated");
 }
 
 //_____________________________________________________________________________
 MillePede2::MillePede2(const MillePede2& src)
-  : TObject(src),
-    fNLocPar(0),
+  : fNLocPar(0),
     fNGloPar(0),
     fNGloParIni(0),
     fNGloSize(0),
@@ -169,8 +168,8 @@ MillePede2::MillePede2(const MillePede2& src)
     fRecord(0),
     fCurrRecDataID(0),
     fCurrRecConstrID(0),
-    fLocFitAdd(kTRUE),
-    fUseRecordWeight(kTRUE),
+    fLocFitAdd(true),
+    fUseRecordWeight(true),
     fMinRecordLength(1),
     fSelFirst(1),
     fSelLast(-1),
@@ -192,30 +191,69 @@ MillePede2::MillePede2(const MillePede2& src)
 //_____________________________________________________________________________
 MillePede2::~MillePede2()
 {
-  delete[] fParamGrID;
-  delete[] fProcPnt;
-  delete[] fVecBLoc;
-  delete[] fDiagCGlo;
-  delete[] fVecBGlo;
-  delete[] fInitPar;
-  delete[] fDeltaPar;
-  delete[] fSigmaPar;
-  delete[] fGlo2CGlo;
-  delete[] fCGlo2Glo;
-  delete[] fIsLinear;
-  delete[] fConstrUsed;
-  delete[] fFillIndex;
-  delete[] fFillValue;
-  delete fMatCLoc;
-  delete fMatCGlo;
-  delete fMatCGloLoc;
-  delete fRejRunList;
-  delete fAccRunList;
-  delete fAccRunListWgh;
+  if (fParamGrID)
+    free(fParamGrID);
+  if (fProcPnt)
+    free(fProcPnt);
+  if (fVecBLoc)
+    free(fVecBLoc);
+  if (fDiagCGlo)
+    free(fDiagCGlo);
+  if (fVecBGlo)
+    free(fVecBGlo);
+  if (fInitPar)
+    free(fInitPar);
+  if (fDeltaPar)
+    free(fDeltaPar);
+  if (fSigmaPar)
+    free(fSigmaPar);
+  if (fGlo2CGlo)
+    free(fGlo2CGlo);
+  if (fCGlo2Glo)
+    free(fCGlo2Glo);
+  if (fIsLinear)
+    free(fIsLinear);
+  if (fConstrUsed)
+    free(fConstrUsed);
+  if (fFillIndex)
+    free(fFillIndex);
+  if (fFillValue)
+    free(fFillValue);
+
+  if (fMatCLoc)
+    delete fMatCLoc;
+  if (fMatCGlo)
+    delete fMatCGlo;
+  if (fMatCGloLoc)
+    delete fMatCGloLoc;
+
+  if (fRejRunList)
+    delete fRejRunList;
+  if (fAccRunList)
+    delete fAccRunList;
+  if (fAccRunListWgh)
+    delete fAccRunListWgh;
+
+  if (fRecChi2File)
+    delete fRecChi2File;
+  if (fTreeChi2)
+    delete fTreeChi2;
+
+  if (fRecordWriter)
+    fRecordWriter.reset();
+  if (fConstraintsRecWriter)
+    fConstraintsRecWriter.reset();
+  if (fRecordReader)
+    fRecordReader.reset();
+  if (fConstraintsRecReader)
+    fConstraintsRecReader.reset();
+  LOGF(info, "MillePede2 destroyed");
 }
 
 //_____________________________________________________________________________
-Int_t MillePede2::InitMille(int nGlo, int nLoc, int lNStdDev, double lResCut, double lResCutInit, const Int_t* regroup)
+int MillePede2::InitMille(int nGlo, const int nLoc,
+                          const int lNStdDev, const double lResCut,
+                          const double lResCutInit, const int* regroup)
 {
   fNGloParIni = nGlo;
   if (regroup) { // regrouping is requested
@@ -250,39 +288,39 @@ Int_t MillePede2::InitMille(int nGlo, int nLoc, int lNStdDev, double lResCut, do
 
   if (fgIsMatGloSparse) {
     fMatCGlo = new MatrixSparse(fNGloPar);
-    fMatCGlo->SetSymmetric(kTRUE);
+    fMatCGlo->SetSymmetric(true);
   } else
     fMatCGlo = new SymMatrix(fNGloPar);
 
-  fFillIndex = new Int_t[fNGloPar];
-  fFillValue = new Double_t[fNGloPar];
+  fFillIndex = (int*)malloc(sizeof(int) * fNGloPar);
+  fFillValue = (double*)malloc(sizeof(double) * fNGloPar);
 
   fMatCLoc = new SymMatrix(fNLocPar);
   fMatCGloLoc = new RectMatrix(fNGloPar, fNLocPar);
 
-  fParamGrID = new Int_t[fNGloPar];
-  fProcPnt = new Int_t[fNGloPar];
-  fVecBLoc = new Double_t[fNLocPar];
-  fDiagCGlo = new Double_t[fNGloPar];
+  fParamGrID = (int*)malloc(sizeof(int) * fNGloPar);
+  fProcPnt = (int*)malloc(sizeof(int) * fNGloPar);
+  fVecBLoc = (double*)malloc(sizeof(double) * fNGloPar);
+  fDiagCGlo = (double*)malloc(sizeof(double) * fNGloPar);
 
-  fInitPar = new Double_t[fNGloPar];
-  fDeltaPar = new Double_t[fNGloPar];
-  fSigmaPar = new Double_t[fNGloPar];
-  fIsLinear = new Bool_t[fNGloPar];
+  fInitPar = (double*)malloc(sizeof(double) * fNGloPar);
+  fDeltaPar = (double*)malloc(sizeof(double) * fNGloPar);
+  fSigmaPar = (double*)malloc(sizeof(double) * fNGloPar);
+  fIsLinear = (bool*)malloc(sizeof(bool) * fNGloPar);
 
-  fGlo2CGlo = new Int_t[fNGloPar];
-  fCGlo2Glo = new Int_t[fNGloPar];
+  fGlo2CGlo = (int*)malloc(sizeof(int) * fNGloPar);
+  fCGlo2Glo = (int*)malloc(sizeof(int) * fNGloPar);
 
-  memset(fVecBLoc, 0, fNLocPar * sizeof(Double_t));
-  memset(fDiagCGlo, 0, fNGloPar * sizeof(Double_t));
-  memset(fInitPar, 0, fNGloPar * sizeof(Double_t));
-  memset(fDeltaPar, 0, fNGloPar * sizeof(Double_t));
-  memset(fSigmaPar, 0, fNGloPar * sizeof(Double_t));
-  memset(fProcPnt, 0, fNGloPar * sizeof(Int_t));
+  memset(fVecBLoc, 0, fNLocPar * sizeof(double));
+  memset(fDiagCGlo, 0, fNGloPar * sizeof(double));
+  memset(fInitPar, 0, fNGloPar * sizeof(double));
+  memset(fDeltaPar, 0, fNGloPar * sizeof(double));
+  memset(fSigmaPar, 0, fNGloPar * sizeof(double));
+  memset(fProcPnt, 0, fNGloPar * sizeof(int));
 
   for (int i = fNGloPar; i--;) {
     fGlo2CGlo[i] = fCGlo2Glo[i] = -1;
-    fIsLinear[i] = kTRUE;
+    fIsLinear[i] = true;
     fParamGrID[i] = -1;
   }
 
@@ -292,23 +330,23 @@ Int_t MillePede2::InitMille(int nGlo, int nLoc, int lNStdDev, double lResCut, do
 }
 
 //_____________________________________________________________________________
-Bool_t MillePede2::InitChi2Storage(const int nEntriesAutoSave)
+bool MillePede2::InitChi2Storage(const int nEntriesAutoSave)
 {
   if (fTreeChi2) {
     LOG(warning) << "MillePede2::InitChi2Storage() - output tree already initialized";
-    return kFALSE;
+    return false;
   }
   if (fRecChi2File == nullptr)
-    fRecChi2File = std::make_unique<TFile>(GetRecChi2FName(), "recreate", "", 505);
+    fRecChi2File = new TFile(GetRecChi2FName(), "recreate", "", 505);
   if ((!fRecChi2File) || (fRecChi2File->IsZombie())) {
     LOGF(error,
          "MillePede2::InitChi2Storage() - failed to initialise chi2 storage file %s!",
          GetRecChi2FName());
-    return kFALSE;
+    return false;
   }
   if (fTreeChi2 == nullptr) {
     fRecChi2File->cd();
-    fTreeChi2 = std::make_unique<TTree>(fRecChi2TreeName.Data(), "Sum of chi2 per records");
+    fTreeChi2 = new TTree(fRecChi2TreeName.Data(), "Sum of chi2 per records");
     fTreeChi2->SetAutoSave(nEntriesAutoSave); // flush the TTree to disk every N entries
     fTreeChi2->SetImplicitMT(true);
     fTreeChi2->Branch("sumChi2", &fSumChi2, "fSumChi2/F");
@@ -317,11 +355,11 @@ Bool_t MillePede2::InitChi2Storage(const int nEntriesAutoSave)
   }
   if (!fTreeChi2) {
     LOG(error) << "MillePede2::InitChi2Storage() - failed to initialise TTree !";
-    return kFALSE;
+    return false;
   }
   LOGF(info, "MillePede2::InitChi2Storage() - chi2 storage file %s",
        GetRecChi2FName());
-  return kTRUE;
+  return true;
 }
 
 //_____________________________________________________________________________
@@ -337,11 +375,13 @@ void MillePede2::CloseChi2Storage()
     fRecChi2File->Close();
     LOG(info) << "MillePede2::CloseChi2Storage() - Closed file "
               << GetRecChi2FName();
+    delete fRecChi2File; // this should automatically delete the TTree that belongs to the file
   }
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, double lSigma)
+void MillePede2::SetLocalEquation(double* dergb, double* derlc,
+                                  const double lMeas, const double lSigma)
 {
   if (!fRecordWriter) {
     LOG(fatal) << "MillePede2::SetLocalEquation() - aborted: null pointer to record writer";
@@ -385,7 +425,8 @@ void MillePede2::SetLocalEquation(double* dergb, double* derlc, double lMeas, do
 
 //_____________________________________________________________________________
 void MillePede2::SetLocalEquation(int* indgb, double* dergb, int ngb, int* indlc,
-                                  double* derlc, int nlc, double lMeas, double lSigma)
+                                  double* derlc, const int nlc,
+                                  const double lMeas, const double lSigma)
 {
   if (!fRecordWriter) {
     LOG(fatal) << "MillePede2::SetLocalEquation() - aborted: null pointer to record writer";
@@ -427,7 +468,8 @@ void MillePede2::SetLocalEquation(int* indgb, double* dergb, int ngb, int* indlc
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetGlobalConstraint(const double* dergb, double val, double sigma, const bool doPrint)
+void MillePede2::SetGlobalConstraint(const double* dergb, const double val,
+                                     const double sigma, const bool doPrint)
 {
   if (!fConstraintsRecWriter) {
     LOG(fatal) << "MillePede2::SetGlobalConstraint() - aborted: null pointer to record writer";
@@ -455,7 +497,9 @@ void MillePede2::SetGlobalConstraint(const double* dergb, double val, double sig
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetGlobalConstraint(const int* indgb, const double* dergb, int ngb, double val, double sigma, const bool doPrint)
+void MillePede2::SetGlobalConstraint(const int* indgb, const double* dergb,
+                                     const int ngb, const double val,
+                                     const double sigma, const bool doPrint)
 {
   if (!fConstraintsRecWriter) {
     LOG(fatal) << "MillePede2::SetGlobalConstraint() - aborted: null pointer to record writer";
@@ -483,7 +527,7 @@ void MillePede2::SetGlobalConstraint(const int* indgb, const double* dergb, int 
 }
 
 //_____________________________________________________________________________
-void MillePede2::ReadRecordData(Long_t recID, bool doPrint)
+void MillePede2::ReadRecordData(const long recID, bool doPrint)
 {
   if (fRecordReader == nullptr) {
     LOG(error) << "MillePede2::ReadRecordData() - aborted, input record reader is a null pointer";
@@ -495,7 +539,7 @@ void MillePede2::ReadRecordData(Long_t recID, bool doPrint)
 }
 
 //_____________________________________________________________________________
-void MillePede2::ReadRecordConstraint(Long_t recID, bool doPrint)
+void MillePede2::ReadRecordConstraint(const long recID, bool doPrint)
 {
   if (fConstraintsRecReader == nullptr) {
     LOG(error) << "MillePede2::ReadRecordConstraint() - aborted, input record reader is a null pointer";
@@ -507,11 +551,11 @@ void MillePede2::ReadRecordConstraint(Long_t recID, bool doPrint)
 }
 
 //_____________________________________________________________________________
-Int_t MillePede2::LocalFit(double* localParams)
+int MillePede2::LocalFit(double* localParams)
 {
   static int nrefSize = 0;
   //  static TArrayI refLoc,refGlo,nrefLoc,nrefGlo;
-  static Int_t *refLoc = 0, *refGlo = 0, *nrefLoc = 0, *nrefGlo = 0;
+  static int *refLoc = 0, *refGlo = 0, *nrefLoc = 0, *nrefGlo = 0;
   int nPoints = 0;
   fIsChi2BelowLimit = true;
 
@@ -531,19 +575,19 @@ Int_t MillePede2::LocalFit(double* localParams)
       int* tmpA = 0;
       nrefSize = 2 * (nPoints + 1);
       tmpA = refLoc;
-      refLoc = new Int_t[nrefSize];
+      refLoc = new int[nrefSize];
       if (tmpA)
         memcpy(refLoc, tmpA, nPoints * sizeof(int));
       tmpA = refGlo;
-      refGlo = new Int_t[nrefSize];
+      refGlo = new int[nrefSize];
       if (tmpA)
         memcpy(refGlo, tmpA, nPoints * sizeof(int));
       tmpA = nrefLoc;
-      nrefLoc = new Int_t[nrefSize];
+      nrefLoc = new int[nrefSize];
       if (tmpA)
         memcpy(nrefLoc, tmpA, nPoints * sizeof(int));
       tmpA = nrefGlo;
-      nrefGlo = new Int_t[nrefSize];
+      nrefGlo = new int[nrefSize];
       if (tmpA)
         memcpy(nrefGlo, tmpA, nPoints * sizeof(int));
     }
@@ -574,7 +618,7 @@ Int_t MillePede2::LocalFit(double* localParams)
   double gloWgh = fRunWgh;
   if (fUseRecordWeight)
     gloWgh *= fRecord->GetWeight(); // global weight for this set
-  Int_t maxLocUsed = 0;
+  int maxLocUsed = 0;
 
   for (int ip = nPoints; ip--;) { // Transfer the measurement records to matrices
     double resid = fRecord->GetValue(refLoc[ip] - 1);
@@ -626,9 +670,9 @@ Int_t MillePede2::LocalFit(double* localParams)
   printf("RHSLoc: "); for (int i=0;i<fNLocPar;i++) printf("%+e |",fVecBLoc[i]); printf("\n");
   */
   // first try to solve by faster Cholesky decomposition, then by Gaussian elimination
-  if (!matCLoc.SolveChol(fVecBLoc, kTRUE)) {
+  if (!matCLoc.SolveChol(fVecBLoc, true)) {
     LOG(warning) << "MillePede2 - Failed to solve locals by Cholesky, trying Gaussian Elimination";
-    if (!matCLoc.SolveSpmInv(fVecBLoc, kTRUE)) {
+    if (!matCLoc.SolveSpmInv(fVecBLoc, true)) {
       LOG(warning) << "MillePede2 - Failed to solve locals by Gaussian Elimination, skip...";
       matCLoc.Print("d");
       return 0; // failed to solve
@@ -762,14 +806,14 @@ Int_t MillePede2::LocalFit(double* localParams)
       // Now we have also rectangular matrices containing global/local terms.
       int iCIDg = fGlo2CGlo[iIDg]; // compressed Index of index
       if (iCIDg == -1) {
-        Double_t* rowGL = matCGloLoc(nGloInFit);
+        double* rowGL = matCGloLoc(nGloInFit);
         for (int k = maxLocUsed; k--;)
           rowGL[k] = 0.0; // reset the row
         iCIDg = fGlo2CGlo[iIDg] = nGloInFit;
         fCGlo2Glo[nGloInFit++] = iIDg;
       }
 
-      Double_t* rowGLIDg = matCGloLoc(iCIDg);
+      double* rowGLIDg = matCGloLoc(iCIDg);
       for (int il = nrefLoc[ip]; il--;)
         rowGLIDg[indLoc[il]] += weight * derGlo[ig] * derLoc[il];
       fProcPnt[iIDg] += fLocFitAdd ? 1 : -1; // update counter
@@ -792,7 +836,7 @@ Int_t MillePede2::LocalFit(double* localParams)
     int iIDg = fCGlo2Glo[iCIDg];
 
     vl = 0;
-    Double_t* rowGLIDg = matCGloLoc(iCIDg);
+    double* rowGLIDg = matCGloLoc(iCIDg);
     for (int kl = 0; kl < maxLocUsed; kl++)
       if (rowGLIDg[kl])
         vl += rowGLIDg[kl] * fVecBLoc[kl];
@@ -804,7 +848,7 @@ Int_t MillePede2::LocalFit(double* localParams)
       int jIDg = fCGlo2Glo[jCIDg];
 
       vl = 0;
-      Double_t* rowGLJDg = matCGloLoc(jCIDg);
+      double* rowGLJDg = matCGloLoc(jCIDg);
       for (int kl = 0; kl < maxLocUsed; kl++) {
         // diag terms
         if ((!IsZero(vll = rowGLIDg[kl] * rowGLJDg[kl])))
@@ -846,7 +890,7 @@ Int_t MillePede2::LocalFit(double* localParams)
 }
 
 //_____________________________________________________________________________
-Int_t MillePede2::GlobalFit(Double_t* par, Double_t* error, Double_t* pull)
+int MillePede2::GlobalFit(double* par, double* error, double* pull)
 {
   if (fRecordReader == nullptr) {
     LOG(fatal) << "MillePede2::GlobalFit() - aborted, input record reader is a null pointer";
@@ -897,7 +941,7 @@ Int_t MillePede2::GlobalFit(Double_t* par, Double_t* error, Double_t* pull)
 }
 
 //_____________________________________________________________________________
-Int_t MillePede2::GlobalFitIteration()
+int MillePede2::GlobalFitIteration()
 {
   LOGF(info, "MillePede2 - Global Fit Iteration#%2d (Local Fit Chi^2 cut factor: %.2f)", fIter, fChi2CutFactor);
 
@@ -914,13 +958,13 @@ Int_t MillePede2::GlobalFitIteration()
   sws.Stop();
 
   if (!fConstrUsed) {
-    fConstrUsed = new Bool_t[fNGloConstraints];
-    memset(fConstrUsed, 0, fNGloConstraints * sizeof(Bool_t));
+    fConstrUsed = (bool*)malloc(sizeof(bool) * fNGloConstraints);
+    memset(fConstrUsed, 0, fNGloConstraints * sizeof(bool));
   }
   // Reset all info specific for this step
   MatrixSq& matCGlo = *fMatCGlo;
   matCGlo.Reset();
-  memset(fProcPnt, 0, fNGloPar * sizeof(Int_t));
+  memset(fProcPnt, 0, fNGloPar * sizeof(int));
 
   fNGloConstraints = fConstraintsRecReader ? fConstraintsRecReader->getNEntries() : 0;
 
@@ -938,7 +982,7 @@ Int_t MillePede2::GlobalFitIteration()
   if (!fVecBGlo || fNGloSize != fNGloPar + fNLagrangeConstraints) {
     delete[] fVecBGlo; // in case some constraint was added between the two manual iterations
     fNGloSize = fNGloPar + fNLagrangeConstraints;
-    fVecBGlo = new Double_t[fNGloSize];
+    fVecBGlo = (double*)malloc(sizeof(double) * fNGloSize);
   }
   memset(fVecBGlo, 0, fNGloSize * sizeof(double));
 
@@ -947,9 +991,9 @@ Int_t MillePede2::GlobalFitIteration()
   fNLocEquations = 0;
 
   //  Process data records and build the matrices
-  Long_t ndr = fRecordReader->getNEntries();
-  Long_t first = fSelFirst > 0 ? fSelFirst : 0;
-  Long_t last = fSelLast < 1 ? ndr : (fSelLast >= ndr ? ndr : fSelLast + Long_t(1));
+  long ndr = fRecordReader->getNEntries();
+  long first = fSelFirst > 0 ? fSelFirst : 0;
+  long last = fSelLast < 1 ? ndr : (fSelLast >= ndr ? ndr : fSelLast + long(1));
   ndr = last - first;
 
   LOGF(info, "MillePede2 - Building the Global matrix from data records %ld : %ld", first, last);
@@ -958,9 +1002,9 @@ Int_t MillePede2::GlobalFitIteration()
 
   TStopwatch swt;
   swt.Start();
-  fLocFitAdd = kTRUE; // add contributions of matching tracks
-  for (Long_t i = 0; i < ndr; i++) {
-    Long_t iev = i + first;
+  fLocFitAdd = true; // add contributions of matching tracks
+  for (long i = 0; i < ndr; i++) {
+    long iev = i + first;
     ReadRecordData(iev);
     if (!IsRecordAcceptable() || !fRecordReader->isReadEntryOk())
       continue;
@@ -975,7 +1019,7 @@ Int_t MillePede2::GlobalFitIteration()
   printf("BGlo: "); for (int i=0; i<fNGloPar; i++) printf("%+e |",fVecBGlo[i]); printf("\n");
   swt.Print();
   */
-  sw.Start(kFALSE);
+  sw.Start(false);
 
   // ---------------------- Reject parameters with low statistics ------------>>
   fNGloFix = 0;
@@ -985,8 +1029,8 @@ Int_t MillePede2::GlobalFitIteration()
     TStopwatch swsup;
     swsup.Start();
     // 1) build the list of parameters to fix
-    Int_t fixArrSize = 10;
-    Int_t nFixedGroups = 0;
+    int fixArrSize = 10;
+    int nFixedGroups = 0;
     TArrayI fixGroups(fixArrSize);
     //
     int grIDold = -2;
@@ -1004,10 +1048,10 @@ Int_t MillePede2::GlobalFitIteration()
           if (oldMin < fMinPntValid && oldMax < 2 * fMinPntValid) { // suppress group
             for (int iold = oldStart; iold > i; iold--)
               fProcPnt[iold] = 0;
-            Bool_t fnd = kFALSE; // check if the group is already accounted
+            bool fnd = false; // check if the group is already accounted
             for (int j = nFixedGroups; j--;)
               if (fixGroups[j] == grIDold) {
-                fnd = kTRUE;
+                fnd = true;
                 break;
               }
             if (!fnd) {
@@ -1033,10 +1077,10 @@ Int_t MillePede2::GlobalFitIteration()
     if (grIDold >= 0 && oldMin < fMinPntValid && oldMax < 2 * fMinPntValid) { // suppress group
       for (int iold = oldStart; iold--;)
         fProcPnt[iold] = 0;
-      Bool_t fnd = kFALSE; // check if the group is already accounted
+      bool fnd = false; // check if the group is already accounted
       for (int j = nFixedGroups; j--;)
         if (fixGroups[j] == grIDold) {
-          fnd = kTRUE;
+          fnd = true;
           break;
         }
       if (!fnd) {
@@ -1049,21 +1093,21 @@ Int_t MillePede2::GlobalFitIteration()
     }
 
     // 2) loop over records and add contributions of fixed groups with negative sign
-    fLocFitAdd = kFALSE;
+    fLocFitAdd = false;
 
-    for (Long_t i = 0; i < ndr; i++) {
-      Long_t iev = i + first;
+    for (long i = 0; i < ndr; i++) {
+      long iev = i + first;
       ReadRecordData(iev);
       if (!IsRecordAcceptable() || !fRecordReader->isReadEntryOk())
         continue;
-      Bool_t suppr = kFALSE;
+      bool suppr = false;
       for (int ifx = nFixedGroups; ifx--;)
         if (fRecord->IsGroupPresent(fixGroups[ifx]))
-          suppr = kTRUE;
+          suppr = true;
       if (suppr)
         LocalFit();
     }
-    fLocFitAdd = kTRUE;
+    fLocFitAdd = true;
 
     if (nFixedGroups) {
       LOGF(info, "MillePede2 - Suppressed contributions of groups with NPoints < %d :", fMinPntValid);
@@ -1164,7 +1208,7 @@ Int_t MillePede2::GlobalFitIteration()
       if (matCGlo.QueryDiag(nVar))
         matCGlo.DiagElem(nVar) = 0.0;
       fVecBGlo[nVar++] = float(fNLocEquations) * val; // RS ? should we use here fNLocFits ?
-      fConstrUsed[i] = kTRUE;
+      fConstrUsed[i] = true;
     }
   }
 
@@ -1276,7 +1320,7 @@ Int_t MillePede2::GlobalFitIteration()
 }
 
 //_____________________________________________________________________________
-Int_t MillePede2::SolveGlobalMatEq()
+int MillePede2::SolveGlobalMatEq()
 {
   /*
   printf("GlobalMatrix\n");
@@ -1292,7 +1336,7 @@ Int_t MillePede2::SolveGlobalMatEq()
       else
         LOG(warning) << "MillePede2 - Solution of Global Dense System by Cholesky failed, trying Gaussian Elimiation";
     }
-    if (((SymMatrix*)fMatCGlo)->SolveSpmInv(fVecBGlo, kTRUE))
+    if (((SymMatrix*)fMatCGlo)->SolveSpmInv(fVecBGlo, true))
       return kInvert;
     else
       LOG(warning) << "MillePede2 - Solution of Global Dense System by Gaussian Elimination failed, trying iterative methods";
@@ -1304,7 +1348,7 @@ Int_t MillePede2::SolveGlobalMatEq()
   if (!slv)
     return kFailed;
 
-  Bool_t res = kFALSE;
+  bool res = false;
   if (fgIterSol == MinResSolve::kSolMinRes)
     res = slv->SolveMinRes(sol, fgMinResCondType, fgMinResMaxIter, fgMinResTol);
   else if (fgIterSol == MinResSolve::kSolFGMRes)
@@ -1378,7 +1422,7 @@ Float_t MillePede2::Chi2DoFLim(int nSig, int nDoF) const
 }
 
 //_____________________________________________________________________________
-Int_t MillePede2::SetIterations(double lChi2CutFac)
+int MillePede2::SetIterations(const double lChi2CutFac)
 {
   fChi2CutFactor = TMath::Max(1.0, lChi2CutFac);
   LOGF(info, "MillePede2 - Initial cut factor is %f", fChi2CutFactor);
@@ -1387,7 +1431,7 @@ Int_t MillePede2::SetIterations(double lChi2CutFac)
 }
 
 //_____________________________________________________________________________
-Double_t MillePede2::GetParError(int iPar) const
+double MillePede2::GetParError(int iPar) const
 {
   if (fGloSolveStatus == kInvert) {
     if (fkReGroup)
@@ -1404,7 +1448,7 @@ Double_t MillePede2::GetParError(int iPar) const
 }
 
 //_____________________________________________________________________________
-Double_t MillePede2::GetPull(int iPar) const
+double MillePede2::GetPull(int iPar) const
 {
   if (fGloSolveStatus == kInvert) {
     if (fkReGroup)
@@ -1421,7 +1465,7 @@ Double_t MillePede2::GetPull(int iPar) const
 }
 
 //_____________________________________________________________________________
-Int_t MillePede2::PrintGlobalParameters() const
+int MillePede2::PrintGlobalParameters() const
 {
   double lError = 0.;
   double lGlobalCor = 0.;
@@ -1456,29 +1500,29 @@ Int_t MillePede2::PrintGlobalParameters() const
 }
 
 //_____________________________________________________________________________
-Bool_t MillePede2::IsRecordAcceptable()
+bool MillePede2::IsRecordAcceptable()
 {
-  static Long_t prevRunID = kMaxInt;
-  static Bool_t prevAns = kTRUE;
-  Long_t runID = fRecord->GetRunID();
+  static long prevRunID = kMaxInt;
+  static bool prevAns = true;
+  long runID = fRecord->GetRunID();
   if (runID != prevRunID) {
     int n = 0;
     fRunWgh = 1.;
     prevRunID = runID;
     // is run to be rejected?
     if (fRejRunList && (n = fRejRunList->GetSize())) {
-      prevAns = kTRUE;
+      prevAns = true;
       for (int i = n; i--;)
         if (runID == (*fRejRunList)[i]) {
-          prevAns = kFALSE;
+          prevAns = false;
           LOGF(info, "MillePede2 - New Run to reject: %ld", runID);
           break;
         }
     } else if (fAccRunList && (n = fAccRunList->GetSize())) { // is run specifically selected
-      prevAns = kFALSE;
+      prevAns = false;
       for (int i = n; i--;)
         if (runID == (*fAccRunList)[i]) {
-          prevAns = kTRUE;
+          prevAns = true;
           if (fAccRunListWgh)
             fRunWgh = (*fAccRunListWgh)[i];
           LOGF(info, "MillePede2 - New Run to accept explicitly: %ld, weight=%f", runID, fRunWgh);
@@ -1493,7 +1537,7 @@ Bool_t MillePede2::IsRecordAcceptable()
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetRejRunList(const UInt_t* runs, Int_t nruns)
+void MillePede2::SetRejRunList(const int* runs, const int nruns)
 {
   if (fRejRunList)
     delete fRejRunList;
@@ -1506,7 +1550,7 @@ void MillePede2::SetRejRunList(const UInt_t* runs, Int_t nruns)
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetAccRunList(const UInt_t* runs, Int_t nruns, const Float_t* wghList)
+void MillePede2::SetAccRunList(const int* runs, const int nruns, const float* wghList)
 {
   if (fAccRunList)
     delete fAccRunList;
@@ -1524,7 +1568,7 @@ void MillePede2::SetAccRunList(const UInt_t* runs, Int_t nruns, const Float_t* w
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetInitPars(const Double_t* par)
+void MillePede2::SetInitPars(const double* par)
 {
   for (int i = 0; i < fNGloParIni; i++) {
     int id = GetRGId(i);
@@ -1535,7 +1579,7 @@ void MillePede2::SetInitPars(const Double_t* par)
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetSigmaPars(const Double_t* par)
+void MillePede2::SetSigmaPars(const double* par)
 {
   for (int i = 0; i < fNGloParIni; i++) {
     int id = GetRGId(i);
@@ -1546,7 +1590,7 @@ void MillePede2::SetSigmaPars(const Double_t* par)
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetInitPar(Int_t i, Double_t par)
+void MillePede2::SetInitPar(int i, double par)
 {
   int id = GetRGId(i);
   if (id < 0)
@@ -1555,7 +1599,7 @@ void MillePede2::SetInitPar(Int_t i, Double_t par)
 }
 
 //_____________________________________________________________________________
-void MillePede2::SetSigmaPar(Int_t i, Double_t par)
+void MillePede2::SetSigmaPar(int i, double par)
 {
   int id = GetRGId(i);
   if (id < 0)

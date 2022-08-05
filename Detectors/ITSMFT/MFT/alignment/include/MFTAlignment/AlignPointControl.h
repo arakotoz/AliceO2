@@ -18,10 +18,11 @@
 
 #include <Rtypes.h>
 #include <TString.h>
-#include <TFile.h>
-#include <TTree.h>
 
 #include "MFTAlignment/AlignPointHelper.h"
+
+class TFile;
+class TTree;
 
 namespace o2
 {
@@ -59,7 +60,7 @@ class AlignPointControl
   AlignPointControl();
 
   /// \brief destructor
-  ~AlignPointControl() = default;
+  virtual ~AlignPointControl();
 
   /// \brief Set the number of entries to be used by TTree::AutoSave()
   void setCyclicAutoSave(const long nEntries);
@@ -74,7 +75,7 @@ class AlignPointControl
   bool isInitOk() const { return mIsSuccessfulInit; }
 
   /// \brief fill the tree from an align point
-  void fill(std::shared_ptr<o2::mft::AlignPointHelper> alignPoint,
+  void fill(std::weak_ptr<o2::mft::AlignPointHelper> alignPoint,
             const int iTrack = 0,
             const bool doPrint = false);
 
@@ -82,17 +83,17 @@ class AlignPointControl
   void terminate();
 
  protected:
-  std::unique_ptr<TTree> mControlTree; ///< the ROOT TTree container
-  std::unique_ptr<TFile> mControlFile; ///< the output file
-  bool mIsSuccessfulInit;              ///< boolean to monitor the success of the initialization
-  long mNEntriesAutoSave;              ///< max entries in the buffer after which TTree::AutoSave() is automatically used
-  TString mOutFileName;                ///< name of the output file that will store the TTree
-  TString mTreeTitle;                  ///< title of the TTree
-  AlignPointInfo mPointInfo;           ///< information to be written to the output TTree
+  TTree* mControlTree;       ///< the ROOT TTree container
+  TFile* mControlFile;       ///< the output file
+  bool mIsSuccessfulInit;    ///< boolean to monitor the success of the initialization
+  long mNEntriesAutoSave;    ///< max entries in the buffer after which TTree::AutoSave() is automatically used
+  TString mOutFileName;      ///< name of the output file that will store the TTree
+  TString mTreeTitle;        ///< title of the TTree
+  AlignPointInfo mPointInfo; ///< information to be written to the output TTree
 
-  bool setControlPoint(std::shared_ptr<o2::mft::AlignPointHelper> alignPoint);
+  bool setControlPoint(std::weak_ptr<o2::mft::AlignPointHelper> alignPoint);
 
-  ClassDefNV(AlignPointControl, 1);
+  ClassDef(AlignPointControl, 0);
 };
 } // namespace mft
 } // namespace o2

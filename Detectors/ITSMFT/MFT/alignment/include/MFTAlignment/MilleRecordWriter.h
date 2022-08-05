@@ -18,11 +18,11 @@
 
 #include <Rtypes.h>
 #include <TString.h>
-#include <TFile.h>
-#include <TTree.h>
 
 #include "MFTAlignment/MillePedeRecord.h"
 
+class TFile;
+class TTree;
 namespace o2
 {
 namespace mft
@@ -35,7 +35,7 @@ class MilleRecordWriter
   MilleRecordWriter();
 
   /// \brief destructor
-  ~MilleRecordWriter();
+  virtual ~MilleRecordWriter();
 
   /// \brief Set the number of entries to be used by TTree::AutoSave()
   void setCyclicAutoSave(const long nEntries);
@@ -71,8 +71,8 @@ class MilleRecordWriter
   void setRecordWeight(double wgh);
 
  protected:
-  std::unique_ptr<TTree> mDataTree;  ///< TTree container that stores the records
-  std::unique_ptr<TFile> mDataFile;  ///< output file where the records are written
+  TTree* mDataTree;                  ///< TTree container that stores the records
+  TFile* mDataFile;                  ///< output file where the records are written
   bool mIsSuccessfulInit;            ///< boolean to monitor the success of the initialization
   bool mIsConstraintsRec;            ///< boolean to know if these are data records or constraints records
   long mNEntriesAutoSave;            ///< max entries in the buffer after which TTree::AutoSave() is automatically used
@@ -82,7 +82,7 @@ class MilleRecordWriter
   o2::mft::MillePedeRecord* mRecord; ///< the running record
   Long64_t mCurrentDataID;           ///< counter increasing when adding a record to the tree
 
-  ClassDefNV(MilleRecordWriter, 1);
+  ClassDef(MilleRecordWriter, 0);
 };
 } // namespace mft
 } // namespace o2

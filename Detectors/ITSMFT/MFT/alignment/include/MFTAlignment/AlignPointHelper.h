@@ -40,7 +40,7 @@ class GlobalDerivative
 
  public:
   GlobalDerivative() = default;
-  ~GlobalDerivative() = default;
+  virtual ~GlobalDerivative() = default;
 
   void reset()
   {
@@ -69,7 +69,7 @@ class LocalDerivative
 
  public:
   LocalDerivative() = default;
-  ~LocalDerivative() = default;
+  virtual ~LocalDerivative() = default;
 
   double dX0() { return mdX0; }
   double dTx() { return mdTx; }
@@ -95,10 +95,8 @@ class LocalDerivative
 class AlignPointHelper
 {
  public:
-  /// \brief constructor with a pointer to the geometry
   AlignPointHelper();
-
-  ~AlignPointHelper() = default;
+  virtual ~AlignPointHelper() = default;
 
   struct TrackParam {
     Double_t X0, Y0, Z0, Tx, Ty;
@@ -215,7 +213,7 @@ class AlignPointHelper
   /// \brief compute Z component of the global derivatives
   bool computeGlobalDerivativeZ();
 
-  ClassDefNV(AlignPointHelper, 0);
+  ClassDef(AlignPointHelper, 0);
 };
 
 } // namespace mft

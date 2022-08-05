@@ -38,8 +38,8 @@ class Aligner
   /// \brief destructor
   virtual ~Aligner();
 
-  /// \brief init Millipede
-  virtual void init();
+  /// \brief init Millipede (will be overriden in derived classes)
+  virtual void init() = 0;
 
   // simple setters
 
@@ -74,7 +74,7 @@ class Aligner
   static constexpr int mFixedParId = -1;
   static constexpr int mFreeParId = mFixedParId - 1;
 
-  ClassDefNV(Aligner, 1);
+  ClassDef(Aligner, 0);
 };
 
 } // namespace mft

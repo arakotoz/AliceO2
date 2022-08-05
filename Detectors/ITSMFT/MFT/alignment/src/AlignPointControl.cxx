@@ -11,6 +11,9 @@
 
 /// @file AlignPointControl.cxx
 
+#include <TFile.h>
+#include <TTree.h>
+
 #include "Framework/Logger.h"
 
 #include "MFTAlignment/AlignPointControl.h"
@@ -53,6 +56,15 @@ AlignPointControl::AlignPointControl()
 }
 
 //__________________________________________________________________________
+AlignPointControl::~AlignPointControl()
+{
+  if (mControlFile)
+    delete mControlFile;
+  if (mControlTree)
+    delete mControlTree;
+}
+
+//__________________________________________________________________________
 void AlignPointControl::setCyclicAutoSave(const long nEntries)
 {
   if (nEntries <= 0)
@@ -66,11 +78,11 @@ void AlignPointControl::init()
   mIsSuccessfulInit = true;
 
   if (mControlFile == nullptr)
-    mControlFile = std::make_unique<TFile>(mOutFileName.Data(), "recreate", "", 505);
+    mControlFile = new TFile(mOutFileName.Data(), "recreate", "", 505);
 
   if (mControlTree == nullptr) {
     mControlFile->cd();
-    mControlTree = std::make_unique<TTree>("point", mTreeTitle.Data());
+    mControlTree = new TTree("point", mTreeTitle.Data());
     mControlTree->SetAutoSave(mNEntriesAutoSave); // flush the TTree to disk every N entries
     mControlTree->Branch("sensor", &mPointInfo.sensor, "sensor/s");
     mControlTree->Branch("layer", &mPointInfo.layer, "layer/s");
@@ -116,14 +128,15 @@ void AlignPointControl::terminate()
   }
   if (mControlFile) {
     mControlFile->Close();
-    LOG(info) << "AlignPointControl::terminate() - Closed file "
+    LOG(info) << "AlignPointControl::terminate() - closed file "
               << mOutFileName.Data();
+    delete mControlFile;
   }
 }
 
 //__________________________________________________________________________
 void AlignPointControl::fill(
-  std::shared_ptr<o2::mft::AlignPointHelper> alignPoint,
+  std::weak_ptr<o2::mft::AlignPointHelper> alignPoint,
   const int iTrack,
   const bool doPrint)
 {
@@ -148,35 +161,36 @@ void AlignPointControl::fill(
 
 //__________________________________________________________________________
 bool AlignPointControl::setControlPoint(
-  std::shared_ptr<o2::mft::AlignPointHelper> alignPoint)
+  std::weak_ptr<o2::mft::AlignPointHelper> alignPoint)
 {
-  if (!alignPoint) {
+  std::shared_ptr<o2::mft::AlignPointHelper> aPoint = alignPoint.lock();
+  if (!aPoint) {
     LOG(warning) << "AlignPointControl::setControlPoint() - aborted, can not use a null pointer";
     return false;
   }
 
-  mPointInfo.sensor = alignPoint->getSensorId();
-  mPointInfo.layer = alignPoint->layer();
-  mPointInfo.disk = alignPoint->disk();
-  mPointInfo.half = alignPoint->half();
-  mPointInfo.measuredGlobalX = alignPoint->getGlobalMeasuredPosition().X();
-  mPointInfo.measuredGlobalY = alignPoint->getGlobalMeasuredPosition().Y();
-  mPointInfo.measuredGlobalZ = alignPoint->getGlobalMeasuredPosition().Z();
-  mPointInfo.measuredLocalX = alignPoint->getLocalMeasuredPosition().X();
-  mPointInfo.measuredLocalY = alignPoint->getLocalMeasuredPosition().Y();
-  mPointInfo.measuredLocalZ = alignPoint->getLocalMeasuredPosition().Z();
-  mPointInfo.residualX = alignPoint->getGlobalResidual().X();
-  mPointInfo.residualY = alignPoint->getGlobalResidual().Y();
-  mPointInfo.residualZ = alignPoint->getGlobalResidual().Z();
-  mPointInfo.residualLocalX = alignPoint->getLocalResidual().X();
-  mPointInfo.residualLocalY = alignPoint->getLocalResidual().Y();
-  mPointInfo.residualLocalZ = alignPoint->getLocalResidual().Z();
-  mPointInfo.recoGlobalX = alignPoint->getGlobalRecoPosition().X();
-  mPointInfo.recoGlobalY = alignPoint->getGlobalRecoPosition().Y();
-  mPointInfo.recoGlobalZ = alignPoint->getGlobalRecoPosition().Z();
-  mPointInfo.recoLocalX = alignPoint->getLocalRecoPosition().X();
-  mPointInfo.recoLocalY = alignPoint->getLocalRecoPosition().Y();
-  mPointInfo.recoLocalZ = alignPoint->getLocalRecoPosition().Z();
+  mPointInfo.sensor = aPoint->getSensorId();
+  mPointInfo.layer = aPoint->layer();
+  mPointInfo.disk = aPoint->disk();
+  mPointInfo.half = aPoint->half();
+  mPointInfo.measuredGlobalX = aPoint->getGlobalMeasuredPosition().X();
+  mPointInfo.measuredGlobalY = aPoint->getGlobalMeasuredPosition().Y();
+  mPointInfo.measuredGlobalZ = aPoint->getGlobalMeasuredPosition().Z();
+  mPointInfo.measuredLocalX = aPoint->getLocalMeasuredPosition().X();
+  mPointInfo.measuredLocalY = aPoint->getLocalMeasuredPosition().Y();
+  mPointInfo.measuredLocalZ = aPoint->getLocalMeasuredPosition().Z();
+  mPointInfo.residualX = aPoint->getGlobalResidual().X();
+  mPointInfo.residualY = aPoint->getGlobalResidual().Y();
+  mPointInfo.residualZ = aPoint->getGlobalResidual().Z();
+  mPointInfo.residualLocalX = aPoint->getLocalResidual().X();
+  mPointInfo.residualLocalY = aPoint->getLocalResidual().Y();
+  mPointInfo.residualLocalZ = aPoint->getLocalResidual().Z();
+  mPointInfo.recoGlobalX = aPoint->getGlobalRecoPosition().X();
+  mPointInfo.recoGlobalY = aPoint->getGlobalRecoPosition().Y();
+  mPointInfo.recoGlobalZ = aPoint->getGlobalRecoPosition().Z();
+  mPointInfo.recoLocalX = aPoint->getLocalRecoPosition().X();
+  mPointInfo.recoLocalY = aPoint->getLocalRecoPosition().Y();
+  mPointInfo.recoLocalZ = aPoint->getLocalRecoPosition().Z();
 
   return true;
 }

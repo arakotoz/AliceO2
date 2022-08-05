@@ -32,12 +32,25 @@ RecordsToAlignParams::RecordsToAlignParams()
     mWithConstraintsRecReader(false),
     mConstraintsRecReader(nullptr)
 {
+  mMillepede = std::make_unique<MillePede2>();
+
+  mRecordReader = std::make_shared<MilleRecordReader>();
+  if (mWithConstraintsRecReader) {
+    mConstraintsRecReader = std::make_shared<MilleRecordReader>();
+  }
   LOGF(info, "RecordsToAlignParams instantiated");
 }
 
 //__________________________________________________________________________
 RecordsToAlignParams::~RecordsToAlignParams()
 {
+  if (mRecordReader)
+    mRecordReader.reset();
+  if (mConstraintsRecReader)
+    mConstraintsRecReader.reset();
+  if (mMillepede)
+    mMillepede.reset();
+  LOGF(info, "RecordsToAlignParams destroyed");
 }
 
 //__________________________________________________________________________
@@ -46,13 +59,12 @@ void RecordsToAlignParams::init()
   if (mIsInitDone)
     return;
 
-  mMillepede = std::make_unique<MillePede2>();
-  mRecordReader = std::make_shared<MilleRecordReader>();
   mMillepede->SetRecordReader(mRecordReader);
+
   if (mWithConstraintsRecReader) {
-    mConstraintsRecReader = std::make_shared<MilleRecordReader>();
     mMillepede->SetConstraintsRecReader(mConstraintsRecReader);
   }
+
   mMillepede->InitMille(mNumberOfGlobalParam,
                         mNumberOfTrackParam,
                         mChi2CutNStdDev,

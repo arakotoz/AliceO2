@@ -54,44 +54,7 @@ Aligner::Aligner()
 //__________________________________________________________________________
 Aligner::~Aligner()
 {
-  free(mGlobalParameterStatus);
-}
-
-//__________________________________________________________________________
-void Aligner::init()
-{
-  if (mIsInitDone)
-    return;
-
-  mMillepede = std::make_unique<MillePede2>();
-  mMillepede->InitMille(mNumberOfGlobalParam,
-                        mNumberOfTrackParam,
-                        mChi2CutNStdDev,
-                        mResCut,
-                        mResCutInitial);
-
-  LOG(info) << "-------------- Aligner configured with -----------------";
-  LOGF(info, "Chi2CutNStdDev = %d", mChi2CutNStdDev);
-  LOGF(info, "ResidualCutInitial = %.3f", mResCutInitial);
-  LOGF(info, "ResidualCut = %.3f", mResCut);
-  LOGF(info, "mStartFac = %.3f", mStartFac);
-  LOGF(info,
-       "Allowed variation: dx = %.3f, dy = %.3f, dz = %.3f, dRz = %.4f",
-       mAllowVar[0], mAllowVar[1], mAllowVar[3], mAllowVar[2]);
-  LOG(info) << "-----------------------------------------------------------";
-
-  // set allowed variations for all parameters
-  for (int chipId = 0; chipId < mNumberOfSensors; ++chipId) {
-    for (Int_t iPar = 0; iPar < mNDofPerSensor; ++iPar) {
-      mMillepede->SetParSigma(chipId * mNDofPerSensor + iPar, mAllowVar[iPar]);
-    }
-  }
-
-  // set iterations
-  if (mStartFac > 1) {
-    mMillepede->SetIterations(mStartFac);
-  }
-
-  LOGF(info, "Aligner init done");
-  mIsInitDone = true;
+  if (mGlobalParameterStatus)
+    free(mGlobalParameterStatus);
+  LOGF(info, "Aligner destroyed");
 }

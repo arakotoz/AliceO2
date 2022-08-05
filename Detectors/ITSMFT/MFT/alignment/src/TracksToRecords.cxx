@@ -53,6 +53,14 @@ TracksToRecords::TracksToRecords()
     mWithConstraintsRecWriter(false),
     mConstraintsRecWriter(nullptr)
 {
+  mMillepede = std::make_unique<MillePede2>();
+
+  mRecordWriter = std::make_shared<MilleRecordWriter>();
+  if (mWithConstraintsRecWriter) {
+    mConstraintsRecWriter = std::make_shared<MilleRecordWriter>();
+  }
+  mAlignPoint = std::make_shared<AlignPointHelper>();
+
   // allocate memory for local and global derivatives
   mGlobalDerivatives = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
   mLocalDerivatives = new double[mNumberOfTrackParam];
@@ -66,8 +74,13 @@ TracksToRecords::TracksToRecords()
 //__________________________________________________________________________
 TracksToRecords::~TracksToRecords()
 {
-  free(mGlobalDerivatives);
-  delete[] mLocalDerivatives;
+  if (mGlobalParameterStatus)
+    free(mGlobalParameterStatus);
+  if (mLocalDerivatives)
+    delete[] mLocalDerivatives;
+  if (mGlobalDerivatives)
+    free(mGlobalDerivatives);
+  LOGF(info, "TracksToRecords destroyed");
 }
 
 //__________________________________________________________________________
@@ -81,19 +94,18 @@ void TracksToRecords::init()
     return;
   }
 
-  mMillepede = std::make_unique<MillePede2>();
-  mRecordWriter = std::make_shared<MilleRecordWriter>();
   mRecordWriter->setCyclicAutoSave(mNEntriesAutoSave);
   mRecordWriter->setDataFileName(mMilleRecordsFileName);
   mMillepede->SetRecordWriter(mRecordWriter);
+
   if (mWithConstraintsRecWriter) {
-    mConstraintsRecWriter = std::make_shared<MilleRecordWriter>();
     mConstraintsRecWriter->setCyclicAutoSave(mNEntriesAutoSave);
     mConstraintsRecWriter->setDataFileName(mMilleConstraintsRecFileName);
     mMillepede->SetConstraintsRecWriter(mConstraintsRecWriter);
   }
-  mAlignPoint = std::make_shared<AlignPointHelper>();
+
   mAlignPoint->setClusterDictionary(mDictionary);
+
   mMillepede->InitMille(mNumberOfGlobalParam,
                         mNumberOfTrackParam,
                         mChi2CutNStdDev,
@@ -123,8 +135,8 @@ void TracksToRecords::init()
     mMillepede->SetIterations(mStartFac);
   }
 
-  LOGF(info, "TracksToRecords init done");
   mIsInitDone = true;
+  LOGF(info, "TracksToRecords init done");
 }
 
 //__________________________________________________________________________
@@ -155,6 +167,8 @@ void TracksToRecords::processRecoTracks()
     LOGF(fatal, "TracksToRecords::processRecoTracks() aborted because uninitialised mRecordWriter !");
     return;
   }
+
+  LOG(info) << "TracksToRecords::processRecoTracks() - start";
 
   int nCounterAllTracks = 0;
 
@@ -222,6 +236,9 @@ void TracksToRecords::processRecoTracks()
       success &= setLocalEquationX();
       success &= setLocalEquationY();
       success &= setLocalEquationZ();
+      isTrackUsed &= success;
+      if (mWithControl && success)
+        mPointControl.fill(mAlignPoint, mCounterUsedTracks);
       if (!success) {
         LOGF(error, "TracksToRecords::processRecoTracks() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
              mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
@@ -229,18 +246,19 @@ void TracksToRecords::processRecoTracks()
              mAlignPoint->getGlobalMeasuredPosition().X(), mAlignPoint->getGlobalMeasuredPosition().Y(), mAlignPoint->getGlobalMeasuredPosition().Z(),
              mAlignPoint->getGlobalRecoPosition().X(), mAlignPoint->getGlobalRecoPosition().Y(), mAlignPoint->getGlobalRecoPosition().Z());
       }
-      isTrackUsed &= success;
 
     } // end of loop on clusters
 
     if (isTrackUsed) {
       mRecordWriter->setRecordRun(mRunNumber);
       mRecordWriter->setRecordWeight(mWeightRecord);
-      mRecordWriter->fillRecordTree(); // save record data
+      const bool doPrint = false;
+      mRecordWriter->fillRecordTree(doPrint); // save record data
       mCounterUsedTracks++;
     }
     nCounterAllTracks++;
   } // end of loop on tracks
+  LOG(info) << "TracksToRecords::processRecoTracks() - end";
 }
 
 //__________________________________________________________________________
@@ -276,12 +294,11 @@ void TracksToRecords::processROFs(TChain* mfttrackChain, TChain* mftclusterChain
   TTreeReaderValue<std::vector<unsigned char>> mftClusterPatterns =
     {mftClusterChainReader, "MFTClusterPatt"};
 
-  bool firstEntry = true;
   int nCounterAllTracks = 0;
+
   while (mftTrackChainReader.Next() && mftClusterChainReader.Next()) {
 
-    if (firstEntry)
-      pattIterator = (*mftClusterPatterns).begin();
+    pattIterator = (*mftClusterPatterns).begin();
 
     mNumberOfTrackChainROFs += (*mftTracksROF).size();
     mNumberOfClusterChainROFs += (*mftClustersROF).size();
@@ -351,9 +368,9 @@ void TracksToRecords::processROFs(TChain* mfttrackChain, TChain* mftclusterChain
         success &= setLocalEquationX();
         success &= setLocalEquationY();
         success &= setLocalEquationZ();
+        isTrackUsed &= success;
         if (mWithControl && success)
           mPointControl.fill(mAlignPoint, mCounterUsedTracks);
-        isTrackUsed &= success;
         if (!success) {
           LOGF(error, "TracksToRecords::processROFs() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
                mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
@@ -374,8 +391,6 @@ void TracksToRecords::processROFs(TChain* mfttrackChain, TChain* mftclusterChain
       }
       nCounterAllTracks++;
     } // end of loop on tracks
-
-    firstEntry = false;
 
   } // end of loop on TChain reader
 

@@ -11,6 +11,9 @@
 
 /// @file MilleRecordWriter.cxx
 
+#include <TFile.h>
+#include <TTree.h>
+
 #include "Framework/Logger.h"
 
 #include "MFTAlignment/MilleRecordWriter.h"
@@ -38,8 +41,14 @@ MilleRecordWriter::MilleRecordWriter()
 //__________________________________________________________________________
 MilleRecordWriter::~MilleRecordWriter()
 {
+  LOGF(info, "MilleRecordWriter destructor");
+  if (mDataFile)
+    delete mDataFile;
+  if (mDataTree)
+    delete mDataTree;
   if (mRecord)
     delete mRecord;
+  LOGF(info, "MilleRecordWriter destroyed");
 }
 
 //__________________________________________________________________________
@@ -67,7 +76,7 @@ void MilleRecordWriter::init()
   mIsSuccessfulInit = false;
 
   if (mDataFile == nullptr)
-    mDataFile = std::make_unique<TFile>(mDataFileName.Data(), "recreate", "", 505);
+    mDataFile = new TFile(mDataFileName.Data(), "recreate", "", 505);
 
   if ((!mDataFile) || (mDataFile->IsZombie())) {
     LOGF(fatal,
@@ -77,7 +86,7 @@ void MilleRecordWriter::init()
   }
   if (mDataTree == nullptr) {
     mDataFile->cd();
-    mDataTree = std::make_unique<TTree>(mDataTreeName.Data(), "records for MillePede2");
+    mDataTree = new TTree(mDataTreeName.Data(), "records for MillePede2");
     mDataTree->SetAutoSave(mNEntriesAutoSave); // flush the TTree to disk every N entries
     const int bufsize = 32000;
     const int splitLevel = 99; // "all the way"
@@ -127,8 +136,9 @@ void MilleRecordWriter::terminate()
   }
   if (mDataFile) {
     mDataFile->Close();
-    LOG(info) << "MilleRecordWriter::terminate() - Closed file "
+    LOG(info) << "MilleRecordWriter::terminate() - closed file "
               << mDataFileName.Data();
+    delete mDataFile;
   }
 }
 
