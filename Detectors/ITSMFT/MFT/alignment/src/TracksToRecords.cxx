@@ -9,36 +9,31 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file Alignment.cxx
+/// @file TracksToRecords.cxx
 
 #include <iostream>
 #include <sstream>
 #include <string>
 
-#include <TString.h>
-#include <TChain.h>
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
 
 #include "Framework/InputSpec.h"
 #include "Framework/Logger.h"
 #include <Framework/InputRecord.h>
-#include "MFTAlignment/AlignPointHelper.h"
-#include "MFTAlignment/AlignSensorHelper.h"
-#include "MFTAlignment/Alignment.h"
-#include "MFTTracking/IOUtils.h"
 #include "MFTBase/Geometry.h"
-#include "MFTBase/GeometryTGeo.h"
 #include "MFTAlignment/MillePedeRecord.h"
-#include "MFTAlignment/MillePede2.h"
+
+#include "MFTAlignment/TracksToRecords.h"
 
 using namespace o2::mft;
 
-ClassImp(o2::mft::Alignment);
+ClassImp(o2::mft::TracksToRecords);
 
 //__________________________________________________________________________
-Alignment::Alignment()
-  : mRunNumber(0),
+TracksToRecords::TracksToRecords()
+  : Aligner(),
+    mRunNumber(0),
     mBz(0),
     mNumberTFs(0),
     mNumberOfClusterChainROFs(0),
@@ -48,89 +43,54 @@ Alignment::Alignment()
     mCounterUsedTracks(0),
     mGlobalDerivatives(nullptr),
     mLocalDerivatives(nullptr),
-    mStartFac(256),
-    mChi2CutNStdDev(3),
-    mResCutInitial(100.),
-    mResCut(100.),
     mMinNumberClusterCut(6),
     mWeightRecord(1.),
-    mMilleRecordsFileName("mft_mille_records.root"),
-    mMilleConstraintsRecFileName("mft_mille_constraints.root"),
-    mMillepede(nullptr),
     mDictionary(nullptr),
     mAlignPoint(nullptr),
-    mIsInitDone(false),
-    mGlobalParameterStatus(nullptr),
     mWithControl(false),
     mNEntriesAutoSave(10000),
-    mWithRecordWriter(true),
     mRecordWriter(nullptr),
     mWithConstraintsRecWriter(false),
-    mConstraintsRecWriter(nullptr),
-    mWithRecordReader(false),
-    mRecordReader(nullptr),
-    mWithConstraintsRecReader(false),
-    mConstraintsRecReader(nullptr)
+    mConstraintsRecWriter(nullptr)
 {
-  // default allowed variations w.r.t. global system coordinates
-  mAllowVar[0] = 0.5;  // delta translation in x (cm)
-  mAllowVar[1] = 0.5;  // delta translation in y (cm)
-  mAllowVar[2] = 0.01; // rotation angle Rz around z-axis (rad)
-  mAllowVar[3] = 0.5;  // delta translation in z (cm)
-
   // allocate memory for local and global derivatives
   mGlobalDerivatives = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
   mLocalDerivatives = new double[mNumberOfTrackParam];
-  mGlobalParameterStatus = (int*)malloc(sizeof(int) * mNumberOfGlobalParam);
 
   // initialise the content of each array
   resetGlocalDerivative();
   resetLocalDerivative();
-  for (int iPar = 0; iPar < mNumberOfGlobalParam; iPar++) {
-    mGlobalParameterStatus[iPar] = mFreeParId;
-  }
-  LOGF(info, "Alignment instantiated");
+  LOGF(info, "TracksToRecords instantiated");
 }
 
 //__________________________________________________________________________
-Alignment::~Alignment()
+TracksToRecords::~TracksToRecords()
 {
   free(mGlobalDerivatives);
   delete[] mLocalDerivatives;
-  free(mGlobalParameterStatus);
 }
 
 //__________________________________________________________________________
-void Alignment::init()
+void TracksToRecords::init()
 {
   if (mIsInitDone)
     return;
   if (mDictionary == nullptr) {
-    LOGF(fatal, "Alignment::init() failed because no cluster dictionary is defined");
+    LOGF(fatal, "TracksToRecords::init() failed because no cluster dictionary is defined");
     mIsInitDone = false;
     return;
   }
 
   mMillepede = std::make_unique<MillePede2>();
-  if (mWithRecordWriter) {
-    mRecordWriter = std::make_shared<MilleRecordWriter>();
-    mRecordWriter->setCyclicAutoSave(mNEntriesAutoSave);
-    mRecordWriter->setDataFileName(mMilleRecordsFileName);
-    mMillepede->SetRecordWriter(mRecordWriter);
-  }
+  mRecordWriter = std::make_shared<MilleRecordWriter>();
+  mRecordWriter->setCyclicAutoSave(mNEntriesAutoSave);
+  mRecordWriter->setDataFileName(mMilleRecordsFileName);
+  mMillepede->SetRecordWriter(mRecordWriter);
   if (mWithConstraintsRecWriter) {
     mConstraintsRecWriter = std::make_shared<MilleRecordWriter>();
     mConstraintsRecWriter->setCyclicAutoSave(mNEntriesAutoSave);
     mConstraintsRecWriter->setDataFileName(mMilleConstraintsRecFileName);
     mMillepede->SetConstraintsRecWriter(mConstraintsRecWriter);
-  }
-  if (mWithRecordReader) {
-    mRecordReader = std::make_shared<MilleRecordReader>();
-    mMillepede->SetRecordReader(mRecordReader);
-  }
-  if (mWithConstraintsRecReader) {
-    mConstraintsRecReader = std::make_shared<MilleRecordReader>();
-    mMillepede->SetConstraintsRecReader(mConstraintsRecReader);
   }
   mAlignPoint = std::make_shared<AlignPointHelper>();
   mAlignPoint->setClusterDictionary(mDictionary);
@@ -140,7 +100,7 @@ void Alignment::init()
                         mResCut,
                         mResCutInitial);
 
-  LOG(info) << "-------------- Alignment configured with -----------------";
+  LOG(info) << "-------------- TracksToRecords configured with -----------------";
   LOGF(info, "Chi2CutNStdDev = %d", mChi2CutNStdDev);
   LOGF(info, "ResidualCutInitial = %.3f", mResCutInitial);
   LOGF(info, "ResidualCut = %.3f", mResCut);
@@ -163,12 +123,12 @@ void Alignment::init()
     mMillepede->SetIterations(mStartFac);
   }
 
-  LOGF(info, "Alignment init done");
+  LOGF(info, "TracksToRecords init done");
   mIsInitDone = true;
 }
 
 //__________________________________________________________________________
-void Alignment::processTimeFrame(o2::framework::ProcessingContext& ctx)
+void TracksToRecords::processTimeFrame(o2::framework::ProcessingContext& ctx)
 {
   mNumberTFs++; // TF Counter
 
@@ -185,14 +145,14 @@ void Alignment::processTimeFrame(o2::framework::ProcessingContext& ctx)
 }
 
 //__________________________________________________________________________
-void Alignment::processRecoTracks()
+void TracksToRecords::processRecoTracks()
 {
   if (!mIsInitDone) {
-    LOGF(fatal, "Alignment::processRecoTracks() aborted because init was not done !");
+    LOGF(fatal, "TracksToRecords::processRecoTracks() aborted because init was not done !");
     return;
   }
-  if (!mWithRecordWriter || !mRecordWriter || !mRecordWriter->isInitOk()) {
-    LOGF(fatal, "Alignment::processRecoTracks() aborted because uninitialised mRecordWriter !");
+  if (!mRecordWriter || !mRecordWriter->isInitOk()) {
+    LOGF(fatal, "TracksToRecords::processRecoTracks() aborted because uninitialised mRecordWriter !");
     return;
   }
 
@@ -237,7 +197,7 @@ void Alignment::processRecoTracks()
       const auto compCluster = mMFTClusters[clsEntry];
       mAlignPoint->setMeasuredPosition(compCluster, pattIt);
       if (!mAlignPoint->isClusterOk()) {
-        LOGF(info, "Alignment::processRecoTracks() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
+        LOGF(info, "TracksToRecords::processRecoTracks() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
         mCounterSkippedTracks++;
         isTrackUsed = false;
         break;
@@ -263,7 +223,7 @@ void Alignment::processRecoTracks()
       success &= setLocalEquationY();
       success &= setLocalEquationZ();
       if (!success) {
-        LOGF(error, "Alignment::processRecoTracks() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
+        LOGF(error, "TracksToRecords::processRecoTracks() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
              mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
              mAlignPoint->getLocalMeasuredPosition().X(), mAlignPoint->getLocalMeasuredPosition().Y(), mAlignPoint->getLocalMeasuredPosition().Z(),
              mAlignPoint->getGlobalMeasuredPosition().X(), mAlignPoint->getGlobalMeasuredPosition().Y(), mAlignPoint->getGlobalMeasuredPosition().Z(),
@@ -284,19 +244,19 @@ void Alignment::processRecoTracks()
 }
 
 //__________________________________________________________________________
-void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
+void TracksToRecords::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 {
   if (!mIsInitDone) {
-    LOGF(fatal, "Alignment::processROFs() aborted because init was not done !");
+    LOGF(fatal, "TracksToRecords::processROFs() aborted because init was not done !");
     return;
   }
 
-  if (!mWithRecordWriter || !mRecordWriter || !mRecordWriter->isInitOk()) {
-    LOGF(fatal, "Alignment::processROFs() aborted because uninitialised mRecordWriter !");
+  if (!mRecordWriter || !mRecordWriter->isInitOk()) {
+    LOGF(fatal, "TracksToRecords::processROFs() aborted because uninitialised mRecordWriter !");
     return;
   }
 
-  LOG(info) << "Alignment::processROFs() - start";
+  LOG(info) << "TracksToRecords::processROFs() - start";
 
   TTreeReader mftTrackChainReader(mfttrackChain);
   TTreeReader mftClusterChainReader(mftclusterChain);
@@ -366,7 +326,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
         const auto compCluster = (*mftClusters)[clsEntry];
         mAlignPoint->setMeasuredPosition(compCluster, pattIterator);
         if (!mAlignPoint->isClusterOk()) {
-          LOGF(warning, "Alignment::processROFs() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
+          LOGF(warning, "TracksToRecords::processROFs() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
           mCounterSkippedTracks++;
           isTrackUsed = false;
           break;
@@ -395,7 +355,7 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
           mPointControl.fill(mAlignPoint, mCounterUsedTracks);
         isTrackUsed &= success;
         if (!success) {
-          LOGF(error, "Alignment::processROFs() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
+          LOGF(error, "TracksToRecords::processROFs() - track %i h %d d %d l %d s %4d lMpos x %.2e y %.2e z %.2e gMpos x %.2e y %.2e z %.2e gRpos x %.2e y %.2e z %.2e",
                mCounterUsedTracks, mAlignPoint->half(), mAlignPoint->disk(), mAlignPoint->layer(), mAlignPoint->getSensorId(),
                mAlignPoint->getLocalMeasuredPosition().X(), mAlignPoint->getLocalMeasuredPosition().Y(), mAlignPoint->getLocalMeasuredPosition().Z(),
                mAlignPoint->getGlobalMeasuredPosition().X(), mAlignPoint->getGlobalMeasuredPosition().Y(), mAlignPoint->getGlobalMeasuredPosition().Z(),
@@ -419,92 +379,13 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 
   } // end of loop on TChain reader
 
-  LOG(info) << "Alignment::processROFs() - end";
+  LOG(info) << "TracksToRecords::processROFs() - end";
 }
 
 //__________________________________________________________________________
-void Alignment::globalFit()
+void TracksToRecords::printProcessTrackSummary()
 {
-  if (!mIsInitDone) {
-    LOGF(fatal, "Alignment::globalFit() aborted because init was not done !");
-    return;
-  }
-  if (!mWithRecordReader || !mRecordReader ||
-      !mRecordReader->isReaderOk() || !mRecordReader->getNEntries()) {
-    LOGF(fatal, "Alignment::globalFit() aborted because no data record can be read !");
-    return;
-  }
-
-  // initialize the file and tree to store chi2 from Millepede LocalFit()
-
-  if (mWithControl)
-    mMillepede->InitChi2Storage(mNEntriesAutoSave);
-
-  // allocate memory in arrays to temporarily store the results of the global fit
-
-  double* params = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
-  double* paramsErrors = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
-  double* paramsPulls = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
-
-  // initialise the content of each array
-
-  for (int ii = 0; ii < mNumberOfGlobalParam; ii++) {
-    params[ii] = 0.;
-    paramsErrors[ii] = 0.;
-    paramsPulls[ii] = 0.;
-  }
-
-  // perform the simultaneous fit of track and alignement parameters
-
-  mMillepede->GlobalFit(params, paramsErrors, paramsPulls);
-
-  if (mWithControl)
-    mMillepede->CloseChi2Storage();
-
-  // post-treatment:
-  // debug output + save Millepede global fit result in AlignParam vector
-
-  LOGF(info, "Alignment::globalFit() - done, results below");
-  LOGF(info, "sensor info, dx (cm), dy (cm), dz (cm), dRz (rad)");
-
-  AlignSensorHelper chipHelper;
-  double dRx = 0., dRy = 0., dRz = 0.; // delta rotations
-  double dx = 0., dy = 0., dz = 0.;    // delta translations
-  bool global = true;                  // delta in global ref. system
-  bool withSymName = false;
-
-  for (int chipId = 0; chipId < mNumberOfSensors; chipId++) {
-    chipHelper.setSensorOnlyInfo(chipId);
-    std::stringstream name = chipHelper.getSensorFullName(withSymName);
-    dx = params[chipId * mNDofPerSensor + 0];
-    dy = params[chipId * mNDofPerSensor + 1];
-    dz = params[chipId * mNDofPerSensor + 3];
-    dRz = params[chipId * mNDofPerSensor + 2];
-    LOGF(info,
-         "%s, %.3e, %.3e, %.3e, %.3e",
-         name.str().c_str(), dx, dy, dz, dRz);
-    mAlignParams.emplace_back(
-      chipHelper.geoSymbolicName(),
-      chipHelper.sensorUid(),
-      dx, dy, dz,
-      dRx, dRy, dRz,
-      global);
-  }
-
-  // free allocated memory
-
-  free(params);
-  free(paramsErrors);
-  free(paramsPulls);
-}
-
-//__________________________________________________________________________
-void Alignment::printProcessTrackSummary()
-{
-  if (!mWithRecordWriter)
-    return;
-
-  LOGF(info, "Alignment processRecoTracks() summary: ");
+  LOGF(info, "TracksToRecords processRecoTracks() summary: ");
   if (mNumberOfTrackChainROFs) {
     LOGF(info,
          "n ROFs = %d, used tracks = %d, skipped tracks = %d, local equations failed = %d",
@@ -519,11 +400,8 @@ void Alignment::printProcessTrackSummary()
 }
 
 //__________________________________________________________________________
-void Alignment::startRecordWriter()
+void TracksToRecords::startRecordWriter()
 {
-  if (!mWithRecordWriter)
-    return;
-
   if (mRecordWriter)
     mRecordWriter->init();
   if (mWithControl) {
@@ -533,11 +411,8 @@ void Alignment::startRecordWriter()
 }
 
 //__________________________________________________________________________
-void Alignment::endRecordWriter()
+void TracksToRecords::endRecordWriter()
 {
-  if (!mWithRecordWriter)
-    return;
-
   if (mRecordWriter) {
     mRecordWriter->terminate(); // write record tree and close output file
   }
@@ -546,7 +421,7 @@ void Alignment::endRecordWriter()
 }
 
 //__________________________________________________________________________
-void Alignment::startConstraintsRecWriter()
+void TracksToRecords::startConstraintsRecWriter()
 {
   if (!mWithConstraintsRecWriter)
     return;
@@ -558,7 +433,7 @@ void Alignment::startConstraintsRecWriter()
 }
 
 //__________________________________________________________________________
-void Alignment::endConstraintsRecWriter()
+void TracksToRecords::endConstraintsRecWriter()
 {
   if (!mWithConstraintsRecWriter)
     return;
@@ -569,30 +444,7 @@ void Alignment::endConstraintsRecWriter()
 }
 
 //__________________________________________________________________________
-void Alignment::connectRecordReaderToChain(TChain* ch)
-{
-  if (!mWithRecordReader)
-    return;
-
-  if (mRecordReader) {
-    mRecordReader->connectToChain(ch);
-  }
-}
-
-//__________________________________________________________________________
-void Alignment::connectConstraintsRecReaderToChain(TChain* ch)
-{
-  if (!mWithConstraintsRecReader)
-    return;
-
-  if (mConstraintsRecReader) {
-    mConstraintsRecReader->changeDataBranchName();
-    mConstraintsRecReader->connectToChain(ch);
-  }
-}
-
-//__________________________________________________________________________
-bool Alignment::setLocalDerivative(Int_t index, Double_t value)
+bool TracksToRecords::setLocalDerivative(Int_t index, Double_t value)
 {
   // index [0 .. 3] for {dX0, dTx, dY0, dTz}
 
@@ -609,7 +461,7 @@ bool Alignment::setLocalDerivative(Int_t index, Double_t value)
 }
 
 //__________________________________________________________________________
-bool Alignment::setGlobalDerivative(Int_t index, Double_t value)
+bool TracksToRecords::setGlobalDerivative(Int_t index, Double_t value)
 {
   // index [0 .. 3] for {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
 
@@ -626,7 +478,7 @@ bool Alignment::setGlobalDerivative(Int_t index, Double_t value)
 }
 
 //__________________________________________________________________________
-bool Alignment::resetLocalDerivative()
+bool TracksToRecords::resetLocalDerivative()
 {
   bool success = false;
   for (int i = 0; i < mNumberOfTrackParam; ++i) {
@@ -638,7 +490,7 @@ bool Alignment::resetLocalDerivative()
 }
 
 //__________________________________________________________________________
-bool Alignment::resetGlocalDerivative()
+bool TracksToRecords::resetGlocalDerivative()
 {
   bool success = false;
   for (int i = 0; i < mNumberOfGlobalParam; ++i) {
@@ -650,12 +502,12 @@ bool Alignment::resetGlocalDerivative()
 }
 
 //__________________________________________________________________________
-bool Alignment::setLocalEquationX()
+bool TracksToRecords::setLocalEquationX()
 {
 
   if (!mAlignPoint->isAlignPointSet()) {
     LOGF(error,
-         "Alignment::setLocalEquationX() - no align point coordinates set !");
+         "TracksToRecords::setLocalEquationX() - no align point coordinates set !");
     return false;
   }
   if (!mAlignPoint->isGlobalDerivativeDone())
@@ -690,7 +542,7 @@ bool Alignment::setLocalEquationX()
   if (success) {
     if (mCounterUsedTracks < 5) {
       LOGF(debug,
-           "Alignment::setLocalEquationX(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e X %.3e sigma %.3e",
+           "TracksToRecords::setLocalEquationX(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e X %.3e sigma %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
            mGlobalDerivatives[chipId * mNDofPerSensor + 0],
@@ -713,11 +565,11 @@ bool Alignment::setLocalEquationX()
 }
 
 //__________________________________________________________________________
-bool Alignment::setLocalEquationY()
+bool TracksToRecords::setLocalEquationY()
 {
   if (!mAlignPoint->isAlignPointSet()) {
     LOGF(error,
-         "Alignment::setLocalEquationY() - no align point coordinates set !");
+         "TracksToRecords::setLocalEquationY() - no align point coordinates set !");
     return false;
   }
   if (!mAlignPoint->isGlobalDerivativeDone())
@@ -752,7 +604,7 @@ bool Alignment::setLocalEquationY()
   if (success) {
     if (mCounterUsedTracks < 5) {
       LOGF(debug,
-           "Alignment::setLocalEquationY(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Y %.3e sigma %.3e",
+           "TracksToRecords::setLocalEquationY(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Y %.3e sigma %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
            mGlobalDerivatives[chipId * mNDofPerSensor + 0],
@@ -775,11 +627,11 @@ bool Alignment::setLocalEquationY()
 }
 
 //__________________________________________________________________________
-bool Alignment::setLocalEquationZ()
+bool TracksToRecords::setLocalEquationZ()
 {
   if (!mAlignPoint->isAlignPointSet()) {
     LOGF(error,
-         "Alignment::setLocalEquationZ() - no align point coordinates set !");
+         "TracksToRecords::setLocalEquationZ() - no align point coordinates set !");
     return false;
   }
   if (!mAlignPoint->isGlobalDerivativeDone())
@@ -814,7 +666,7 @@ bool Alignment::setLocalEquationZ()
   if (success) {
     if (mCounterUsedTracks < 5) {
       LOGF(debug,
-           "Alignment::setLocalEquationZ(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Z %.3e sigma %.3e",
+           "TracksToRecords::setLocalEquationZ(): track %i sr %4d local %.3e %.3e %.3e %.3e, global %.3e %.3e %.3e %.3e Z %.3e sigma %.3e",
            mCounterUsedTracks, chipId,
            mLocalDerivatives[0], mLocalDerivatives[1], mLocalDerivatives[2], mLocalDerivatives[3],
            mGlobalDerivatives[chipId * mNDofPerSensor + 0],

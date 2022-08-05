@@ -307,6 +307,7 @@ Bool_t MillePede2::InitChi2Storage(const int nEntriesAutoSave)
     return kFALSE;
   }
   if (fTreeChi2 == nullptr) {
+    fRecChi2File->cd();
     fTreeChi2 = std::make_unique<TTree>(fRecChi2TreeName.Data(), "Sum of chi2 per records");
     fTreeChi2->SetAutoSave(nEntriesAutoSave); // flush the TTree to disk every N entries
     fTreeChi2->SetImplicitMT(true);
@@ -318,7 +319,7 @@ Bool_t MillePede2::InitChi2Storage(const int nEntriesAutoSave)
     LOG(error) << "MillePede2::InitChi2Storage() - failed to initialise TTree !";
     return kFALSE;
   }
-  LOGF(info, "MillePede2::InitChi2Storage() - chi2 storage file %s!",
+  LOGF(info, "MillePede2::InitChi2Storage() - chi2 storage file %s",
        GetRecChi2FName());
   return kTRUE;
 }
@@ -327,6 +328,7 @@ Bool_t MillePede2::InitChi2Storage(const int nEntriesAutoSave)
 void MillePede2::CloseChi2Storage()
 {
   if (fRecChi2File && fRecChi2File->IsWritable() && fTreeChi2) {
+    fRecChi2File->cd();
     fTreeChi2->Write();
     LOG(info) << "MillePede2::CloseChi2Storage() - wrote tree "
               << fRecChi2TreeName.Data();

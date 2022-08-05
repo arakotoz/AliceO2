@@ -68,17 +68,17 @@ void MilleRecordWriter::init()
 
   if (mDataFile == nullptr)
     mDataFile = std::make_unique<TFile>(mDataFileName.Data(), "recreate", "", 505);
+
   if ((!mDataFile) || (mDataFile->IsZombie())) {
     LOGF(fatal,
          "MilleRecordWriter::init() - failed to initialise records file %s!",
          mDataFileName.Data());
     return;
   }
-
   if (mDataTree == nullptr) {
+    mDataFile->cd();
     mDataTree = std::make_unique<TTree>(mDataTreeName.Data(), "records for MillePede2");
     mDataTree->SetAutoSave(mNEntriesAutoSave); // flush the TTree to disk every N entries
-    mDataTree->SetImplicitMT(true);
     const int bufsize = 32000;
     const int splitLevel = 99; // "all the way"
     mDataTree->Branch(mDataBranchName.Data(), "MillePedeRecord", mRecord, bufsize, splitLevel);
@@ -120,6 +120,7 @@ void MilleRecordWriter::fillRecordTree(const bool doPrint)
 void MilleRecordWriter::terminate()
 {
   if (mDataFile && mDataFile->IsWritable() && mDataTree) {
+    mDataFile->cd();
     mDataTree->Write();
     LOG(info) << "MilleRecordWriter::terminate() - wrote tree "
               << mDataTreeName.Data();

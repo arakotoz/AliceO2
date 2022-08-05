@@ -16,6 +16,7 @@
 #pragma link off all functions;
 
 #pragma link C++ class o2::mft::AlignConfig + ;
+#pragma link C++ class o2::mft::Aligner + ;
 #pragma link C++ class o2::mft::Alignment + ;
 #pragma link C++ class o2::mft::AlignPointControl + ;
 #pragma link C++ class o2::mft::AlignPointHelper + ;
@@ -27,9 +28,11 @@
 #pragma link C++ class o2::mft::MilleRecordReader + ;
 #pragma link C++ class o2::mft::MilleRecordWriter + ;
 #pragma link C++ class o2::mft::MinResSolve + ;
+#pragma link C++ class o2::mft::RecordsToAlignParams + ;
 #pragma link C++ class o2::mft::RectMatrix + ;
 #pragma link C++ class o2::mft::SymBDMatrix + ;
 #pragma link C++ class o2::mft::SymMatrix + ;
+#pragma link C++ class o2::mft::TracksToRecords + ;
 #pragma link C++ class o2::mft::VectorSparse + ;
 
 #endif

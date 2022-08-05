@@ -69,9 +69,9 @@ void AlignPointControl::init()
     mControlFile = std::make_unique<TFile>(mOutFileName.Data(), "recreate", "", 505);
 
   if (mControlTree == nullptr) {
+    mControlFile->cd();
     mControlTree = std::make_unique<TTree>("point", mTreeTitle.Data());
     mControlTree->SetAutoSave(mNEntriesAutoSave); // flush the TTree to disk every N entries
-    mControlTree->SetImplicitMT(true);
     mControlTree->Branch("sensor", &mPointInfo.sensor, "sensor/s");
     mControlTree->Branch("layer", &mPointInfo.layer, "layer/s");
     mControlTree->Branch("disk", &mPointInfo.disk, "disk/s");
@@ -109,6 +109,7 @@ void AlignPointControl::init()
 void AlignPointControl::terminate()
 {
   if (mControlFile && mControlFile->IsWritable() && mControlTree) {
+    mControlFile->cd();
     mControlTree->Write();
     LOG(info) << "AlignPointControl::terminate() - wrote "
               << mTreeTitle.Data();
