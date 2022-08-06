@@ -37,7 +37,7 @@ class RecordsToAlignParams : public Aligner
   /// \brief destructor
   ~RecordsToAlignParams();
 
-  /// \brief init Millipede and AlignPointHelper
+  /// \brief init MilliPede
   void init();
 
   // simple setters
@@ -46,7 +46,7 @@ class RecordsToAlignParams : public Aligner
   void setNEntriesAutoSave(const int value) { mNEntriesAutoSave = value; }
   void setWithConstraintsRecReader(const bool choice) { mWithConstraintsRecReader = choice; }
 
-  /// \brief perform the simultaneous fit of track and alignement parameters
+  /// \brief perform the simultaneous fit of track (local) and alignement (global) parameters
   void globalFit();
 
   /// \brief provide access to the AlignParam vector
@@ -59,12 +59,12 @@ class RecordsToAlignParams : public Aligner
   void connectConstraintsRecReaderToChain(TChain* ch);
 
  protected:
-  bool mWithControl;                                   ///< boolean to set the use of the control tree
-  long mNEntriesAutoSave = 10000;                      ///< number of entries needed to call AutoSave for the output TTrees
-  std::vector<o2::detectors::AlignParam> mAlignParams; ///< vector of alignment parameters computed by Millepede global fit
-  std::shared_ptr<o2::mft::MilleRecordReader> mRecordReader;
-  bool mWithConstraintsRecReader;
-  std::shared_ptr<o2::mft::MilleRecordReader> mConstraintsRecReader;
+  bool mWithControl;                                                 ///< boolean to set the use of the control tree = chi2 per track filled by MillePede LocalFit()
+  long mNEntriesAutoSave = 10000;                                    ///< number of entries needed to cyclically call AutoSave for the output control tree
+  std::vector<o2::detectors::AlignParam> mAlignParams;               ///< vector of alignment parameters computed by MillePede simultaneous fit
+  std::shared_ptr<o2::mft::MilleRecordReader> mRecordReader;         ///< utility that handles the reading of the data records used to feed MillePede solver
+  bool mWithConstraintsRecReader;                                    ///< boolean to set to true if one wants to also read constraints records
+  std::shared_ptr<o2::mft::MilleRecordReader> mConstraintsRecReader; ///< utility that handles the reading of the constraints records
 
   ClassDef(RecordsToAlignParams, 0);
 };
