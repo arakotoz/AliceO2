@@ -35,7 +35,7 @@ Aligner::Aligner()
     mMilleConstraintsRecFileName("mft_mille_constraints.root"),
     mMillepede(nullptr),
     mIsInitDone(false),
-    mGlobalParameterStatus(nullptr)
+    mGlobalParameterStatus(std::vector<int>(mNumberOfGlobalParam))
 {
   // default allowed variations w.r.t. global system coordinates
   mAllowVar[0] = 0.5;  // delta translation in x (cm)
@@ -43,18 +43,13 @@ Aligner::Aligner()
   mAllowVar[2] = 0.01; // rotation angle Rz around z-axis (rad)
   mAllowVar[3] = 0.5;  // delta translation in z (cm)
 
-  mGlobalParameterStatus = (int*)malloc(sizeof(int) * mNumberOfGlobalParam);
+  std::fill(mGlobalParameterStatus.begin(), mGlobalParameterStatus.end(), mFreeParId);
 
-  for (int iPar = 0; iPar < mNumberOfGlobalParam; iPar++) {
-    mGlobalParameterStatus[iPar] = mFreeParId;
-  }
   LOGF(info, "Aligner instantiated");
 }
 
 //__________________________________________________________________________
 Aligner::~Aligner()
 {
-  if (mGlobalParameterStatus)
-    free(mGlobalParameterStatus);
   LOGF(info, "Aligner destroyed");
 }

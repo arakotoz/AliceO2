@@ -46,8 +46,8 @@ Alignment::Alignment()
     mCounterLocalEquationFailed(0),
     mCounterSkippedTracks(0),
     mCounterUsedTracks(0),
-    mGlobalDerivatives(nullptr),
-    mLocalDerivatives(nullptr),
+    mGlobalDerivatives(std::vector<double>(mNumberOfGlobalParam)),
+    mLocalDerivatives(std::vector<double>(mNumberOfTrackParam)),
     mStartFac(256),
     mChi2CutNStdDev(3),
     mResCutInitial(100.),
@@ -60,7 +60,7 @@ Alignment::Alignment()
     mDictionary(nullptr),
     mAlignPoint(nullptr),
     mIsInitDone(false),
-    mGlobalParameterStatus(nullptr),
+    mGlobalParameterStatus(std::vector<int>(mNumberOfGlobalParam)),
     mWithControl(false),
     mNEntriesAutoSave(10000),
     mWithRecordWriter(true),
@@ -78,26 +78,18 @@ Alignment::Alignment()
   mAllowVar[2] = 0.01; // rotation angle Rz around z-axis (rad)
   mAllowVar[3] = 0.5;  // delta translation in z (cm)
 
-  // allocate memory for local and global derivatives
-  mGlobalDerivatives = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
-  mLocalDerivatives = new double[mNumberOfTrackParam];
-  mGlobalParameterStatus = (int*)malloc(sizeof(int) * mNumberOfGlobalParam);
-
   // initialise the content of each array
   resetGlocalDerivative();
   resetLocalDerivative();
-  for (int iPar = 0; iPar < mNumberOfGlobalParam; iPar++) {
-    mGlobalParameterStatus[iPar] = mFreeParId;
-  }
+  std::fill(mGlobalParameterStatus.begin(), mGlobalParameterStatus.end(), mFreeParId);
+
   LOGF(info, "Alignment instantiated");
 }
 
 //__________________________________________________________________________
 Alignment::~Alignment()
 {
-  free(mGlobalDerivatives);
-  delete[] mLocalDerivatives;
-  free(mGlobalParameterStatus);
+  LOGF(info, "Alignment destroyed");
 }
 
 //__________________________________________________________________________
@@ -629,11 +621,8 @@ bool Alignment::setGlobalDerivative(Int_t index, Double_t value)
 bool Alignment::resetLocalDerivative()
 {
   bool success = false;
-  for (int i = 0; i < mNumberOfTrackParam; ++i) {
-    success = false;
-    mLocalDerivatives[i] = 0.0;
-    success = true;
-  }
+  std::fill(mLocalDerivatives.begin(), mLocalDerivatives.end(), 0.);
+  success = true;
   return success;
 }
 
@@ -641,11 +630,8 @@ bool Alignment::resetLocalDerivative()
 bool Alignment::resetGlocalDerivative()
 {
   bool success = false;
-  for (int i = 0; i < mNumberOfGlobalParam; ++i) {
-    success = false;
-    mGlobalDerivatives[i] = 0.0;
-    success = true;
-  }
+  std::fill(mGlobalDerivatives.begin(), mGlobalDerivatives.end(), 0.);
+  success = true;
   return success;
 }
 

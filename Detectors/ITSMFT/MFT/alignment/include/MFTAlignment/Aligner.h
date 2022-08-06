@@ -16,8 +16,10 @@
 #ifndef ALICEO2_MFT_ALIGNER_H
 #define ALICEO2_MFT_ALIGNER_H
 
-#include <Rtypes.h>
 #include <array>
+#include <vector>
+
+#include <Rtypes.h>
 #include <TString.h>
 #include <TFile.h>
 
@@ -67,7 +69,7 @@ class Aligner
   TString mMilleConstraintsRecFileName;                                          ///< output file name when saving the records of the constraints
   std::unique_ptr<o2::mft::MillePede2> mMillepede;                               ///< Millepede2 implementation copied from AliROOT
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
-  int* mGlobalParameterStatus;                                                   ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
+  std::vector<int> mGlobalParameterStatus;                                       ///< vector of effective degrees of freedom, used to fix detectors, parameters, etc.
 
   // used to fix some degrees of freedom
 

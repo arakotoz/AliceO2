@@ -16,8 +16,10 @@
 #ifndef ALICEO2_MFT_ALIGNMENT_H
 #define ALICEO2_MFT_ALIGNMENT_H
 
-#include <Rtypes.h>
 #include <array>
+#include <vector>
+
+#include <Rtypes.h>
 #include <TString.h>
 #include <TChain.h>
 #include <TFile.h>
@@ -127,8 +129,8 @@ class Alignment
   static o2::itsmft::ChipMappingMFT mChipMapping;                                ///< MFT chip <-> ladder, layer, disk, half mapping
   static constexpr int mNumberOfSensors = mChipMapping.getNChips();              ///< Total number of sensors (detection elements) in the MFT
   static constexpr int mNumberOfGlobalParam = mNDofPerSensor * mNumberOfSensors; ///< Number of alignment (= global) parameters
-  double* mGlobalDerivatives;                                                    ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
-  double* mLocalDerivatives;                                                     ///< Array of local derivatives {dX0, dTx, dY0, dTz}
+  std::vector<double> mGlobalDerivatives;                                        ///< vector of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+  std::vector<double> mLocalDerivatives;                                         ///< vector of local derivatives {dX0, dTx, dY0, dTz}
   std::array<double, mNDofPerSensor> mAllowVar;                                  ///< "Encouraged" variation for degrees of freedom {dx, dy, dRz, dz}
   double mStartFac;                                                              ///< Initial value for chi2 cut, used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * chi2CutFactor (if > 1, iterations in Millepede are turned on)
   int mChi2CutNStdDev;                                                           ///< Number of standard deviations for chi2 cut
@@ -143,7 +145,7 @@ class Alignment
   std::shared_ptr<o2::mft::AlignPointHelper> mAlignPoint;                        ///< Alignment point helper
   std::vector<o2::detectors::AlignParam> mAlignParams;                           ///< vector of alignment parameters computed by Millepede global fit
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
-  int* mGlobalParameterStatus;                                                   ///< Array of effective degrees of freedom, used to fix detectors, parameters, etc.
+  std::vector<int> mGlobalParameterStatus;                                       ///< vector of effective degrees of freedom, used to fix detectors, parameters, etc.
   bool mWithControl;                                                             ///< boolean to set the use of the control tree
   long mNEntriesAutoSave = 10000;                                                ///< number of entries needed to call AutoSave for the output TTrees
   o2::mft::AlignPointControl mPointControl;                                      ///< AlignPointControl handles the control tree

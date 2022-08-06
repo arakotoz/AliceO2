@@ -41,8 +41,8 @@ TracksToRecords::TracksToRecords()
     mCounterLocalEquationFailed(0),
     mCounterSkippedTracks(0),
     mCounterUsedTracks(0),
-    mGlobalDerivatives(nullptr),
-    mLocalDerivatives(nullptr),
+    mGlobalDerivatives(std::vector<double>(mNumberOfGlobalParam)),
+    mLocalDerivatives(std::vector<double>(mNumberOfTrackParam)),
     mMinNumberClusterCut(6),
     mWeightRecord(1.),
     mDictionary(nullptr),
@@ -61,10 +61,6 @@ TracksToRecords::TracksToRecords()
   }
   mAlignPoint = std::make_shared<AlignPointHelper>();
 
-  // allocate memory for local and global derivatives
-  mGlobalDerivatives = (double*)malloc(sizeof(double) * mNumberOfGlobalParam);
-  mLocalDerivatives = new double[mNumberOfTrackParam];
-
   // initialise the content of each array
   resetGlocalDerivative();
   resetLocalDerivative();
@@ -74,12 +70,6 @@ TracksToRecords::TracksToRecords()
 //__________________________________________________________________________
 TracksToRecords::~TracksToRecords()
 {
-  if (mGlobalParameterStatus)
-    free(mGlobalParameterStatus);
-  if (mLocalDerivatives)
-    delete[] mLocalDerivatives;
-  if (mGlobalDerivatives)
-    free(mGlobalDerivatives);
   LOGF(info, "TracksToRecords destroyed");
 }
 
@@ -496,11 +486,8 @@ bool TracksToRecords::setGlobalDerivative(Int_t index, Double_t value)
 bool TracksToRecords::resetLocalDerivative()
 {
   bool success = false;
-  for (int i = 0; i < mNumberOfTrackParam; ++i) {
-    success = false;
-    mLocalDerivatives[i] = 0.0;
-    success = true;
-  }
+  std::fill(mLocalDerivatives.begin(), mLocalDerivatives.end(), 0.);
+  success = true;
   return success;
 }
 
@@ -508,11 +495,8 @@ bool TracksToRecords::resetLocalDerivative()
 bool TracksToRecords::resetGlocalDerivative()
 {
   bool success = false;
-  for (int i = 0; i < mNumberOfGlobalParam; ++i) {
-    success = false;
-    mGlobalDerivatives[i] = 0.0;
-    success = true;
-  }
+  std::fill(mGlobalDerivatives.begin(), mGlobalDerivatives.end(), 0.);
+  success = true;
   return success;
 }
 

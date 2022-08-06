@@ -19,6 +19,7 @@
 #ifndef ALICEO2_MFT_MILLEPEDE2_H
 #define ALICEO2_MFT_MILLEPEDE2_H
 
+#include <vector>
 #include <TString.h>
 #include <TTree.h>
 #include "MFTAlignment/MinResSolve.h"
@@ -61,11 +62,11 @@ class MillePede2
   /// \brief init all
   int InitMille(int nGlo, const int nLoc,
                 const int lNStdDev = -1, const double lResCut = -1.,
-                const double lResCutInit = -1., const int* regroup = 0);
+                const double lResCutInit = -1., const std::vector<int>& regroup = {});
 
   int GetNGloPar() const { return fNGloPar; }
   int GetNGloParIni() const { return fNGloParIni; }
-  const int* GetRegrouping() const { return fkReGroup; }
+  std::vector<int> GetRegrouping() const { return fkReGroup; }
   int GetNLocPar() const { return fNLocPar; }
   long GetNLocalEquations() const { return fNLocEquations; }
   int GetCurrentIteration() const { return fIter; }
@@ -82,13 +83,13 @@ class MillePede2
   float GetResCurInit() const { return fResCutInit; }
   float GetResCut() const { return fResCut; }
   int GetMinPntValid() const { return fMinPntValid; }
-  int GetRGId(int i) const { return fkReGroup ? (fkReGroup[i] < 0 ? -1 : fkReGroup[i]) : i; }
+  int GetRGId(int i) const { return fkReGroup.size() ? (fkReGroup[i] < 0 ? -1 : fkReGroup[i]) : i; }
   int GetProcessedPoints(int i) const
   {
     int ir = GetRGId(i);
     return ir <= 0 ? 0 : fProcPnt[ir];
   }
-  int* GetProcessedPoints() const { return fProcPnt; }
+  std::vector<int> GetProcessedPoints() const { return fProcPnt; }
   int GetParamGrID(int i) const
   {
     int ir = GetRGId(i);
@@ -97,11 +98,11 @@ class MillePede2
 
   MatrixSq* GetGlobalMatrix() const { return fMatCGlo; }
   SymMatrix* GetLocalMatrix() const { return fMatCLoc; }
-  double* GetGlobals() const { return fVecBGlo; }
-  double* GetDeltaPars() const { return fDeltaPar; }
-  double* GetInitPars() const { return fInitPar; }
-  double* GetSigmaPars() const { return fSigmaPar; }
-  bool* GetIsLinear() const { return fIsLinear; }
+  std::vector<double> GetGlobals() const { return fVecBGlo; }
+  std::vector<double> GetDeltaPars() const { return fDeltaPar; }
+  std::vector<double> GetInitPars() const { return fInitPar; }
+  std::vector<double> GetSigmaPars() const { return fSigmaPar; }
+  std::vector<bool> GetIsLinear() const { return fIsLinear; }
   double GetFinalParam(int i) const
   {
     int ir = GetRGId(i);
@@ -221,23 +222,25 @@ class MillePede2
   // constraints
 
   /// \brief define a constraint equation
-  void SetGlobalConstraint(const double* dergb,
+  void SetGlobalConstraint(const std::vector<double>& dergb,
                            const double val, const double sigma = 0,
                            const bool doPrint = false);
 
   /// \brief define a constraint equation
-  void SetGlobalConstraint(const int* indgb, const double* dergb,
+  void SetGlobalConstraint(const std::vector<int>& indgb,
+                           const std::vector<double>& dergb,
                            const int ngb, const double val,
                            double sigma = 0, const bool doPrint = false);
 
   /// \brief assing derivs of loc.eq.
-  void SetLocalEquation(double* dergb, double* derlc,
+  void SetLocalEquation(std::vector<double>& dergb, std::vector<double>& derlc,
                         const double lMeas, const double lSigma);
 
   /// \brief write data of single measurement.
   ///        Note: the records ignore regrouping, store direct parameters
-  void SetLocalEquation(int* indgb, double* dergb, int ngb, int* indlc,
-                        double* derlc, const int nlc,
+  void SetLocalEquation(std::vector<int>& indgb, std::vector<double>& dergb,
+                        int ngb, std::vector<int>& indlc,
+                        std::vector<double>& derlc, const int nlc,
                         const double lMeas, const double lSigma);
 
   /// \brief return file name where is stored chi2 from LocalFit()
@@ -287,7 +290,7 @@ class MillePede2
   /// \brief Perform local parameters fit once all the local equations have been set
   ///
   /// localParams = (if !=0) will contain the fitted track parameters and related errors
-  int LocalFit(double* localParams = 0);
+  int LocalFit(std::vector<double>& localParams);
 
   bool IsZero(const double v, const double eps = 1e-16) const { return TMath::Abs(v) < eps; }
 
@@ -314,29 +317,29 @@ class MillePede2
   float fResCut;        ///< Cut in residual for other iterartiona
   int fMinPntValid;     ///< min number of points for global to vary
 
-  int fNGroupsSet;   ///< number of groups set
-  int* fParamGrID;   ///< [fNGloPar] group id for the every parameter
-  int* fProcPnt;     ///< [fNGloPar] N of processed points per global variable
-  double* fVecBLoc;  ///< [fNLocPar] Vector B local (parameters)
-  double* fDiagCGlo; ///< [fNGloPar] Initial diagonal elements of C global matrix
-  double* fVecBGlo;  //! Vector B global (parameters)
+  int fNGroupsSet;               ///< number of groups set
+  std::vector<int> fParamGrID;   ///< [fNGloPar] group id for the every parameter
+  std::vector<int> fProcPnt;     ///< [fNGloPar] N of processed points per global variable
+  std::vector<double> fVecBLoc;  ///< [fNLocPar] Vector B local (parameters)
+  std::vector<double> fDiagCGlo; ///< [fNGloPar] Initial diagonal elements of C global matrix
+  std::vector<double> fVecBGlo;  //! Vector B global (parameters)
 
-  double* fInitPar;  ///< [fNGloPar] Initial global parameters
-  double* fDeltaPar; ///< [fNGloPar] Variation of global parameters
-  double* fSigmaPar; ///< [fNGloPar] Sigma of allowed variation of global parameter
+  std::vector<double> fInitPar;  ///< [fNGloPar] Initial global parameters
+  std::vector<double> fDeltaPar; ///< [fNGloPar] Variation of global parameters
+  std::vector<double> fSigmaPar; ///< [fNGloPar] Sigma of allowed variation of global parameter
 
-  bool* fIsLinear;   ///< [fNGloPar] Flag for linear parameters
-  bool* fConstrUsed; //! Flag for used constraints
+  std::vector<bool> fIsLinear;   ///< [fNGloPar] Flag for linear parameters
+  std::vector<bool> fConstrUsed; //! Flag for used constraints
 
-  int* fGlo2CGlo; ///< [fNGloPar] global ID to compressed ID buffer
-  int* fCGlo2Glo; ///< [fNGloPar] compressed ID to global ID buffer
+  std::vector<int> fGlo2CGlo; ///< [fNGloPar] global ID to compressed ID buffer
+  std::vector<int> fCGlo2Glo; ///< [fNGloPar] compressed ID to global ID buffer
 
   // Matrices
   o2::mft::SymMatrix* fMatCLoc;     ///< Matrix C local
   o2::mft::MatrixSq* fMatCGlo;      ///< Matrix C global
   o2::mft::RectMatrix* fMatCGloLoc; ///< Rectangular matrix C g*l
-  int* fFillIndex;                  ///< [fNGloPar] auxilary index array for fast matrix fill
-  double* fFillValue;               ///< [fNGloPar] auxilary value array for fast matrix fill
+  std::vector<int> fFillIndex;      ///< [fNGloPar] auxilary index array for fast matrix fill
+  std::vector<double> fFillValue;   ///< [fNGloPar] auxilary value array for fast matrix fill
 
   TFile* fRecChi2File;
   TString fRecChi2FName;
@@ -348,19 +351,19 @@ class MillePede2
 
   MillePedeRecord* fRecord; ///< Buffer of measurements records
 
-  long fCurrRecDataID;     ///< ID of the current data record
-  long fCurrRecConstrID;   ///< ID of the current constraint record
-  bool fLocFitAdd;         ///< Add contribution of carrent track (and not eliminate it)
-  bool fUseRecordWeight;   ///< force or ignore the record weight
-  int fMinRecordLength;    ///< ignore shorter records
-  int fSelFirst;           ///< event selection start
-  int fSelLast;            ///< event selection end
-  TArrayL* fRejRunList;    ///< list of runs to reject (if any)
-  TArrayL* fAccRunList;    ///< list of runs to select (if any)
-  TArrayF* fAccRunListWgh; ///< optional weights for data of accepted runs (if any)
-  double fRunWgh;          ///< run weight
-  double fWghScl[2];       ///< optional rescaling for odd/even residual weights (see its usage in LocalFit)
-  const int* fkReGroup;    ///< optional regrouping of parameters wrt ID's from the records
+  long fCurrRecDataID;        ///< ID of the current data record
+  long fCurrRecConstrID;      ///< ID of the current constraint record
+  bool fLocFitAdd;            ///< Add contribution of carrent track (and not eliminate it)
+  bool fUseRecordWeight;      ///< force or ignore the record weight
+  int fMinRecordLength;       ///< ignore shorter records
+  int fSelFirst;              ///< event selection start
+  int fSelLast;               ///< event selection end
+  TArrayL* fRejRunList;       ///< list of runs to reject (if any)
+  TArrayL* fAccRunList;       ///< list of runs to select (if any)
+  TArrayF* fAccRunListWgh;    ///< optional weights for data of accepted runs (if any)
+  double fRunWgh;             ///< run weight
+  double fWghScl[2];          ///< optional rescaling for odd/even residual weights (see its usage in LocalFit)
+  std::vector<int> fkReGroup; ///< optional regrouping of parameters wrt ID's from the records
 
   static bool fgInvChol;        ///< Invert global matrix in Cholesky solver
   static bool fgWeightSigma;    ///< weight parameter constraint by statistics

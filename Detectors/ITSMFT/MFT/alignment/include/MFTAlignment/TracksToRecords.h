@@ -16,6 +16,8 @@
 #ifndef ALICEO2_MFT_TRACKS_TO_RECORDS_H
 #define ALICEO2_MFT_TRACKS_TO_RECORDS_H
 
+#include <vector>
+
 #include <TTree.h>
 #include <TChain.h>
 
@@ -93,8 +95,8 @@ class TracksToRecords : public Aligner
   int mCounterLocalEquationFailed;                        ///< count how many times we failed to set a local equation
   int mCounterSkippedTracks;                              ///< count how many tracks did not met the cut on the min. nb of clusters
   int mCounterUsedTracks;                                 ///< count how many tracks were used to make Mille records
-  double* mGlobalDerivatives;                             ///< Array of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
-  double* mLocalDerivatives;                              ///< Array of local derivatives {dX0, dTx, dY0, dTz}
+  std::vector<double> mGlobalDerivatives;                 ///< vector of global derivatives {dDeltaX, dDeltaY, dDeltaRz, dDeltaZ}
+  std::vector<double> mLocalDerivatives;                  ///< vector of local derivatives {dX0, dTx, dY0, dTz}
   int mMinNumberClusterCut;                               ///< Minimum number of clusters in the track to be used for alignment
   double mWeightRecord;                                   ///< the weight given to a single Mille record in Millepede algorithm
   const o2::itsmft::TopologyDictionary* mDictionary;      ///< cluster patterns dictionary
