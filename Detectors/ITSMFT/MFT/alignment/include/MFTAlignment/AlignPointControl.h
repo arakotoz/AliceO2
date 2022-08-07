@@ -18,10 +18,10 @@
 
 #include <Rtypes.h>
 #include <TString.h>
+#include "MFTAlignment/AlignPointHelper.h"
 
 class TFile;
 class TTree;
-class AlignPointHelper;
 
 namespace o2
 {
