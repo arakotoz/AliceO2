@@ -25,19 +25,15 @@ namespace mft
 {
 
 struct AlignConfig : public o2::conf::ConfigurableParamHelper<AlignConfig> {
-  enum TrackType { Collision,
-                   Cosmic,
-                   NTrackTypes };
-
-  int minPoints[NTrackTypes] = {6, 4}; ///< mininum number of clusters in a track used for alignment
-  Int_t chi2CutNStdDev = 3;            ///< Number of standard deviations for chi2 cut
-  Double_t residualCutInitial = 100.;  ///< Cut on residual on first iteration
-  Double_t residualCut = 100.;         ///< Cut on residual for other iterations
-  Double_t allowedVarDeltaX = 0.5;     ///< allowed max delta in x-translation (cm)
-  Double_t allowedVarDeltaY = 0.5;     ///< allowed max delta in y-translation (cm)
-  Double_t allowedVarDeltaZ = 0.5;     ///< allowed max delta in z-translation (cm)
-  Double_t allowedVarDeltaRz = 0.01;   ///< allowed max delta in rotation around z-axis (rad)
-  Double_t chi2CutFactor = 256.;       ///< used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor
+  int minPoints = 6;                  ///< mininum number of clusters in a track used for alignment
+  Int_t chi2CutNStdDev = 3;           ///< Number of standard deviations for chi2 cut
+  Double_t residualCutInitial = 100.; ///< Cut on residual on first iteration
+  Double_t residualCut = 100.;        ///< Cut on residual for other iterations
+  Double_t allowedVarDeltaX = 0.5;    ///< allowed max delta in x-translation (cm)
+  Double_t allowedVarDeltaY = 0.5;    ///< allowed max delta in y-translation (cm)
+  Double_t allowedVarDeltaZ = 0.5;    ///< allowed max delta in z-translation (cm)
+  Double_t allowedVarDeltaRz = 0.01;  ///< allowed max delta in rotation around z-axis (rad)
+  Double_t chi2CutFactor = 256.;      ///< used to reject outliers i.e. bad tracks with sum(chi2) > Chi2DoFLim(fNStdDev, nDoF) * fChi2CutFactor
 
   O2ParamDef(AlignConfig, "MFTAlignment");
 };

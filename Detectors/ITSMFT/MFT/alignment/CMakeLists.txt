@@ -12,7 +12,6 @@
 o2_add_library(MFTAlignment
         SOURCES src/AlignConfig.cxx
                 src/Aligner.cxx
-                src/Alignment.cxx
                 src/AlignPointControl.cxx
                 src/AlignPointHelper.cxx
                 src/AlignSensorHelper.cxx
@@ -38,7 +37,6 @@ o2_add_library(MFTAlignment
 o2_target_root_dictionary(MFTAlignment
         HEADERS include/MFTAlignment/AlignConfig.h
                 include/MFTAlignment/Aligner.h
-                include/MFTAlignment/Alignment.h
                 include/MFTAlignment/AlignPointControl.h
                 include/MFTAlignment/AlignPointHelper.h
                 include/MFTAlignment/AlignSensorHelper.h

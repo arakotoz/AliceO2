@@ -17,7 +17,6 @@
 
 #pragma link C++ class o2::mft::AlignConfig + ;
 #pragma link C++ class o2::mft::Aligner + ;
-#pragma link C++ class o2::mft::Alignment + ;
 #pragma link C++ class o2::mft::AlignPointControl + ;
 #pragma link C++ class o2::mft::AlignPointHelper + ;
 #pragma link C++ class o2::mft::AlignSensorHelper + ;

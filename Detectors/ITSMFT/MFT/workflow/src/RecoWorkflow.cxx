@@ -19,7 +19,7 @@
 #include "MFTWorkflow/TrackWriterSpec.h"
 #include "ITSMFTWorkflow/DigitReaderSpec.h"
 #include "MFTWorkflow/MFTAssessmentSpec.h"
-#include "MFTWorkflow/AlignmentSpec.h"
+#include "MFTWorkflow/TracksToRecordsSpec.h"
 
 namespace o2
 {
@@ -37,7 +37,7 @@ framework::WorkflowSpec getWorkflow(
   bool runAssessment,
   bool processGen,
   bool runTracking,
-  bool runAlignment)
+  bool runTracks2Records)
 {
   framework::WorkflowSpec specs;
 
@@ -58,8 +58,8 @@ framework::WorkflowSpec getWorkflow(
     if (runAssessment) {
       specs.emplace_back(o2::mft::getMFTAssessmentSpec(useMC, processGen));
     }
-    if (runAlignment) {
-      specs.emplace_back(o2::mft::getAlignmentSpec());
+    if (runTracks2Records) {
+      specs.emplace_back(o2::mft::getTracksToRecordsSpec());
     }
   }
   return specs;

@@ -9,16 +9,16 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// \file AlignmentSpec.h
+/// \file TracksToRecordsSpec.h
 /// \author arakotoz@cern.ch
-/// \brief Class to run standalone alignment for MFT in a workflow
+/// \brief Class to run tracks to records needed to feed standalone alignment for MFT
 
 #ifndef ALICEO2_MFT_ALIGNMENT_DEVICE_H
 #define ALICEO2_MFT_ALIGNMENT_DEVICE_H
 
 #include "Framework/DataProcessorSpec.h"
 #include "Framework/Task.h"
-#include "MFTAlignment/Alignment.h"
+#include "MFTAlignment/TracksToRecords.h"
 #include "TStopwatch.h"
 #include "DetectorsBase/GRPGeomHelper.h"
 
@@ -28,10 +28,10 @@ namespace o2
 {
 namespace mft
 {
-class AlignmentSpec : public Task
+class TracksToRecordsSpec : public Task
 {
  public:
-  AlignmentSpec(std::shared_ptr<o2::base::GRPGeomRequest> gr)
+  TracksToRecordsSpec(std::shared_ptr<o2::base::GRPGeomRequest> gr)
     : mGGCCDBRequest(gr){};
   void init(o2::framework::InitContext& ic) final;
   void run(o2::framework::ProcessingContext& pc) final;
@@ -41,21 +41,19 @@ class AlignmentSpec : public Task
  private:
   void updateTimeDependentParams(o2::framework::ProcessingContext& pc);
   void sendOutput(o2::framework::DataAllocator& output);
-  std::unique_ptr<o2::mft::Alignment> mAlignment;
+  std::unique_ptr<o2::mft::TracksToRecords> mAlignment;
   std::shared_ptr<o2::base::GRPGeomRequest> mGGCCDBRequest;
   enum TimerIDs { SWTot,
                   SWProcessTimeFrame,
                   SWProcessRecoTracks,
-                  SWGlobalFit,
                   NStopWatches };
   static constexpr std::string_view TimerName[] = {"Total",
                                                    "processTimeFrame",
-                                                   "processRecoTracks",
-                                                   "globalFit"};
+                                                   "processRecoTracks"};
   TStopwatch mTimer[NStopWatches];
 };
 
-DataProcessorSpec getAlignmentSpec();
+DataProcessorSpec getTracksToRecordsSpec();
 
 } // namespace mft
 } // namespace o2

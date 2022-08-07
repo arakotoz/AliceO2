@@ -9,7 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file AlignmentSpec.cxx
+/// @file TracksToRecordsSpec.cxx
 
 #include "Framework/ControlService.h"
 #include "Framework/ConfigParamRegistry.h"
@@ -20,7 +20,7 @@
 #include "MFTBase/GeometryTGeo.h"
 #include "MFTAlignment/AlignConfig.h"
 
-#include "MFTWorkflow/AlignmentSpec.h"
+#include "MFTWorkflow/TracksToRecordsSpec.h"
 #include "CommonUtils/NameConf.h"
 #include "DetectorsCommonDataFormats/AlignParam.h"
 
@@ -32,12 +32,12 @@ namespace mft
 {
 
 //_____________________________________________________________
-void AlignmentSpec::init(InitContext& ic)
+void TracksToRecordsSpec::init(InitContext& ic)
 {
   o2::base::GRPGeomHelper::instance().setRequest(mGGCCDBRequest);
 
   auto& alignConfigParam = o2::mft::AlignConfig::Instance();
-  mAlignment = std::make_unique<o2::mft::Alignment>();
+  mAlignment = std::make_unique<o2::mft::TracksToRecords>();
   mAlignment->setChi2CutNStdDev(alignConfigParam.chi2CutNStdDev);
   mAlignment->setResidualCutInitial(alignConfigParam.residualCutInitial);
   mAlignment->setResidualCut(alignConfigParam.residualCut);
@@ -54,7 +54,7 @@ void AlignmentSpec::init(InitContext& ic)
 }
 
 //_____________________________________________________________
-void AlignmentSpec::run(o2::framework::ProcessingContext& pc)
+void TracksToRecordsSpec::run(o2::framework::ProcessingContext& pc)
 {
   updateTimeDependentParams(pc);
   mTimer[SWProcessTimeFrame].Start(false);
@@ -68,14 +68,10 @@ void AlignmentSpec::run(o2::framework::ProcessingContext& pc)
 }
 
 //_____________________________________________________________
-void AlignmentSpec::endOfStream(o2::framework::EndOfStreamContext& ec)
+void TracksToRecordsSpec::endOfStream(o2::framework::EndOfStreamContext& ec)
 {
   mAlignment->printProcessTrackSummary();
   mAlignment->endRecordWriter();
-
-  mTimer[SWGlobalFit].Start(false);
-  mAlignment->globalFit();
-  mTimer[SWGlobalFit].Stop();
 
   sendOutput(ec.outputs());
   mTimer[SWTot].Stop();
@@ -86,18 +82,13 @@ void AlignmentSpec::endOfStream(o2::framework::EndOfStreamContext& ec)
 }
 
 //_____________________________________________________________
-void AlignmentSpec::sendOutput(DataAllocator& output)
+void TracksToRecordsSpec::sendOutput(DataAllocator& output)
 {
-  std::vector<o2::detectors::AlignParam> alignParams;
-  mAlignment->getAlignParams(alignParams);
-  output.snapshot(Output{"MFT", "MFTALIGNMENT", 0, Lifetime::Sporadic}, alignParams);
-  LOG(info) << "Storing MFT alignment params in local file mft_alignment.root";
-  TFile* f = new TFile(Form("mft_alignment.root"), "RECREATE");
-  f->WriteObjectAny(&alignParams, "std::vector<o2::detectors::AlignParam>", "alignment");
-  f->Close();
+  // TODO: figure out how to have record tree output redirected here and saved
 }
+
 ///_______________________________________
-void AlignmentSpec::updateTimeDependentParams(ProcessingContext& pc)
+void TracksToRecordsSpec::updateTimeDependentParams(ProcessingContext& pc)
 {
   o2::base::GRPGeomHelper::instance().checkUpdates(pc);
   static bool initOnceDone = false;
@@ -113,15 +104,17 @@ void AlignmentSpec::updateTimeDependentParams(ProcessingContext& pc)
     auto field = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField());
     double centerMFT[3] = {0, 0, -61.4}; // Field at center of MFT
     auto Bz = field->getBz(centerMFT);
-    LOG(info) << "Setting MFT Assessment Bz = " << Bz;
+    LOG(info) << "Setting MFT TracksToRecords Bz = " << Bz;
+    // TODO: figure out how to get run number from worklow
+    // mAlignment->setRunNumber(value);
     mAlignment->setBz(Bz);
-    mAlignment->setMinNumberClusterCut(alignConfigParam.minPoints[o2::mft::AlignConfig::Collision]);
+    mAlignment->setMinNumberClusterCut(alignConfigParam.minPoints);
     mAlignment->init();
   }
 }
 
 ///_______________________________________
-void AlignmentSpec::finaliseCCDB(ConcreteDataMatcher& matcher, void* obj)
+void TracksToRecordsSpec::finaliseCCDB(ConcreteDataMatcher& matcher, void* obj)
 {
   if (o2::base::GRPGeomHelper::instance().finaliseCCDB(matcher, obj)) {
     return;
@@ -133,7 +126,7 @@ void AlignmentSpec::finaliseCCDB(ConcreteDataMatcher& matcher, void* obj)
 }
 
 //_____________________________________________________________
-DataProcessorSpec getAlignmentSpec()
+DataProcessorSpec getTracksToRecordsSpec()
 {
   std::vector<InputSpec> inputs;
   std::vector<OutputSpec> outputs;
@@ -154,13 +147,13 @@ DataProcessorSpec getAlignmentSpec()
                                                               inputs,
                                                               true);
 
-  outputs.emplace_back("MFT", "MFTALIGNMENT", 0, Lifetime::Sporadic);
+  outputs.emplace_back("MFT", "TRACKS2RECORDS", 0, Lifetime::Sporadic);
 
   return DataProcessorSpec{
-    "mft-alignment",
+    "mft-tracks2records",
     inputs,
     outputs,
-    AlgorithmSpec{adaptFromTask<o2::mft::AlignmentSpec>(ggRequest)},
+    AlgorithmSpec{adaptFromTask<o2::mft::TracksToRecordsSpec>(ggRequest)},
     Options{{}}};
 }
 

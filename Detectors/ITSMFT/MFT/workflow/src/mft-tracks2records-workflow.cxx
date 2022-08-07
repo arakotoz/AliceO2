@@ -10,7 +10,7 @@
 // or submit itself to any jurisdiction.
 
 #include "Framework/DataProcessorSpec.h"
-#include "MFTWorkflow/AlignmentSpec.h"
+#include "MFTWorkflow/TracksToRecordsSpec.h"
 #include "CommonUtils/ConfigurableParam.h"
 
 using namespace o2::framework;
@@ -20,7 +20,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
 {
   // option allowing to set parameters
   std::vector<o2::framework::ConfigParamSpec> options{
-    {"run-alignment", o2::framework::VariantType::Bool, false, {"run MFT alignment workflow"}}};
+    {"run-tracks2records", o2::framework::VariantType::Bool, false, {"run MFT alignment tracks to records workflow"}}};
   std::swap(workflowOptions, options);
 }
 
@@ -33,10 +33,10 @@ WorkflowSpec defineDataProcessing(ConfigContext const& configcontext)
   // Update the (declared) parameters if changed from the command line
   o2::conf::ConfigurableParam::updateFromString(configcontext.options().get<std::string>("configKeyValues"));
   // write the configuration used for the workflow
-  o2::conf::ConfigurableParam::writeINI("o2-mft-alignment.ini");
-  auto runAlignment = configcontext.options().get<bool>("run-alignment");
+  o2::conf::ConfigurableParam::writeINI("o2-mft-tracks2records.ini");
+  auto runTracks2Records = configcontext.options().get<bool>("run-tracks2records");
 
   WorkflowSpec specs;
-  specs.emplace_back(o2::mft::getAlignmentSpec());
+  specs.emplace_back(o2::mft::getTracksToRecordsSpec());
   return specs;
 }

@@ -18,7 +18,7 @@ o2_add_library(MFTWorkflow
                        src/TrackReaderSpec.cxx
                        src/TrackWriterSpec.cxx
                        src/MFTAssessmentSpec.cxx
-                       src/AlignmentSpec.cxx
+                       src/TracksToRecordsSpec.cxx
                PUBLIC_LINK_LIBRARIES O2::Framework
                                      O2::SimConfig
                                      O2::SimulationDataFormat
@@ -48,7 +48,7 @@ o2_add_executable(cluster-writer-workflow
                   COMPONENT_NAME mft
                   PUBLIC_LINK_LIBRARIES O2::MFTWorkflow)
 
-o2_add_executable(alignment-workflow
-                  SOURCES src/mft-alignment-workflow.cxx
+o2_add_executable(tracks2records-workflow
+                  SOURCES src/mft-tracks2records-workflow.cxx
                   COMPONENT_NAME mft
                   PUBLIC_LINK_LIBRARIES O2::MFTWorkflow)
