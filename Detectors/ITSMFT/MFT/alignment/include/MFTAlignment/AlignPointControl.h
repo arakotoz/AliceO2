@@ -19,10 +19,9 @@
 #include <Rtypes.h>
 #include <TString.h>
 
-#include "MFTAlignment/AlignPointHelper.h"
-
 class TFile;
 class TTree;
+class AlignPointHelper;
 
 namespace o2
 {
@@ -75,7 +74,7 @@ class AlignPointControl
   bool isInitOk() const { return mIsSuccessfulInit; }
 
   /// \brief fill the tree from an align point
-  void fill(std::weak_ptr<o2::mft::AlignPointHelper> alignPoint,
+  void fill(o2::mft::AlignPointHelper* aPoint,
             const int iTrack = 0,
             const bool doPrint = false);
 
@@ -91,7 +90,7 @@ class AlignPointControl
   TString mTreeTitle;        ///< title of the TTree
   AlignPointInfo mPointInfo; ///< information to be written to the output TTree
 
-  bool setControlPoint(std::weak_ptr<o2::mft::AlignPointHelper> alignPoint);
+  bool setControlPoint(o2::mft::AlignPointHelper* aPoint);
 
   ClassDef(AlignPointControl, 0);
 };

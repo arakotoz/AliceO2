@@ -11,7 +11,7 @@
 
 /// \file Aligner.h
 /// \author arakotoz@cern.ch
-/// \brief Base class for the standalone alignment for MFT
+/// \brief Abstract base class for the standalone alignment of MFT
 
 #ifndef ALICEO2_MFT_ALIGNER_H
 #define ALICEO2_MFT_ALIGNER_H
@@ -67,7 +67,6 @@ class Aligner
   double mResCut;                                                                ///< Cut on residual for other iterations
   TString mMilleRecordsFileName;                                                 ///< output file name when saving the Mille records
   TString mMilleConstraintsRecFileName;                                          ///< output file name when saving the records of the constraints
-  std::unique_ptr<o2::mft::MillePede2> mMillepede;                               ///< Millepede2 implementation copied from AliROOT
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
   std::vector<int> mGlobalParameterStatus;                                       ///< vector of effective degrees of freedom, used to fix detectors, parameters, etc.
 

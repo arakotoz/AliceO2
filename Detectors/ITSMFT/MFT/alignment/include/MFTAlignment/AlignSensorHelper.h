@@ -52,142 +52,70 @@ class AlignSensorHelper
   void setSensorOnlyInfo(const int chipIndex);
 
   /// \brief return sensor index within the ladder [0, 4]
-  UShort_t chipIndexOnLadder() const
-  {
-    return mChipIndexOnLadder;
-  }
+  UShort_t chipIndexOnLadder() const { return mChipIndexOnLadder; }
 
   /// \brief return sensor sw index within the MFT [0, 935]
-  UShort_t chipIndexInMft() const
-  {
-    return mChipIndexInMft;
-  }
+  UShort_t chipIndexInMft() const { return mChipIndexInMft; }
 
   /// \brief return ladder geo index in this half MFT disk [0, 33]
-  UShort_t ladderInHalfDisk() const
-  {
-    return mLadderInHalfDisk;
-  }
+  UShort_t ladderInHalfDisk() const { return mLadderInHalfDisk; }
 
   /// \brief return the half number to which belongs the sensor
-  UShort_t half() const
-  {
-    return mHalf;
-  }
+  UShort_t half() const { return mHalf; }
 
   /// \brief return the disk number to which belongs the sensor
-  UShort_t disk() const
-  {
-    return mDisk;
-  }
+  UShort_t disk() const { return mDisk; }
 
   /// \brief return the layer number to which belongs the sensor
-  UShort_t layer() const
-  {
-    return mLayer;
-  }
+  UShort_t layer() const { return mLayer; }
 
   /// \brief return the zone to which belongs the sensor
-  UShort_t zone() const
-  {
-    return mZone;
-  }
+  UShort_t zone() const { return mZone; }
 
   /// \brief return the connector to which the ladder is plugged
-  UShort_t connector() const
-  {
-    return mConnector;
-  }
+  UShort_t connector() const { return mConnector; }
 
   /// \brief return the transceiver on the RU for this sensor
-  UShort_t transceiver() const
-  {
-    return mTransceiver;
-  }
+  UShort_t transceiver() const { return mTransceiver; }
 
   /// \brief return the ALICE global unique id of the sensor
-  Int_t sensorUid() const
-  {
-    return mChipUniqueId;
-  }
+  Int_t sensorUid() const { return mChipUniqueId; }
 
   /// \brief return the geo symbolic name for this sensor
-  TString geoSymbolicName()
-  {
-    return mGeoSymbolicName;
-  }
+  TString geoSymbolicName() { return mGeoSymbolicName; }
 
   /// \brief return the x component of the translation in the sensor transform
-  double translateX() const
-  {
-    return mTranslation.X();
-  }
+  double translateX() const { return mTranslation.X(); }
 
   /// \brief return the y component of the translation in the sensor transform
-  double translateY() const
-  {
-    return mTranslation.Y();
-  }
+  double translateY() const { return mTranslation.Y(); }
 
   /// \brief return the z component of the translation in the sensor transform
-  double translateZ() const
-  {
-    return mTranslation.Z();
-  }
+  double translateZ() const { return mTranslation.Z(); }
 
   /// \brief return the rotation angle w.r.t. global x-axis in the sensor transform
-  double angleRx() const
-  {
-    return mRx;
-  }
+  double angleRx() const { return mRx; }
 
   /// \brief return the rotation angle w.r.t. global y-axis in the sensor transform
-  double angleRy() const
-  {
-    return mRy;
-  }
+  double angleRy() const { return mRy; }
 
   /// \brief return the rotation angle w.r.t. global z-axis in the sensor transform
-  double angleRz() const
-  {
-    return mRz;
-  }
+  double angleRz() const { return mRz; }
 
   /// \brief return the sin, cos of the rotation angle w.r.t. x-axis
-  double sinRx() const
-  {
-    return mSinRx;
-  }
-  double cosRx() const
-  {
-    return mCosRx;
-  }
+  double sinRx() const { return mSinRx; }
+  double cosRx() const { return mCosRx; }
 
   /// \brief return the sin, cos of the rotation angle w.r.t. y-axis
-  double sinRy() const
-  {
-    return mSinRy;
-  }
-  double cosRy() const
-  {
-    return mCosRy;
-  }
+  double sinRy() const { return mSinRy; }
+  double cosRy() const { return mCosRy; }
 
   /// \brief return the sin, cos of the rotation angle w.r.t. z-axis
-  double sinRz() const
-  {
-    return mSinRz;
-  }
-  double cosRz() const
-  {
-    return mCosRz;
-  }
+  double sinRz() const { return mSinRz; }
+  double cosRz() const { return mCosRz; }
 
   /// \brief return the status of the sensor transform extraction
-  bool isTransformExtracted() const
-  {
-    return mIsTransformExtracted;
-  }
+  bool isTransformExtracted() const { return mIsTransformExtracted; }
 
   /// \brief return a stringstream filled with the sensor info
   std::stringstream getSensorFullName(bool wSymName = true);
@@ -208,10 +136,12 @@ class AlignSensorHelper
   Int_t mChipUniqueId = 0;                         ///< ALICE global unique id of the sensor
   TGeoHMatrix mTransform;                          ///< sensor transformation matrix L2G
   o2::math_utils::Point3D<double> mTranslation;    ///< coordinates of the translation between the local system origin (the center of the sensor) and the global origin
+
   // Euler angles extracted from the sensor transform
   double mRx = 0; ///< rotation angle aroung global x-axis (radian)
   double mRy = 0; ///< rotation angle aroung global y-axis (radian)
   double mRz = 0; ///< rotation angle aroung global z-axis (radian)
+
   // Cosinus and sinus of the Euler angles
   double mSinRx = 0;
   double mCosRx = 0;
@@ -222,8 +152,9 @@ class AlignSensorHelper
 
   TString mGeoSymbolicName; ///< symbolic name of this sensor in the geometry
 
-  bool mIsTransformExtracted = false;
+  bool mIsTransformExtracted = false; ///< boolean used to check if the sensor transform was successfully extracted from geometry
 
+ protected:
   /// \brief set the ALICE global unique id of the sensor
   void setSensorUid(const int chipIndex);
 

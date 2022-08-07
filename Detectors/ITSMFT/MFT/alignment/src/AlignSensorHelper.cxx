@@ -51,7 +51,7 @@ AlignSensorHelper::AlignSensorHelper()
 {
   mNumberOfSensors = mChipMapping.getNChips();
   setGeometry();
-  LOGF(info, "AlignSensorHelper instantiated");
+  LOGF(debug, "AlignSensorHelper instantiated");
 }
 
 //__________________________________________________________________________

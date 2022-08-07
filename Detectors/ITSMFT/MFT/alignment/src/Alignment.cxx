@@ -105,26 +105,26 @@ void Alignment::init()
 
   mMillepede = std::make_unique<MillePede2>();
   if (mWithRecordWriter) {
-    mRecordWriter = std::make_shared<MilleRecordWriter>();
+    mRecordWriter = new MilleRecordWriter();
     mRecordWriter->setCyclicAutoSave(mNEntriesAutoSave);
     mRecordWriter->setDataFileName(mMilleRecordsFileName);
     mMillepede->SetRecordWriter(mRecordWriter);
   }
   if (mWithConstraintsRecWriter) {
-    mConstraintsRecWriter = std::make_shared<MilleRecordWriter>();
+    mConstraintsRecWriter = new MilleRecordWriter();
     mConstraintsRecWriter->setCyclicAutoSave(mNEntriesAutoSave);
     mConstraintsRecWriter->setDataFileName(mMilleConstraintsRecFileName);
     mMillepede->SetConstraintsRecWriter(mConstraintsRecWriter);
   }
   if (mWithRecordReader) {
-    mRecordReader = std::make_shared<MilleRecordReader>();
+    mRecordReader = new MilleRecordReader();
     mMillepede->SetRecordReader(mRecordReader);
   }
   if (mWithConstraintsRecReader) {
-    mConstraintsRecReader = std::make_shared<MilleRecordReader>();
+    mConstraintsRecReader = new MilleRecordReader();
     mMillepede->SetConstraintsRecReader(mConstraintsRecReader);
   }
-  mAlignPoint = std::make_shared<AlignPointHelper>();
+  mAlignPoint = new AlignPointHelper();
   mAlignPoint->setClusterDictionary(mDictionary);
   mMillepede->InitMille(mNumberOfGlobalParam,
                         mNumberOfTrackParam,
@@ -174,6 +174,10 @@ void Alignment::processTimeFrame(o2::framework::ProcessingContext& ctx)
   mMFTClustersROF = ctx.inputs().get<gsl::span<o2::itsmft::ROFRecord>>("clustersrofs");
   mMFTClusterPatterns = ctx.inputs().get<gsl::span<unsigned char>>("patterns");
   pattIt = mMFTClusterPatterns.begin();
+  mMFTClustersLocal.clear();
+  mMFTClustersGlobal.clear();
+  mAlignPoint->convertCompactClusters(
+    mMFTClusters, pattIt, mMFTClustersLocal, mMFTClustersGlobal);
 }
 
 //__________________________________________________________________________
@@ -226,8 +230,9 @@ void Alignment::processRecoTracks()
 
       // Store measured positions
       auto clsEntry = mMFTTrackClusIdx[offset + icls];
-      const auto compCluster = mMFTClusters[clsEntry];
-      mAlignPoint->setMeasuredPosition(compCluster, pattIt);
+      auto localCluster = mMFTClustersLocal[clsEntry];
+      auto globalCluster = mMFTClustersGlobal[clsEntry];
+      mAlignPoint->setMeasuredPosition(localCluster, globalCluster);
       if (!mAlignPoint->isClusterOk()) {
         LOGF(info, "Alignment::processRecoTracks() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
         mCounterSkippedTracks++;
@@ -355,8 +360,9 @@ void Alignment::processROFs(TChain* mfttrackChain, TChain* mftclusterChain)
 
         // Store measured positions
         auto clsEntry = (*mftTrackClusIdx)[offset + icls];
-        const auto compCluster = (*mftClusters)[clsEntry];
-        mAlignPoint->setMeasuredPosition(compCluster, pattIterator);
+        auto localCluster = mMFTClustersLocal[clsEntry];
+        auto globalCluster = mMFTClustersGlobal[clsEntry];
+        mAlignPoint->setMeasuredPosition(localCluster, globalCluster);
         if (!mAlignPoint->isClusterOk()) {
           LOGF(warning, "Alignment::processROFs() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
           mCounterSkippedTracks++;
@@ -451,7 +457,7 @@ void Alignment::globalFit()
   mMillepede->GlobalFit(params, paramsErrors, paramsPulls);
 
   if (mWithControl)
-    mMillepede->CloseChi2Storage();
+    mMillepede->EndChi2Storage();
 
   // post-treatment:
   // debug output + save Millepede global fit result in AlignParam vector

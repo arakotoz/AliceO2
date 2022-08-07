@@ -13,7 +13,6 @@
 /// @file MillePede2.cxx
 
 #include "MFTAlignment/MillePede2.h"
-#include "MFTAlignment/MilleRecordWriter.h"
 #include "Framework/Logger.h"
 #include <TStopwatch.h>
 #include <TFile.h>
@@ -163,49 +162,30 @@ MillePede2::~MillePede2()
 {
   if (fMatCLoc) {
     delete fMatCLoc;
-    fMatCLoc = nullptr;
   }
   if (fMatCGlo) {
     delete fMatCGlo;
-    fMatCGlo = nullptr;
   }
   if (fMatCGloLoc) {
     delete fMatCGloLoc;
-    fMatCGloLoc = nullptr;
   }
 
   if (fRejRunList) {
     delete fRejRunList;
-    fRejRunList = nullptr;
   }
   if (fAccRunList) {
     delete fAccRunList;
-    fAccRunList = nullptr;
   }
   if (fAccRunListWgh) {
     delete fAccRunListWgh;
-    fAccRunListWgh = nullptr;
   }
-
   if (fRecChi2File) {
-    delete fRecChi2File;
-    fRecChi2File = nullptr;
+    fRecChi2File->Close();
+    LOG(info) << "MillePede2 - Closed file "
+              << GetRecChi2FName();
+    delete fRecChi2File; // this should automatically delete the TTree that belongs to the file
   }
-  if (fTreeChi2) {
-    delete fTreeChi2;
-    fTreeChi2 = nullptr;
-  }
-
-  if (fRecordWriter)
-    fRecordWriter.reset();
-  if (fConstraintsRecWriter)
-    fConstraintsRecWriter.reset();
-  if (fRecordReader)
-    fRecordReader.reset();
-  if (fConstraintsRecReader)
-    fConstraintsRecReader.reset();
-
-  LOGF(info, "MillePede2 destroyed");
+  LOGF(debug, "MillePede2 destroyed");
 }
 
 //_____________________________________________________________________________
@@ -314,19 +294,13 @@ bool MillePede2::InitChi2Storage(const int nEntriesAutoSave)
 }
 
 //_____________________________________________________________________________
-void MillePede2::CloseChi2Storage()
+void MillePede2::EndChi2Storage()
 {
   if (fRecChi2File && fRecChi2File->IsWritable() && fTreeChi2) {
     fRecChi2File->cd();
     fTreeChi2->Write();
-    LOG(info) << "MillePede2::CloseChi2Storage() - wrote tree "
+    LOG(info) << "MillePede2::EndChi2Storage() - wrote tree "
               << fRecChi2TreeName.Data();
-  }
-  if (fRecChi2File) {
-    fRecChi2File->Close();
-    LOG(info) << "MillePede2::CloseChi2Storage() - Closed file "
-              << GetRecChi2FName();
-    delete fRecChi2File; // this should automatically delete the TTree that belongs to the file
   }
 }
 

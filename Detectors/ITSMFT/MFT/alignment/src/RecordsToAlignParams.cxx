@@ -28,29 +28,30 @@ RecordsToAlignParams::RecordsToAlignParams()
   : Aligner(),
     mWithControl(false),
     mNEntriesAutoSave(10000),
-    mRecordReader(nullptr),
+    mRecordReader(new MilleRecordReader()),
     mWithConstraintsRecReader(false),
-    mConstraintsRecReader(nullptr)
+    mConstraintsRecReader(nullptr),
+    mMillepede(new MillePede2())
 {
-  mMillepede = std::make_unique<MillePede2>();
-
-  mRecordReader = std::make_shared<MilleRecordReader>();
   if (mWithConstraintsRecReader) {
-    mConstraintsRecReader = std::make_shared<MilleRecordReader>();
+    mConstraintsRecReader = new MilleRecordReader();
   }
-  LOGF(info, "RecordsToAlignParams instantiated");
+  LOGF(debug, "RecordsToAlignParams instantiated");
 }
 
 //__________________________________________________________________________
 RecordsToAlignParams::~RecordsToAlignParams()
 {
-  if (mRecordReader)
-    mRecordReader.reset();
-  if (mConstraintsRecReader)
-    mConstraintsRecReader.reset();
-  if (mMillepede)
-    mMillepede.reset();
-  LOGF(info, "RecordsToAlignParams destroyed");
+  if (mConstraintsRecReader) {
+    delete mConstraintsRecReader;
+  }
+  if (mMillepede) {
+    delete mMillepede;
+  }
+  if (mRecordReader) {
+    delete mRecordReader;
+  }
+  LOGF(debug, "RecordsToAlignParams destroyed");
 }
 
 //__________________________________________________________________________
@@ -133,7 +134,7 @@ void RecordsToAlignParams::globalFit()
   mMillepede->GlobalFit(params, paramsErrors, paramsPulls);
 
   if (mWithControl)
-    mMillepede->CloseChi2Storage();
+    mMillepede->EndChi2Storage();
 
   // post-treatment:
   // debug output + save Millepede global fit result in AlignParam vector

@@ -142,7 +142,7 @@ class Alignment
   TString mMilleConstraintsRecFileName;                                          ///< output file name when saving the records of the constraints
   std::unique_ptr<o2::mft::MillePede2> mMillepede;                               ///< Millepede2 implementation copied from AliROOT
   const o2::itsmft::TopologyDictionary* mDictionary;                             ///< cluster patterns dictionary
-  std::shared_ptr<o2::mft::AlignPointHelper> mAlignPoint;                        ///< Alignment point helper
+  o2::mft::AlignPointHelper* mAlignPoint;                                        ///< Alignment point helper
   std::vector<o2::detectors::AlignParam> mAlignParams;                           ///< vector of alignment parameters computed by Millepede global fit
   bool mIsInitDone = false;                                                      ///< boolean to follow the initialisation status
   std::vector<int> mGlobalParameterStatus;                                       ///< vector of effective degrees of freedom, used to fix detectors, parameters, etc.
@@ -150,13 +150,15 @@ class Alignment
   long mNEntriesAutoSave = 10000;                                                ///< number of entries needed to call AutoSave for the output TTrees
   o2::mft::AlignPointControl mPointControl;                                      ///< AlignPointControl handles the control tree
   bool mWithRecordWriter;
-  std::shared_ptr<o2::mft::MilleRecordWriter> mRecordWriter;
+  o2::mft::MilleRecordWriter* mRecordWriter;
   bool mWithConstraintsRecWriter;
-  std::shared_ptr<o2::mft::MilleRecordWriter> mConstraintsRecWriter;
+  o2::mft::MilleRecordWriter* mConstraintsRecWriter;
   bool mWithRecordReader;
-  std::shared_ptr<o2::mft::MilleRecordReader> mRecordReader;
+  o2::mft::MilleRecordReader* mRecordReader;
   bool mWithConstraintsRecReader;
-  std::shared_ptr<o2::mft::MilleRecordReader> mConstraintsRecReader;
+  o2::mft::MilleRecordReader* mConstraintsRecReader;
+  std::vector<o2::BaseCluster<double>> mMFTClustersLocal;  ///< MFT clusters in local coordinate system
+  std::vector<o2::BaseCluster<double>> mMFTClustersGlobal; ///< MFT clusters in global coordinate system
 
   // used to fix some degrees of freedom
 

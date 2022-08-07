@@ -33,7 +33,6 @@ Aligner::Aligner()
     mResCut(100.),
     mMilleRecordsFileName("mft_mille_records.root"),
     mMilleConstraintsRecFileName("mft_mille_constraints.root"),
-    mMillepede(nullptr),
     mIsInitDone(false),
     mGlobalParameterStatus(std::vector<int>(mNumberOfGlobalParam))
 {
@@ -45,11 +44,11 @@ Aligner::Aligner()
 
   std::fill(mGlobalParameterStatus.begin(), mGlobalParameterStatus.end(), mFreeParId);
 
-  LOGF(info, "Aligner instantiated");
+  LOGF(debug, "Aligner instantiated");
 }
 
 //__________________________________________________________________________
 Aligner::~Aligner()
 {
-  LOGF(info, "Aligner destroyed");
+  LOGF(debug, "Aligner destroyed");
 }

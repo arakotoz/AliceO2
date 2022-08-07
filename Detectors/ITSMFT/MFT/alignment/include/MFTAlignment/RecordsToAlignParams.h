@@ -18,6 +18,7 @@
 
 #include <TChain.h>
 
+#include "MFTAlignment/MillePede2.h"
 #include "MFTAlignment/MilleRecordReader.h"
 #include "DetectorsCommonDataFormats/AlignParam.h"
 
@@ -59,12 +60,13 @@ class RecordsToAlignParams : public Aligner
   void connectConstraintsRecReaderToChain(TChain* ch);
 
  protected:
-  bool mWithControl;                                                 ///< boolean to set the use of the control tree = chi2 per track filled by MillePede LocalFit()
-  long mNEntriesAutoSave = 10000;                                    ///< number of entries needed to cyclically call AutoSave for the output control tree
-  std::vector<o2::detectors::AlignParam> mAlignParams;               ///< vector of alignment parameters computed by MillePede simultaneous fit
-  std::shared_ptr<o2::mft::MilleRecordReader> mRecordReader;         ///< utility that handles the reading of the data records used to feed MillePede solver
-  bool mWithConstraintsRecReader;                                    ///< boolean to set to true if one wants to also read constraints records
-  std::shared_ptr<o2::mft::MilleRecordReader> mConstraintsRecReader; ///< utility that handles the reading of the constraints records
+  bool mWithControl;                                   ///< boolean to set the use of the control tree = chi2 per track filled by MillePede LocalFit()
+  long mNEntriesAutoSave = 10000;                      ///< number of entries needed to cyclically call AutoSave for the output control tree
+  std::vector<o2::detectors::AlignParam> mAlignParams; ///< vector of alignment parameters computed by MillePede simultaneous fit
+  o2::mft::MilleRecordReader* mRecordReader;           ///< utility that handles the reading of the data records used to feed MillePede solver
+  bool mWithConstraintsRecReader;                      ///< boolean to set to true if one wants to also read constraints records
+  o2::mft::MilleRecordReader* mConstraintsRecReader;   ///< utility that handles the reading of the constraints records
+  o2::mft::MillePede2* mMillepede;                     ///< Millepede2 implementation copied from AliROOT
 
   ClassDef(RecordsToAlignParams, 0);
 };

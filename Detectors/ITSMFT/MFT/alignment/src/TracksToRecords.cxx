@@ -46,31 +46,41 @@ TracksToRecords::TracksToRecords()
     mMinNumberClusterCut(6),
     mWeightRecord(1.),
     mDictionary(nullptr),
-    mAlignPoint(nullptr),
+    mAlignPoint(new AlignPointHelper()),
     mWithControl(false),
     mNEntriesAutoSave(10000),
-    mRecordWriter(nullptr),
+    mRecordWriter(new MilleRecordWriter()),
     mWithConstraintsRecWriter(false),
-    mConstraintsRecWriter(nullptr)
+    mConstraintsRecWriter(nullptr),
+    mMillepede(new MillePede2())
 {
-  mMillepede = std::make_unique<MillePede2>();
-
-  mRecordWriter = std::make_shared<MilleRecordWriter>();
   if (mWithConstraintsRecWriter) {
-    mConstraintsRecWriter = std::make_shared<MilleRecordWriter>();
+    mConstraintsRecWriter = new MilleRecordWriter();
   }
-  mAlignPoint = std::make_shared<AlignPointHelper>();
-
   // initialise the content of each array
   resetGlocalDerivative();
   resetLocalDerivative();
-  LOGF(info, "TracksToRecords instantiated");
+  LOGF(debug, "TracksToRecords instantiated");
 }
 
 //__________________________________________________________________________
 TracksToRecords::~TracksToRecords()
 {
-  LOGF(info, "TracksToRecords destroyed");
+  if (mConstraintsRecWriter) {
+    delete mConstraintsRecWriter;
+  }
+  if (mMillepede) {
+    delete mMillepede;
+  }
+  if (mRecordWriter) {
+    delete mRecordWriter;
+  }
+  if (mAlignPoint) {
+    delete mAlignPoint;
+  }
+  if (mDictionary)
+    mDictionary = nullptr;
+  LOGF(debug, "TracksToRecords destroyed");
 }
 
 //__________________________________________________________________________
@@ -143,7 +153,9 @@ void TracksToRecords::processTimeFrame(o2::framework::ProcessingContext& ctx)
   mMFTClusters = ctx.inputs().get<gsl::span<o2::itsmft::CompClusterExt>>("compClusters");
   mMFTClustersROF = ctx.inputs().get<gsl::span<o2::itsmft::ROFRecord>>("clustersrofs");
   mMFTClusterPatterns = ctx.inputs().get<gsl::span<unsigned char>>("patterns");
-  pattIt = mMFTClusterPatterns.begin();
+  mPattIt = mMFTClusterPatterns.begin();
+  mAlignPoint->convertCompactClusters(
+    mMFTClusters, mPattIt, mMFTClustersLocal, mMFTClustersGlobal);
 }
 
 //__________________________________________________________________________
@@ -198,10 +210,11 @@ void TracksToRecords::processRecoTracks()
 
       // Store measured positions
       auto clsEntry = mMFTTrackClusIdx[offset + icls];
-      const auto compCluster = mMFTClusters[clsEntry];
-      mAlignPoint->setMeasuredPosition(compCluster, pattIt);
+      auto localCluster = mMFTClustersLocal[clsEntry];
+      auto globalCluster = mMFTClustersGlobal[clsEntry];
+      mAlignPoint->setMeasuredPosition(localCluster, globalCluster);
       if (!mAlignPoint->isClusterOk()) {
-        LOGF(info, "TracksToRecords::processRecoTracks() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
+        LOGF(warning, "TracksToRecords::processRecoTracks() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
         mCounterSkippedTracks++;
         isTrackUsed = false;
         break;
@@ -288,16 +301,18 @@ void TracksToRecords::processROFs(TChain* mfttrackChain, TChain* mftclusterChain
 
   while (mftTrackChainReader.Next() && mftClusterChainReader.Next()) {
 
-    pattIterator = (*mftClusterPatterns).begin();
-
     mNumberOfTrackChainROFs += (*mftTracksROF).size();
     mNumberOfClusterChainROFs += (*mftClustersROF).size();
     assert(mNumberOfTrackChainROFs == mNumberOfClusterChainROFs);
 
+    pattIterator = (*mftClusterPatterns).begin();
+    mAlignPoint->convertCompactClusters(
+      *mftClusters, pattIterator, mMFTClustersLocal, mMFTClustersGlobal);
+
     //______________________________________________________
     for (auto& oneTrack : *mftTracks) { // track loop
 
-      LOGF(info, "Processing track # %5d", nCounterAllTracks);
+      LOGF(debug, "Processing track # %5d", nCounterAllTracks);
 
       // Skip the track if not enough clusters
       auto ncls = oneTrack.getNumberOfPoints();
@@ -330,8 +345,9 @@ void TracksToRecords::processROFs(TChain* mfttrackChain, TChain* mftclusterChain
 
         // Store measured positions
         auto clsEntry = (*mftTrackClusIdx)[offset + icls];
-        const auto compCluster = (*mftClusters)[clsEntry];
-        mAlignPoint->setMeasuredPosition(compCluster, pattIterator);
+        auto localCluster = mMFTClustersLocal[clsEntry];
+        auto globalCluster = mMFTClustersGlobal[clsEntry];
+        mAlignPoint->setMeasuredPosition(localCluster, globalCluster);
         if (!mAlignPoint->isClusterOk()) {
           LOGF(warning, "TracksToRecords::processROFs() - will not use track # %5d with at least a bad cluster", nCounterAllTracks);
           mCounterSkippedTracks++;

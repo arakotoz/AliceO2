@@ -41,14 +41,13 @@ MilleRecordWriter::MilleRecordWriter()
 //__________________________________________________________________________
 MilleRecordWriter::~MilleRecordWriter()
 {
-  LOGF(info, "MilleRecordWriter destructor");
-  if (mDataFile)
-    delete mDataFile;
-  if (mDataTree)
-    delete mDataTree;
+  if (mDataFile) {
+    mDataFile->Close();
+    LOG(info) << "MilleRecordWriter - closed file "
+              << mDataFileName.Data();
+  }
   if (mRecord)
     delete mRecord;
-  LOGF(info, "MilleRecordWriter destroyed");
 }
 
 //__________________________________________________________________________
@@ -133,12 +132,6 @@ void MilleRecordWriter::terminate()
     mDataTree->Write();
     LOG(info) << "MilleRecordWriter::terminate() - wrote tree "
               << mDataTreeName.Data();
-  }
-  if (mDataFile) {
-    mDataFile->Close();
-    LOG(info) << "MilleRecordWriter::terminate() - closed file "
-              << mDataFileName.Data();
-    delete mDataFile;
   }
 }
 

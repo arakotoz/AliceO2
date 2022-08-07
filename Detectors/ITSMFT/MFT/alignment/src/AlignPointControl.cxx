@@ -16,6 +16,7 @@
 
 #include "Framework/Logger.h"
 
+#include "MFTAlignment/AlignPointHelper.h"
 #include "MFTAlignment/AlignPointControl.h"
 
 using namespace o2::mft;
@@ -58,10 +59,12 @@ AlignPointControl::AlignPointControl()
 //__________________________________________________________________________
 AlignPointControl::~AlignPointControl()
 {
-  if (mControlFile)
+  if (mControlFile) {
+    mControlFile->Close();
+    LOG(info) << "AlignPointControl - closed file "
+              << mOutFileName.Data();
     delete mControlFile;
-  if (mControlTree)
-    delete mControlTree;
+  }
 }
 
 //__________________________________________________________________________
@@ -126,26 +129,19 @@ void AlignPointControl::terminate()
     LOG(info) << "AlignPointControl::terminate() - wrote "
               << mTreeTitle.Data();
   }
-  if (mControlFile) {
-    mControlFile->Close();
-    LOG(info) << "AlignPointControl::terminate() - closed file "
-              << mOutFileName.Data();
-    delete mControlFile;
-  }
 }
 
 //__________________________________________________________________________
-void AlignPointControl::fill(
-  std::weak_ptr<o2::mft::AlignPointHelper> alignPoint,
-  const int iTrack,
-  const bool doPrint)
+void AlignPointControl::fill(o2::mft::AlignPointHelper* aPoint,
+                             const int iTrack,
+                             const bool doPrint)
 {
   if (!isInitOk()) {
     LOG(warning) << "AlignPointControl::fill() - aborted, init was not ok !";
     return;
   }
 
-  bool isPointok = setControlPoint(alignPoint);
+  bool isPointok = setControlPoint(aPoint);
 
   if (isPointok) {
     mControlTree->Fill();
@@ -161,9 +157,8 @@ void AlignPointControl::fill(
 
 //__________________________________________________________________________
 bool AlignPointControl::setControlPoint(
-  std::weak_ptr<o2::mft::AlignPointHelper> alignPoint)
+  o2::mft::AlignPointHelper* aPoint)
 {
-  std::shared_ptr<o2::mft::AlignPointHelper> aPoint = alignPoint.lock();
   if (!aPoint) {
     LOG(warning) << "AlignPointControl::setControlPoint() - aborted, can not use a null pointer";
     return false;

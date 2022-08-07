@@ -10,8 +10,8 @@
 // or submit itself to any jurisdiction.
 
 /// \file MillePede2.h
-/// \author ruben.shahoyan@cern.ch
-/// \brief General class for alignment with large number of degrees of freedom
+/// \authors ruben.shahoyan@cern.ch, arakotoz@cern.ch
+/// \brief General class for alignment with large number of degrees of freedom, adapted from AliROOT
 ///
 /// Based on the original milliped2 by Volker Blobel
 /// http://www.desy.de/~blobel/mptalks.html
@@ -250,19 +250,19 @@ class MillePede2
   bool InitChi2Storage(const int nEntriesAutoSave = 10000);
 
   /// \brief write tree and close file where are stored chi2 from LocalFit()
-  void CloseChi2Storage();
+  void EndChi2Storage();
 
-  MillePedeRecord* GetRecord() const { return fRecord; }
+  o2::mft::MillePedeRecord* GetRecord() const { return fRecord; }
   long GetSelFirst() const { return fSelFirst; }
   long GetSelLast() const { return fSelLast; }
   void SetSelFirst(long v) { fSelFirst = v; }
   void SetSelLast(long v) { fSelLast = v; }
 
-  void SetRecord(MillePedeRecord* aRecord) { fRecord = aRecord; }
-  void SetRecordWriter(std::shared_ptr<MilleRecordWriter> myP) { fRecordWriter = myP; }
-  void SetConstraintsRecWriter(std::shared_ptr<MilleRecordWriter> myP) { fConstraintsRecWriter = myP; }
-  void SetRecordReader(std::shared_ptr<MilleRecordReader> myP) { fRecordReader = myP; }
-  void SetConstraintsRecReader(std::shared_ptr<MilleRecordReader> myP) { fConstraintsRecReader = myP; }
+  void SetRecord(o2::mft::MillePedeRecord* aRecord) { fRecord = aRecord; }
+  void SetRecordWriter(o2::mft::MilleRecordWriter* myP) { fRecordWriter = myP; }
+  void SetConstraintsRecWriter(o2::mft::MilleRecordWriter* myP) { fConstraintsRecWriter = myP; }
+  void SetRecordReader(o2::mft::MilleRecordReader* myP) { fRecordReader = myP; }
+  void SetConstraintsRecReader(o2::mft::MilleRecordReader* myP) { fConstraintsRecReader = myP; }
 
   /// \brief return the limit in chi^2/nd for n sigmas stdev authorized
   ///
@@ -349,7 +349,7 @@ class MillePede2
   bool fIsChi2BelowLimit;
   int fRecNDoF;
 
-  MillePedeRecord* fRecord; ///< Buffer of measurements records
+  o2::mft::MillePedeRecord* fRecord; ///< Buffer of measurements records
 
   long fCurrRecDataID;        ///< ID of the current data record
   long fCurrRecConstrID;      ///< ID of the current constraint record
@@ -375,10 +375,10 @@ class MillePede2
   static int fgNKrylovV;        ///< size of Krylov vectors buffer in FGMRES
 
   // processed data record bufferization
-  std::shared_ptr<MilleRecordWriter> fRecordWriter;         //! data record writer
-  std::shared_ptr<MilleRecordWriter> fConstraintsRecWriter; //! constraints record writer
-  std::shared_ptr<MilleRecordReader> fRecordReader;         //! data record reader
-  std::shared_ptr<MilleRecordReader> fConstraintsRecReader; //! constraints record reader
+  o2::mft::MilleRecordWriter* fRecordWriter;         ///< data record writer
+  o2::mft::MilleRecordWriter* fConstraintsRecWriter; ///< constraints record writer
+  o2::mft::MilleRecordReader* fRecordReader;         ///< data record reader
+  o2::mft::MilleRecordReader* fConstraintsRecReader; ///< constraints record reader
 
   ClassDef(MillePede2, 0);
 };

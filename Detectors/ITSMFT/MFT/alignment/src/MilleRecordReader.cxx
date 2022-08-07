@@ -37,6 +37,8 @@ MilleRecordReader::MilleRecordReader()
 //__________________________________________________________________________
 MilleRecordReader::~MilleRecordReader()
 {
+  if (mDataTree)
+    mDataTree->Reset();
   if (mRecord)
     delete mRecord;
 }
