@@ -15,6 +15,7 @@
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/CCDBParamSpec.h"
 #include "Framework/Logger.h"
+#include "Framework/TimingInfo.h"
 #include "Field/MagneticField.h"
 #include "TGeoGlobalMagField.h"
 #include "MFTBase/GeometryTGeo.h"
@@ -105,9 +106,11 @@ void TracksToRecordsSpec::updateTimeDependentParams(ProcessingContext& pc)
     double centerMFT[3] = {0, 0, -61.4}; // Field at center of MFT
     auto Bz = field->getBz(centerMFT);
     LOG(info) << "Setting MFT TracksToRecords Bz = " << Bz;
-    // TODO: figure out how to get run number from worklow
-    // mAlignment->setRunNumber(value);
     mAlignment->setBz(Bz);
+    const auto& timingInfo = pc.services().get<o2::framework::TimingInfo>();
+    auto runNumber = timingInfo.runNumber;
+    mAlignment->setRunNumber(runNumber);
+    LOG(info) << "Setting MFT TracksToRecords run numner = " << runNumber;
     mAlignment->setMinNumberClusterCut(alignConfigParam.minPoints);
     mAlignment->init();
   }
