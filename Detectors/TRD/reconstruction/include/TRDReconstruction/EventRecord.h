@@ -70,6 +70,7 @@ class EventRecord
 
   //statistics stuff these get passed to the per tf data at the end of the timeframe,
   //but as we read in per link, events are seperated hence these counters
+  const TRDDataCountersPerEvent& getEventStats() const { return mEventStats; }
   void clearStats();
   void incTrackletTime(double timeadd) { mEventStats.mTimeTakenForTracklets += timeadd; }
 
@@ -79,9 +80,7 @@ class EventRecord
   void incWordsRejected(int count) { mEventStats.mWordsRejected += count; } // words read in
   void incTrackletsFound(int count) { mEventStats.mTrackletsFound += count; }
   void incDigitsFound(int count) { mEventStats.mDigitsFound += count; }
-  void setDataPerLink(int link, int length)
-  { /* mEventStats.mLinkLength[link] = length;*/
-  }
+
   //std::array<uint8_t, 1080> mLinkErrorFlag{}; //status of the error flags for this event, 8bit values from cru halfchamber header.
   bool operator==(const EventRecord& o) const
   {
@@ -94,12 +93,12 @@ class EventRecord
   }
 
   void incStats(int tracklets, int digits, int wordsread, int wordsrejected);
-  o2::trd::TRDDataCountersPerEvent mEventStats;
 
  private:
   BCData mBCData;                       /// orbit and Bunch crossing data of the physics trigger
   std::vector<Digit> mDigits{};         /// digit data, for this event
   std::vector<Tracklet64> mTracklets{}; /// tracklet data, for this event
+  TRDDataCountersPerEvent mEventStats{};
   //statistics stuff these get passed to the per tf data at the end of the timeframe,
   //but as we read in per link, events are seperated hence these counters
 };
@@ -153,16 +152,20 @@ class EventStorage
     mTFStats.mMCMDigitsFound[hcid / 2 * constants::NROBC1 * constants::NMCMROB + rob * constants::NMCMROB + mcm] += count;
   }*/
 
-  void incParsingError(int error, int sm, int side, int stacklayer)
+  void incParsingError(int error, int hcid)
   {
+    bool detailGraphs = true;
+    if (hcid < 0) {
+      detailGraphs = false;
+    }
     if (error > TRDLastParsingError) {
-      LOG(info) << "wrong error number to inc ParsingError in TrackletParsing : " << error << " for " << sm << "_" << side << "_" << stacklayer;
+      LOG(info) << "wrong error number to inc ParsingError in TrackletParsing : error" << error << " for hcid:" << hcid;
     } else {
       mTFStats.mParsingErrors[error]++;
-      if (sm >= 0) { // sm=-1 is reserved for those errors where we dont know or cant know the underlying source.
-        if ((sm * 2 + side) * 30 * TRDLastParsingError + TRDLastParsingError * stacklayer + error < o2::trd::constants::NSECTOR * 60 * TRDLastParsingError) {
+      if (detailGraphs) { // sm=-1 is reserved for those errors where we dont know or cant know the underlying source.
+        if (hcid * TRDLastParsingError + error < o2::trd::constants::NCHAMBER * 2 * TRDLastParsingError) {
           //prevent bounding errors
-          mTFStats.mParsingErrorsByLink[(sm * 2 + side) * 30 * TRDLastParsingError + TRDLastParsingError * stacklayer + error]++;
+          mTFStats.mParsingErrorsByLink[hcid * TRDLastParsingError + error]++;
         }
       }
     }

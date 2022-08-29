@@ -34,7 +34,8 @@ if [[ "0$GEN_TOPO_VERBOSE" == "01" ]]; then
   echo "CALIB_TOF_LHCPHASE = $CALIB_TOF_LHCPHASE" 1>&2
   echo "CALIB_TOF_CHANNELOFFSETS = $CALIB_TOF_CHANNELOFFSETS" 1>&2
   echo "CALIB_TOF_DIAGNOSTICS = $CALIB_TOF_DIAGNOSTICS" 1>&2
-  echo "CALIB_EMC_CHANNELCALIB = $CALIB_EMC_CHANNELCALIB" 1>&2
+  echo "CALIB_EMC_BADCHANNELCALIB = $CALIB_EMC_BADCHANNELCALIB" 1>&2
+  echo "CALIB_EMC_TIMECALIB = $CALIB_EMC_TIMECALIB" 1>&2
   echo "CALIB_PHS_ENERGYCALIB = $CALIB_PHS_ENERGYCALIB" 1>&2
   echo "CALIB_PHS_BADMAPCALIB = $CALIB_PHS_BADMAPCALIB" 1>&2
   echo "CALIB_PHS_TURNONCALIB = $CALIB_PHS_TURNONCALIB" 1>&2
@@ -166,24 +167,29 @@ if [[ $AGGREGATOR_TASKS == BARREL_SPORADIC ]] || [[ $AGGREGATOR_TASKS == ALL ]];
 fi
 
 # TPC IDCs
-firstCRU=0
-lastCRU=179
-crus="$firstCRU-$lastCRU"
-lanes=1
-lanesDistribute=1
+crus="0-359"
+if [[ $AGGREGATOR_TASKS == TPCIDC_A ]]; then
+  crus="0-179"
+elif [[ $AGGREGATOR_TASKS == TPCIDC_C ]]; then
+  crus="180-359"
+fi
 lanesFactorize=6
-nTFs=500
-if ! workflow_has_parameter CALIB_LOCAL_INTEGRATED_AGGREGATOR && [[ $AGGREGATOR_TASKS == TPCIDC_A || $AGGREGATOR_TASKS == TPCIDC_C || $AGGREGATOR_TASKS == ALL ]]; then
-  add_W o2-tpc-idc-distribute "--crus ${crus} --timeframes ${nTFs} --firstTF -100 --check-for-missing-data true --lanes ${lanesDistribute} --output-lanes ${lanesFactorize} --nFactorTFs 100"
-  add_W o2-tpc-idc-factorize "--lanesDistribute ${lanesDistribute} --input-lanes ${lanesFactorize} --crus ${crus} --timeframes ${nTFs} --configFile '' --compression 2 --groupIDCs true --nthreads-grouping 8 --nthreads-IDC-factorization 8 --groupPads \"5,6,7,8,4,5,6,8,10,13\" --groupRows \"2,2,2,3,3,3,2,2,2,2\" --sendOutputFFT true --nTFsMessage 500 --enable-CCDB-output true --enablePadStatusMap --check-for-missing-data" "TPCIDCGroupParam.groupPadsSectorEdges=32211"
-  add_W o2-tpc-idc-ft-aggregator "--rangeIDC 200 --inputLanes ${lanesFactorize} --nFourierCoeff 40 --timeframes ${nTFs} --nthreads 8"
+nTFs=1000
+
+if ! workflow_has_parameter CALIB_LOCAL_INTEGRATED_AGGREGATOR && [[ $CALIB_TPC_IDC == 1 ]] && [[ $AGGREGATOR_TASKS == TPCIDC_A || $AGGREGATOR_TASKS == TPCIDC_C || $AGGREGATOR_TASKS == ALL ]]; then
+  add_W o2-tpc-idc-distribute "--crus ${crus} --timeframes ${nTFs} --firstTF -100 --output-lanes ${lanesFactorize} --send-precise-timestamp true --condition-tf-per-query ${nTFs}"
+  add_W o2-tpc-idc-factorize "--input-lanes ${lanesFactorize} --crus ${crus} --timeframes ${nTFs} --nthreads-grouping 8 --nthreads-IDC-factorization 8 --sendOutputFFT true --nTFsMessage 500 --enable-CCDB-output true --enablePadStatusMap true --use-precise-timestamp true" "TPCIDCGroupParam.groupPadsSectorEdges=32211"
+  add_W o2-tpc-idc-ft-aggregator "--rangeIDC 200 --inputLanes ${lanesFactorize} --nFourierCoeff 40 --nthreads 8"
 fi
 
 # Calo cal
 # calibrations for AGGREGATOR_TASKS == CALO_TF
 if [[ $AGGREGATOR_TASKS == CALO_TF || $AGGREGATOR_TASKS == ALL ]]; then
   # EMC
-  if [[ $CALIB_EMC_CHANNELCALIB == 1 ]]; then
+  if [[ $CALIB_EMC_BADCHANNELCALIB == 1 ]]; then
+    add_W o2-calibration-emcal-channel-calib-workflow "" "EMCALCalibParams.calibType=\"badchannels\""
+  fi
+  if [[ $CALIB_EMC_TIMECALIB == 1 ]]; then
     add_W o2-calibration-emcal-channel-calib-workflow "" "EMCALCalibParams.calibType=\"time\""
   fi
 

@@ -57,7 +57,7 @@ namespace o2::aodproducer
 
 typedef boost::tuple<int, int, int> Triplet_t;
 
-struct TripletHash : std::unary_function<Triplet_t, std::size_t> {
+struct TripletHash {
   std::size_t operator()(Triplet_t const& e) const
   {
     std::size_t seed = 0;
@@ -68,7 +68,7 @@ struct TripletHash : std::unary_function<Triplet_t, std::size_t> {
   }
 };
 
-struct TripletEqualTo : std::binary_function<Triplet_t, Triplet_t, bool> {
+struct TripletEqualTo {
   bool operator()(Triplet_t const& x, Triplet_t const& y) const
   {
     return (x.get<0>() == y.get<0>() &&
@@ -202,7 +202,7 @@ class AODProducerWorkflowDPL : public Task
   uint32_t mV0Amplitude = 0xFFFFF000;          // 11 bits
   uint32_t mFDDAmplitude = 0xFFFFF000;         // 11 bits
   uint32_t mT0Amplitude = 0xFFFFF000;          // 11 bits
-
+  int mCTPReadout = 0;                         // 0 = use CTP readout from CTP; 1 = create CTP readout
   // helper struct for extra info in fillTrackTablesPerCollision()
   struct TrackExtraInfo {
     float tpcInnerParam = 0.f;
@@ -286,13 +286,12 @@ class AODProducerWorkflowDPL : public Task
 
   void addRefGlobalBCsForTOF(const o2::dataformats::VtxTrackRef& trackRef, const gsl::span<const GIndex>& GIndices,
                              const o2::globaltracking::RecoContainer& data, std::map<uint64_t, int>& bcsMap);
-
+  void createCTPReadout(const o2::globaltracking::RecoContainer& recoData, std::vector<o2::ctp::CTPDigit>& ctpDigits, ProcessingContext& pc);
   void collectBCs(const o2::globaltracking::RecoContainer& data,
                   const std::vector<o2::InteractionTimeRecord>& mcRecords,
                   std::map<uint64_t, int>& bcsMap);
 
   uint64_t getTFNumber(const o2::InteractionRecord& tfStartIR, int runNumber);
-
   template <typename TracksCursorType, typename TracksCovCursorType>
   void addToTracksTable(TracksCursorType& tracksCursor, TracksCovCursorType& tracksCovCursor,
                         const o2::track::TrackParCov& track, int collisionID);

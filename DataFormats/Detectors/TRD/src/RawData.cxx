@@ -60,12 +60,16 @@ std::ostream& operator<<(std::ostream& stream, const TrackletMCMHeader& mcmhead)
 
 void dumpHalfCRUHeader(o2::trd::HalfCRUHeader& halfcru)
 {
-  std::array<uint64_t, 8> raw{};
+  std::array<uint32_t, 16> raw{};
   memcpy(&raw[0], &halfcru, sizeof(halfcru));
   for (int i = 0; i < 2; i++) {
-    int index = 4 * i;
-    LOGF(info, "[1/2CRUHeader %d] 0x%08x 0x%08x 0x%08x 0x%08x", i, raw[index + 3], raw[index + 2],
-         raw[index + 1], raw[index + 0]);
+    std::stringstream message;
+    int index = 8 * i;
+    message << "[1/2CRUHeader:" << i << "] : ";
+    for (int z = 0; z < 8; ++z) {
+      message << "::0x" << std::hex << std::setw(8) << std::setfill('0') << raw[z + index] << " ";
+    }
+    LOG(info) << message.str();
   }
 }
 
@@ -171,12 +175,28 @@ uint32_t getHCIDFromTrackletHCHeader(const TrackletHCHeader& header)
   return header.layer * 2 + header.stack * constants::NLAYER * 2 + header.supermodule * constants::NLAYER * constants::NSTACK * 2 + header.side;
 }
 
-uint32_t getChargeFromRawHeaders(const o2::trd::TrackletHCHeader& hcheader, const o2::trd::TrackletMCMHeader* header, const std::array<o2::trd::TrackletMCMData, 3>& data, int pidindex, int trackletindex)
+int getNumberOfTrackletsFromHeader(const o2::trd::TrackletMCMHeader* header)
+{
+  int headertrackletcount = 0;
+  if (header->pid0 != 0xff) { // pid of cpu0
+    headertrackletcount++;
+  }
+  if (header->pid1 != 0xff) { // pid of cpu1
+    headertrackletcount++;
+  }
+  if (header->pid2 != 0xff) { // pid of cpu2
+    headertrackletcount++;
+  }
+  return headertrackletcount;
+}
+
+int getChargesFromRawHeaders(const o2::trd::TrackletHCHeader& hcheader, const o2::trd::TrackletMCMHeader* header, const std::array<o2::trd::TrackletMCMData, 3>& data, std::array<uint8_t, 3>& q, int trackletindex)
 {
   uint32_t pid = 0;
   uint32_t highPID = 0; // highPID holds the 8 bits from the mcmheader
   uint32_t lowPID = 0;  // lowPID holds the 12 bits from mcmdata
   uint32_t datatype = (hcheader.format) >> 2;
+  q.fill(0xff);
   switch (datatype) {
     case 0: //Cosmic
             // LOG(warn) << "This is a problem cosmic format tracklets ";
@@ -192,60 +212,57 @@ uint32_t getChargeFromRawHeaders(const o2::trd::TrackletHCHeader& hcheader, cons
       //PID is 20 bits, 8 bits in mcmheader and 12 bits in mcmdata word
       //frist part of pid (highPID) is in the TrackletMCMHeader
       //highPID is 7 bits Q2, 1 bit Q1 OR ... 2 bit offset, 6 bits Q2.
-      switch (trackletindex) {
-        case 0:
-          highPID = header->pid0;
-          break;
-        case 1:
-          highPID = header->pid1;
-          break;
-        case 2:
-          highPID = header->pid2;
-          break;
-        default:
-          LOG(warn) << " unknown trackletindex of " << trackletindex << " to " << __func__ << " : " << pidindex;
-          break;
+      //trackletindex is the index into the [0:2] range of tracklets that can be attached to the mcm.
+      //jump to cpu:
+      uint32_t hpid = header->pid0 | (header->pid1 << 8) | (header->pid2 << 16);
+      std::array<uint16_t, 3> hpidvalues;
+      hpidvalues.fill(0xff);
+      uint16_t counter = 0;
+      if (header->pid0 != 0xff) {
+        hpidvalues[counter++] = header->pid0;
       }
+      if (header->pid1 != 0xff) {
+        hpidvalues[counter++] = header->pid1;
+      }
+      if (header->pid2 != 0xff) {
+        hpidvalues[counter++] = header->pid2;
+      }
+      //hpidvalues now holds the sequential list of high pid values related to the subsequent sequence of trackletmcmdata words
+      highPID = hpidvalues[trackletindex];
+      if (highPID == 0xff) {
+        // trackletmcmheader is corrupted
+        return -1;
+      }
+      int pidcount = 0;
       lowPID = data[trackletindex].pid;
-      //lowPID is 6 bits Q0 and 6 bits of Q1
+      //lowPID is 7 bits Q0 and 6 bits of Q1
       uint32_t pidword = (highPID << 12) | lowPID;  // the entire original 20 bit pid in the trap chips
-      int dynamicq = hcheader.format & 0x1;         // last bit of format (lsb) defines the version of tracklet charge calculation
-      uint32_t pidoffset = ((pidword >> 18) & 0x3); //<<6; // used for dynamic ranged charge windows, may or may not be used below.
       //pidword is here to make this code more readible and less error prone.
-      switch (pidindex) {
-        case 2: //Q2
+      int dynamicq = hcheader.format & 0x1;         // last bit of format (lsb) defines the version of tracklet charge calculation
+      uint32_t pidoffset = ((pidword >> 18) & 0x3); // used for dynamic ranged charge windows, may or may not be used below.
+      if (!dynamicq) {
+        q[2] = (pidword >> 14) & 0x3f; // 6 bits at the top of all of pid (MSB)
+      } else {
+        q[2] = (pidword >> 12) & 0x3f; // 6 bits of Q2 and a shift
+        q[2] |= pidoffset << 6;
+        // LOG(info) << "Q2 pid : " << std::hex << pid << " pidoffset: "  << pidoffset;
+      }
           if (!dynamicq) {
-            pid = (pidword >> 14) & 0x3f; // 6 bits at the top of all of pid (MSB)
+            q[1] = (pidword >> 7) & 0x7f; // 7 bits Q1 above the 7 bits of Q0
           } else {
-            pid = (pidword >> 12) & 0x3f; // 6 bits of Q2 and a shift
-            pid |= pidoffset << 6;
-            // LOG(info) << "Q2 pid : " << std::hex << pid << " pidoffset: "  << pidoffset;
-          }
-          break;
-        case 1: //Q1
-          if (!dynamicq) {
-            pid = (pidword >> 7) & 0x7f; // 7 bits Q1 above the 7 bits of Q0
-          } else {
-            pid = (pidword >> 6) & 0x3f; // 6 bits of Q1 and a shift
-            pid |= pidoffset << 6;
+            q[1] = (pidword >> 6) & 0x3f; // 6 bits of Q1 and a shift
+            q[1] |= pidoffset << 6;
             //LOG(info) << "Q1 pid : " << std::hex << pid << " pidoffset: "  << pidoffset;;
           }
-          break;
-        case 0: //Q0
           if (!dynamicq) {
-            pid = pidword & 0x7f; // 7 least significant bits
+            q[0] = pidword & 0x7f; // 7 least significant bits
           } else {
-            pid = pidword & 0x3f; // 6 bits of Q0
-            pid |= pidoffset << 6;
+            q[0] = pidword & 0x3f; // 6 bits of Q0
+            q[0] |= pidoffset << 6;
             // LOG(info) << "Q0 pid : " << std::hex << pid << " pidoffset: "  << pidoffset;
           }
-          break;
-        default:
-          LOG(warn) << " unknown pid index of : " << pidindex;
-          break;
-      }
   } // end of case of various formats.
-  return pid;
+  return 0;
 }
 
 //Tracklet MCM Header
@@ -288,11 +305,9 @@ void printTrackletMCMData(o2::trd::TrackletMCMData& tracklet)
 }
 void printTrackletMCMHeader(o2::trd::TrackletMCMHeader& mcmhead)
 {
-  LOG(info) << " about to print mcm raw header";
   LOGF(info, "MCMRawHeader: Raw:0x%08x 1:%d padrow: 0x%02x col: 0x%01x pid2 0x%02x pid1: 0x%02x pid0: 0x%02x 1:%d",
        mcmhead.word, mcmhead.onea, mcmhead.padrow, mcmhead.col,
        mcmhead.pid2, mcmhead.pid1, mcmhead.pid0, mcmhead.oneb);
-  LOG(info) << " printed mcm raw header";
 }
 
 void printHalfCRUHeader(o2::trd::HalfCRUHeader& halfcru)
@@ -304,7 +319,7 @@ void printHalfCRUHeader(o2::trd::HalfCRUHeader& halfcru)
   LOGF(info, "V:%d BC:%d SB:%d EType:%d", halfcru.HeaderVersion, halfcru.BunchCrossing,
        halfcru.StopBit, halfcru.EventType);
   for (int i = 0; i < 15; i++) {
-    LOGF(info, "Link %d size: %ul eflag: 0x%02x", i, sizes[i], errorflags[i]);
+    LOGF(info, "Link %d size: %lu eflag: 0x%02x", i, sizes[i], errorflags[i]);
   }
   LOG(info) << "Raw: " << std::hex << halfcru.word0 << " " << halfcru.word12[0] << " " << halfcru.word12[1] << " " << halfcru.word3 << " " << halfcru.word47[0] << " " << halfcru.word47[1] << " " << halfcru.word47[2] << " " << halfcru.word47[3];
 }
@@ -339,25 +354,23 @@ bool halfCRUHeaderSanityCheck(o2::trd::HalfCRUHeader& header, std::array<uint32_
   // check the sizes for less than max value
   // check the errors for either < 0x3, for now (may 2022) there is only no error, 1, or 2.
   //
-  bool goodheader = true;
   for (int lengthindex = 0; lengthindex < 15; ++lengthindex) {
     if (lengths[lengthindex] > o2::trd::constants::MAXDATAPERLINK256) {
       // something has gone insane.
-      goodheader = false;
+      return false;
     }
   }
   for (int eflagindex = 0; eflagindex < 15; ++eflagindex) {
     if (eflags[eflagindex] > o2::trd::constants::MAXCRUERRORVALUE) {
       // something has gone insane.
-      goodheader = false;
+      return false;
     }
     if (header.EndPoint > 1) {
-      // end point can only be zero or 1, for ach of the 2 pci end points in the cru
-      goodheader = false;
+      // end point can only be zero or 1, for each of the 2 pci end points in the cru
+      return false;
     }
   }
-
-  return goodheader;
+  return true;
 }
 
 bool sanityCheckTrackletMCMHeader(o2::trd::TrackletMCMHeader* header)
@@ -368,14 +381,6 @@ bool sanityCheckTrackletMCMHeader(o2::trd::TrackletMCMHeader* header)
     goodheader = false;
   }
   if (header->oneb != 1) {
-    goodheader = false;
-  }
-  // if we have 3rd tracklet (pid2!=0) then we must have all the others as well.
-  if ((header->pid2 != 0xff) && (header->pid1 == 0xff || header->pid0 == 0xff)) {
-    goodheader = false;
-  }
-  // sim for 2 tracklets.
-  if ((header->pid1 != 0xff) && (header->pid0 == 0xff)) {
     goodheader = false;
   }
   return goodheader;
@@ -492,6 +497,11 @@ void printDigitMCMData(o2::trd::DigitMCMData& digitmcmdata)
   LOGF(info, "DigitMCMRawData: Raw:0x%08x res(0xc):0x%02x x: 0x%04x y: 0x%04x z 0x%04x ",
        digitmcmdata.word, digitmcmdata.c, digitmcmdata.x, digitmcmdata.y, digitmcmdata.z);
 }
+void printDigitMCMADCMask(o2::trd::DigitMCMADCMask& digitmcmadcmask)
+{
+  LOGF(info, "DigitMCMADCMask: Raw:0x%08x j(0xc):0x%01x mask: 0x%05x count: 0x%02x n(0x1) 0x%01x ",
+       digitmcmadcmask.word, digitmcmadcmask.j, digitmcmadcmask.adcmask, digitmcmadcmask.c, digitmcmadcmask.n);
+}
 
 int getDigitHCHeaderWordType(uint32_t word)
 {
@@ -542,7 +552,7 @@ void printDigitHCHeader(o2::trd::DigitHCHeader& header, uint32_t headers[3])
   printDigitHCHeaders(header, headers, -1, 0, true);
   int countheaderwords = header.numberHCW;
   int index;
-  //for the currently 3 implemeented other header words, they can come in any order, and are identified by their reserved portion
+  //for the currently 3 implemented other header words, they can come in any order, and are identified by their reserved portion
   for (int countheaderwords = 0; countheaderwords < header.numberHCW; ++countheaderwords) {
     switch (getDigitHCHeaderWordType(headers[countheaderwords])) {
       case 1:
@@ -577,44 +587,6 @@ void printDigitHCHeader(o2::trd::DigitHCHeader& header, uint32_t headers[3])
         break;
     }
   }
-}
-
-int getNumberOfTrackletsFromHeader(o2::trd::TrackletMCMHeader* header, bool verbose)
-{
-  int headertrackletcount = 0;
-  if (header->pid0 == 0xff) {
-    headertrackletcount = 0;
-  } else {
-    if (header->pid2 != 0xff) {
-      // 3 tracklets
-      headertrackletcount = 3;
-      if (header->pid1 == 0xff || header->pid0 == 0xff) {
-        if (verbose) {
-          LOG(warn) << __func__ << " 3 tracklets but first 2 are empty ??" << header;
-        }
-      }
-    } else {
-      if (header->pid1 != 0xff) {
-        // 2 tracklets
-        headertrackletcount = 2;
-        if (header->pid0 == 0xff) {
-          if (verbose) {
-            LOG(warn) << __func__ << " 2 tracklets but first is empty ??" << header;
-          }
-        }
-      } else {
-        if (header->pid0 != 0xff) {
-          // 1 tracklet
-          headertrackletcount = 1;
-        } else {
-          if (verbose) {
-            LOG(warn) << __func__ << " 1 tracklet but first is empty ?? so should be no tracklets " << header;
-          }
-        }
-      }
-    }
-  }
-  return headertrackletcount;
 }
 
 int getNextMCMADCfromBP(uint32_t& bp, int channel)

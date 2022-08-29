@@ -444,12 +444,9 @@ bool MatchTPCITS::prepareTPCData()
     }
     if constexpr (isTRDTrack<decltype(trk)>()) {
       // TPC track constrained by TRD trigger time, time and its error in \mus
-      LOG(error) << "Not ready yet for TPC-TRD tracks";
+      this->addTPCSeed(trk, time0, terr, gid, this->mRecoCont->getTPCContributorGID(gid));
     }
-    if constexpr (isTPCTRDTOFTrack<decltype(trk)>()) {
-      // TPC track constrained by TRD and TOF time, time and its error in \mus
-      LOG(error) << "Not ready yet for TPC-TRD-TOF tracks";
-    }
+    // note: TPCTRDTPF tracks are actually TRD track with extra TOF cluster
     return true;
   };
   mRecoCont->createTracksVariadic(creator);
@@ -1253,8 +1250,12 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS)
     trfit.setZ(tITS.getZ()); // fix the seed Z
   }
   float deltaT = (trfit.getZ() - tTPC.getZ()) * mTPCVDriftInv;                                                                                    // time correction in \mus
-  float timeC = tTPC.getCorrectedTime(deltaT);                                                                                                    /// precise time estimate
   float timeErr = tTPC.constraint == TrackLocTPC::Constrained ? tTPC.timeErr : std::sqrt(tITS.getSigmaZ2() + tTPC.getSigmaZ2()) * mTPCVDriftInv;  // estimate the error on time
+  if (timeErr > mITSTimeResMUS && tTPC.constraint != TrackLocTPC::Constrained) {
+    timeErr = mITSTimeResMUS; // chose smallest error
+    deltaT = tTPC.constraint == TrackLocTPC::ASide ? tITS.tBracket.mean() - tTPC.time0 : tTPC.time0 - tITS.tBracket.mean();
+  }
+  float timeC = tTPC.getCorrectedTime(deltaT);                                                                                                    /// precise time estimate
   if (timeC < 0) {                                                                                                                                // RS TODO similar check is needed for other edge of TF
     if (timeC + std::min(timeErr, mParams->tfEdgeTimeToleranceMUS * mTPCTBinMUSInv) < 0) {
       mMatchedTracks.pop_back(); // destroy failed track
@@ -1354,6 +1355,7 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS)
     tofL.addStep(lInt, tracOut.getP2Inv());
     tofL.addX2X0(lInt * mTPCmeanX0Inv);
     propagator->PropagateToXBxByBz(tracOut, o2::constants::geom::XTPCOuterRef, MaxSnp, 10., mUseMatCorrFlag, &tofL);
+
     /*
     LOG(info) <<  "TPC " << iTPC << " ITS " << iITS << " Refitted with chi2 = " << chi2Out;
     tracOut.print();
@@ -1366,6 +1368,26 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS)
   trfit.setTimeMUS(timeC, timeErr);
   trfit.setRefTPC({unsigned(tTPC.sourceID), o2::dataformats::GlobalTrackID::TPC});
   trfit.setRefITS({unsigned(tITS.sourceID), o2::dataformats::GlobalTrackID::ITS});
+
+#ifdef _ALLOW_DEBUG_TREES_
+  if (mDBGOut) {
+    auto tpcOrigC = mTPCTracksArray[tTPC.sourceID];
+    auto itsOrigC = itsTrOrig;
+    auto tITSC = tITS;
+    auto tTPCC = tTPC;
+    o2::MCCompLabel lblITS, lblTPC;
+    (*mDBGOut) << "refit"
+               << "tpcOrig=" << tpcOrigC << "itsOrig=" << itsOrigC << "itsRef=" << tITSC << "tpcRef=" << tTPCC << "matchRefit=" << trfit;
+    if (mMCTruthON) {
+      lblITS = mITSLblWork[iITS];
+      lblTPC = mTPCLblWork[iTPC];
+      (*mDBGOut) << "refit"
+                 << "itsLbl=" << lblITS << "tpcLbl=" << lblTPC;
+    }
+    (*mDBGOut) << "refit"
+               << "\n";
+  }
+#endif
 
   if (mMCTruthON) { // store MC info: we assign TPC track label and declare the match fake if the ITS and TPC labels are different (their fake flag is ignored)
     auto& lbl = mOutLabels.emplace_back(mTPCLblWork[iTPC]);
@@ -2128,6 +2150,7 @@ void MatchTPCITS::fillClustersForAfterBurner(int rofStart, int nROFs, ITSChipClu
 void MatchTPCITS::setITSROFrameLengthMUS(float fums)
 {
   mITSROFrameLengthMUS = fums;
+  mITSTimeResMUS = mITSROFrameLengthMUS / std::sqrt(12.f);
   mITSROFrameLengthMUSInv = 1. / mITSROFrameLengthMUS;
   mITSROFrameLengthInBC = std::max(1, int(mITSROFrameLengthMUS / (o2::constants::lhc::LHCBunchSpacingNS * 1e-3)));
 }
@@ -2137,6 +2160,7 @@ void MatchTPCITS::setITSROFrameLengthInBC(int nbc)
 {
   mITSROFrameLengthInBC = nbc;
   mITSROFrameLengthMUS = nbc * o2::constants::lhc::LHCBunchSpacingNS * 1e-3;
+  mITSTimeResMUS = mITSROFrameLengthMUS / std::sqrt(12.f);
   mITSROFrameLengthMUSInv = 1. / mITSROFrameLengthMUS;
 }
 
