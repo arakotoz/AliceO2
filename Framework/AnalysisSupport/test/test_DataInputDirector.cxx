@@ -16,7 +16,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "Headers/DataHeader.h"
-#include "Framework/DataInputDirector.h"
+#include "../src/DataInputDirector.h"
 
 BOOST_AUTO_TEST_CASE(TestDatainputDirector)
 {

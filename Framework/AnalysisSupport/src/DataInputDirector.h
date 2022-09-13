@@ -15,6 +15,8 @@
 #include "TTreeReader.h"
 
 #include "Framework/DataDescriptorMatcher.h"
+#include "Framework/DataAllocator.h"
+#include "Monitoring/Monitoring.h"
 
 #include <regex>
 #include "rapidjson/fwd.h"
@@ -27,6 +29,7 @@ struct FileNameHolder {
   int numberOfTimeFrames = 0;
   std::vector<uint64_t> listOfTimeFrameNumbers;
   std::vector<std::string> listOfTimeFrameKeys;
+  std::vector<bool> alreadyRead;
 };
 FileNameHolder* makeFileNameHolder(std::string fileName);
 
@@ -35,17 +38,19 @@ struct FileAndFolder {
   std::string folderName = "";
 };
 
-struct DataInputDescriptor {
+class DataInputDescriptor
+{
   /// Holds information concerning the reading of an aod table.
   /// The information includes the table specification, treename,
   /// and the input files
 
+ public:
   std::string tablename = "";
   std::string treename = "";
   std::unique_ptr<data_matcher::DataDescriptorMatcher> matcher;
 
   DataInputDescriptor() = default;
-  DataInputDescriptor(bool alienSupport);
+  DataInputDescriptor(bool alienSupport, int level, o2::monitoring::Monitoring* monitoring = nullptr, std::string parentFileReplacement = "");
 
   void printOut();
 
@@ -67,11 +72,17 @@ struct DataInputDescriptor {
   std::regex getFilenamesRegex();
   int getNumberInputfiles() { return mfilenames.size(); }
   int getNumberTimeFrames() { return mtotalNumberTimeFrames; }
+  int findDFNumber(int file, std::string dfName);
 
   uint64_t getTimeFrameNumber(int counter, int numTF);
   FileAndFolder getFileFolder(int counter, int numTF);
+  DataInputDescriptor* getParentFile(int counter, int numTF);
   int getTimeFramesInFile(int counter);
+  int getReadTimeFramesInFile(int counter);
 
+  bool readTree(DataAllocator& outputs, header::DataHeader dh, int counter, int numTF, std::string treename, size_t& totalSizeCompressed, size_t& totalSizeUncompressed);
+
+  void printFileStatistics();
   void closeInputFile();
   bool isAlienSupportOn() { return mAlienSupport; }
 
@@ -80,22 +91,36 @@ struct DataInputDescriptor {
   std::string* minputfilesFilePtr = nullptr;
   std::string mFilenameRegex = "";
   std::string* mFilenameRegexPtr = nullptr;
+  std::string mParentFileReplacement;
   std::vector<FileNameHolder*> mfilenames;
   std::vector<FileNameHolder*>* mdefaultFilenamesPtr = nullptr;
   TFile* mcurrentFile = nullptr;
+  int mCurrentFileID = -1;
   bool mAlienSupport = false;
 
+  o2::monitoring::Monitoring* mMonitoring = nullptr;
+
+  TMap* mParentFileMap = nullptr;
+  DataInputDescriptor* mParentFile = nullptr;
+  int mLevel = 0; // level of parent files
+
   int mtotalNumberTimeFrames = 0;
+
+  uint64_t mIOTime = 0;
+  uint64_t mCurrentFileStartedAt = 0;
 };
 
-struct DataInputDirector {
+class DataInputDirector
+{
   /// Holds a list of DataInputDescriptor
   /// Provides functionality to access the matching DataInputDescriptor
   /// and the related input files
 
+ public:
   DataInputDirector();
-  DataInputDirector(std::string inputFile);
-  DataInputDirector(std::vector<std::string> inputFiles);
+  DataInputDirector(std::string inputFile, o2::monitoring::Monitoring* monitoring = nullptr, std::string parentFileReplacement = "");
+  DataInputDirector(std::vector<std::string> inputFiles, o2::monitoring::Monitoring* monitoring = nullptr, std::string parentFileReplacement = "");
+  ~DataInputDirector();
 
   void reset();
   void createDefaultDataInputDescriptor();
@@ -113,19 +138,25 @@ struct DataInputDirector {
   int getNumberInputDescriptors() { return mdataInputDescriptors.size(); }
 
   std::unique_ptr<TTreeReader> getTreeReader(header::DataHeader dh, int counter, int numTF, std::string treeName);
-  TTree* getDataTree(header::DataHeader dh, int counter, int numTF);
+  bool readTree(DataAllocator& outputs, header::DataHeader dh, int counter, int numTF, size_t& totalSizeCompressed, size_t& totalSizeUncompressed);
   uint64_t getTimeFrameNumber(header::DataHeader dh, int counter, int numTF);
   FileAndFolder getFileFolder(header::DataHeader dh, int counter, int numTF);
   int getTimeFramesInFile(header::DataHeader dh, int counter);
+
+  uint64_t getTotalSizeCompressed();
+  uint64_t getTotalSizeUncompressed();
 
  private:
   std::string minputfilesFile;
   std::string* const minputfilesFilePtr = &minputfilesFile;
   std::string mFilenameRegex;
+  std::string mParentFileReplacement;
   std::string* const mFilenameRegexPtr = &mFilenameRegex;
   DataInputDescriptor* mdefaultDataInputDescriptor = nullptr;
   std::vector<FileNameHolder*> mdefaultInputFiles;
   std::vector<DataInputDescriptor*> mdataInputDescriptors;
+
+  o2::monitoring::Monitoring* mMonitoring = nullptr;
 
   bool mDebugMode = false;
   bool mAlienSupport = false;

@@ -323,7 +323,7 @@ static void handle_sigint(int)
 void cleanupSHM(std::string const& uniqueWorkflowId)
 {
   using namespace fair::mq::shmem;
-  Monitor::Cleanup(SessionId{"dpl_" + uniqueWorkflowId}, false);
+  fair::mq::shmem::Monitor::Cleanup(SessionId{"dpl_" + uniqueWorkflowId}, false);
 }
 
 static void handle_sigchld(int) { sigchld_requested = true; }
@@ -1724,8 +1724,8 @@ int runStateMachine(DataProcessorSpecs const& workflow,
           }
           deviceExecutions.resize(runningWorkflow.devices.size());
 
-          // Options  which should be uniform across all
-          // teh subworkflow invokations.
+          // Options which should be uniform across all
+          // the subworkflow invokations.
           const auto uniformOptions = {
             "--aod-file",
             "--aod-memory-rate-limit",
@@ -1734,6 +1734,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
             "--aod-writer-resfile",
             "--aod-writer-resmode",
             "--aod-writer-keep",
+            "--aod-parent-base-path-replacement",
             "--driver-client-backend",
             "--fairmq-ipc-prefix",
             "--readers",
@@ -1863,8 +1864,6 @@ int runStateMachine(DataProcessorSpecs const& workflow,
           driverInfo.states.push_back(DriverState::RUNNING);
         }
         {
-          uint64_t inputProcessingStart = uv_hrtime();
-          auto inputProcessingLatency = inputProcessingStart - inputProcessingLast;
           auto outputProcessing = processChildrenOutput(driverInfo, infos, runningWorkflow.devices, controls, metricsInfos);
           if (outputProcessing.didProcessMetric) {
             size_t timestamp = uv_now(loop);
@@ -1875,10 +1874,6 @@ int runStateMachine(DataProcessorSpecs const& workflow,
               std::fill(metricsInfo.changed.begin(), metricsInfo.changed.end(), false);
             }
           }
-          auto inputProcessingEnd = uv_hrtime();
-          driverInfo.inputProcessingCost = (inputProcessingEnd - inputProcessingStart) / 1000000.f;
-          driverInfo.inputProcessingLatency = (inputProcessingLatency) / 1000000.f;
-          inputProcessingLast = inputProcessingStart;
         }
         break;
       case DriverState::QUIT_REQUESTED:
