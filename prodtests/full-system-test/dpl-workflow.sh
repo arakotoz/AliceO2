@@ -253,7 +253,7 @@ elif [[ $EPNPIPELINES != 0 ]]; then
   N_ITSRAWDEC=$(math_max $((3 * $EPNPIPELINES * $NGPUS / 4)) 1)
   N_EMCREC=$(math_max $((3 * $EPNPIPELINES * $NGPUS / 4)) 1)
   N_TRDENT=$(math_max $((3 * $EPNPIPELINES * $NGPUS / 4)) 1)
-  N_TRDTRK=$(math_max $((3 * $EPNPIPELINES * $NGPUS / 4)) 1)
+  N_TRDTRK=$(math_max $((3 * $EPNPIPELINES * $NGPUS / 4)) 1)C
   N_TPCRAWDEC=$(math_max $((12 * $EPNPIPELINES * $NGPUS / 4)) 1)
   if [[ $GPUTYPE == "CPU" ]]; then
     N_TPCTRK=8
@@ -307,7 +307,9 @@ if [[ $CTFINPUT == 1 ]]; then
   [[ ! -z $INPUT_FILE_LIST ]] && CTFName=$INPUT_FILE_LIST
   if [[ -z $CTFName && $WORKFLOWMODE != "print" ]]; then echo "No CTF file given!"; exit 1; fi
   if [[ $NTIMEFRAMES == -1 ]]; then NTIMEFRAMES_CMD= ; else NTIMEFRAMES_CMD="--max-tf $NTIMEFRAMES"; fi
-  add_W o2-ctf-reader-workflow "--delay $TFDELAY --loop $TFLOOP $NTIMEFRAMES_CMD --ctf-input ${CTFName} ${INPUT_FILE_COPY_CMD+--copy-cmd} ${INPUT_FILE_COPY_CMD} --onlyDet $WORKFLOW_DETECTORS --pipeline $(get_N tpc-entropy-decoder TPC REST 1 TPCENTDEC)"
+  CTF_EMC_SUBSPEC=
+  workflow_has_parameter AOD && has_detector EMC && CTF_EMC_SUBSPEC="--emcal-decoded-subspec 1"
+  add_W o2-ctf-reader-workflow "--delay $TFDELAY --loop $TFLOOP $NTIMEFRAMES_CMD --ctf-input ${CTFName} ${INPUT_FILE_COPY_CMD+--copy-cmd} ${INPUT_FILE_COPY_CMD} --onlyDet $WORKFLOW_DETECTORS $CTF_EMC_SUBSPEC --pipeline $(get_N tpc-entropy-decoder TPC REST 1 TPCENTDEC)"
 elif [[ $RAWTFINPUT == 1 ]]; then
   TFName=`ls -t $RAWINPUTDIR/o2_*.tf 2> /dev/null | head -n1`
   [[ -z $TFName && $WORKFLOWMODE == "print" ]] && TFName='$TFName'
@@ -402,9 +404,9 @@ has_detectors_reco ITS TPC && has_detector_matching ITSTPC && add_W o2-tpcits-ma
 has_detector_reco TRD && [[ ! -z "$TRD_SOURCES" ]] && add_W o2-trd-global-tracking "$DISABLE_DIGIT_ROOT_INPUT $DISABLE_ROOT_OUTPUT $DISABLE_MC $TRD_CONFIG $TRD_FILTER_CONFIG --track-sources $TRD_SOURCES" "$TRD_CONFIG_KEY;$ITSMFT_STROBES"
 has_detector_reco TOF && [[ ! -z "$TOF_SOURCES" ]] && add_W o2-tof-matcher-workflow "$DISABLE_DIGIT_ROOT_INPUT $DISABLE_ROOT_OUTPUT $DISABLE_MC --track-sources $TOF_SOURCES --pipeline $(get_N tof-matcher TOF REST 1 TOFMATCH)" "$ITSMFT_STROBES"
 has_detectors TPC && [ -z "$DISABLE_ROOT_OUTPUT" ] && add_W o2-tpc-reco-workflow "--input-type pass-through --output-type clusters,tracks,send-clusters-per-sector $DISABLE_MC"
-
 # ---------------------------------------------------------------------------------------------------------------------
 # Reconstruction workflows normally active only in async mode in async mode ($LIST_OF_ASYNC_RECO_STEPS), but can be forced via $WORKFLOW_EXTRA_PROCESSING_STEPS
+has_detector CTP && has_processing_step_CTP_RECO && add_W o2-ctp-reco-workflow "$DISABLE_DIGIT_ROOT_INPUT $DISABLE_ROOT_OUTPUT $DISABLE_MC"
 has_detector MID && has_processing_step MID_RECO && add_W o2-mid-reco-workflow "$DISABLE_ROOT_OUTPUT $DISABLE_MC --pipeline $(get_N MIDClusterizer MID REST 1),$(get_N MIDTracker MID REST 1)"
 has_detector MCH && has_processing_step MCH_RECO && add_W o2-mch-reco-workflow "$DISABLE_DIGIT_ROOT_INPUT $DISABLE_ROOT_OUTPUT $DISABLE_MC --pipeline $(get_N mch-track-finder MCH REST 1 MCHTRK),$(get_N mch-cluster-finder MCH REST 1 MCHCL),$(get_N mch-cluster-transformer MCH REST 1)" "$MCH_CONFIG_KEY"
 has_detector MFT && has_processing_step MFT_RECO && add_W o2-mft-reco-workflow "$DISABLE_DIGIT_CLUSTER_INPUT $DISABLE_MC $DISABLE_ROOT_OUTPUT --pipeline $(get_N mft-tracker MFT REST 1 MFTTRK)" "$ITSMFT_STROBES"
@@ -419,6 +421,10 @@ has_detectors_reco MFT MCH && has_detector_matching MFTMCH && add_W o2-globalfwd
 # ---------------------------------------------------------------------------------------------------------------------
 # Reconstruction workflows needed only in case QC or CALIB was requested
 ( has_detector_qc PHS || has_detector_calib PHS ) && ( workflow_has_parameter QC || workflow_has_parameter CALIB ) && add_W o2-phos-reco-workflow "--input-type cells --output-type clusters ${PHS_CONFIG} $DISABLE_DIGIT_ROOT_INPUT $DISABLE_ROOT_OUTPUT $DISABLE_MC --pipeline $(get_N PHOSClusterizerSpec PHS REST 1)"
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Reconstruction workflows applying detector-specific calibrations
+workflow_has_parameter AOD && has_detector EMC && add_W o2-emcal-cell-recalibrator-workflow "--input-subspec 1 --output-subspec 0"
 
 # always run vertexing if requested and if there are some sources, but in cosmic mode we work in pass-trough mode (create record for non-associated tracks)
 ( [[ $BEAMTYPE == "cosmic" ]] || ! has_detector_reco ITS) && PVERTEX_CONFIG+=" --skip"

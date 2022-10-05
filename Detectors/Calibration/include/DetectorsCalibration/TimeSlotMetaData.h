@@ -9,4 +9,27 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#include "MemoryResources/MemoryResources.h"
+#ifndef DETECTOR_CALIB_TIMESLOTMETADATA_H_
+#define DETECTOR_CALIB_TIMESLOTMETADATA_H_
+
+/// @brief meta-data for the saved content of the timeslot
+
+namespace o2
+{
+namespace calibration
+{
+struct TimeSlotMetaData {
+  using TFType = uint32_t;
+
+  int startRun = -1;
+  int endRun = -1;
+  long startTime = -1;
+  long endTime = -1;
+
+  ClassDefNV(TimeSlotMetaData, 1);
+};
+
+} // namespace calibration
+} // namespace o2
+
+#endif
