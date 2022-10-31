@@ -9,13 +9,9 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifndef O2_MCH_CONDITIONS_DCS_HV_ALIASES_H
-#define O2_MCH_CONDITIONS_DCS_HV_ALIASES_H
+#ifndef O2_FRAMEWORK_FEATURES_H_
+#define O2_FRAMEWORK_FEATURES_H_
 
-#include <vector>
-#include <string>
-
-extern std::vector<std::string> expectedHVAliasesVoltages;
-extern std::vector<std::string> expectedHVAliasesCurrents;
+#define DPL_HAS_SERVICEREGISTRY_REF 1
 
 #endif

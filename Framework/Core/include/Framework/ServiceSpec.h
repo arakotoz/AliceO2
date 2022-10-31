@@ -30,7 +30,7 @@ namespace o2::framework
 struct InitContext;
 struct DeviceSpec;
 struct ServiceRegistry;
-using ServiceRegistryRef = ServiceRegistry&;
+struct ServiceRegistryRef;
 struct DeviceState;
 struct ProcessingContext;
 class EndOfStreamContext;

@@ -51,12 +51,15 @@ if [[ "0$GEN_TOPO_VERBOSE" == "01" ]]; then
   echo "CALIB_TPC_VDRIFTTGL = $CALIB_TPC_VDRIFTTGL" 1>&2
   echo "CALIB_TPC_IDC = $CALIB_TPC_IDC" 1>&2
   echo "CALIB_TPC_IDC_BOTH = $CALIB_TPC_IDC_BOTH" 1>&2
+  echo "CALIB_TPC_SAC = $CALIB_TPC_SAC" 1>&2
   echo "CALIB_CPV_GAIN = $CALIB_CPV_GAIN" 1>&2
   echo "CALIB_ZDC_TDC = $CALIB_ZDC_TDC" 1>&2
+  echo "CALIB_FT0_TIMEOFFSET = $CALIB_FT0_TIMEOFFSET" 1>&2
 fi
 
 # beamtype dependent settings
 LHCPHASE_TF_PER_SLOT=26400
+FT0_TIMEOFFSET_TF_PER_SLOT=26400
 TOF_CHANNELOFFSETS_UPDATE=300000
 TOF_CHANNELOFFSETS_DELTA_UPDATE=50000
 
@@ -99,7 +102,7 @@ if workflow_has_parameter CALIB_PROXIES; then
     if [[ ! -z $CALIBDATASPEC_BARREL_SPORADIC ]]; then
       add_W o2-dpl-raw-proxy "--dataspec \"$CALIBDATASPEC_BARREL_SPORADIC\" $(get_proxy_connection barrel_sp input)" "" 0
     fi
-  elif [[ $AGGREGATOR_TASKS == TPCIDC_BOTH ]]; then
+  elif [[ $AGGREGATOR_TASKS == TPC_IDCBOTH_SAC ]]; then
     if [[ ! -z $CALIBDATASPEC_TPCIDC_A ]] || [[ ! -z $CALIBDATASPEC_TPCIDC_C ]]; then
       if [[ $FLP_TPC_IDC == 1 ]]; then # IDCs are coming from FLPs
         if [[ $EPNSYNCMODE != 1 ]]; then
@@ -113,9 +116,20 @@ if workflow_has_parameter CALIB_PROXIES; then
           FLP_ADDRESS="tcp://alio2-cr1-flp${flp}-ib:${TPC_IDC_FLP_PORT}"
           CHANNELS_LIST+="type=pull,name=tpcidc_flp${flp},transport=zeromq,address=$FLP_ADDRESS,method=connect,rateLogging=10;"
         done
-        add_W o2-dpl-raw-proxy "--proxy-name tpcidc_flp001 --dataspec \"$CALIBDATASPEC_TPCIDC_A;$CALIBDATASPEC_TPCIDC_C\" --channel-config \"$CHANNELS_LIST\" --timeframes-shm-limit $TIMEFRAME_SHM_LIMIT" "" 0
+        add_W o2-dpl-raw-proxy "--proxy-name tpcidc --dataspec \"$CALIBDATASPEC_TPCIDC_A;$CALIBDATASPEC_TPCIDC_C\" --channel-config \"$CHANNELS_LIST\" --timeframes-shm-limit $TIMEFRAME_SHM_LIMIT" "" 0
       else
         add_W o2-dpl-raw-proxy "--dataspec \"$CALIBDATASPEC_TPCIDC_A;$CALIBDATASPEC_TPCIDC_C\" $(get_proxy_connection tpcidc_both input)" "" 0
+      fi
+    fi
+    if [[ ! -z $CALIBDATASPEC_TPCSAC ]]; then
+      if [[ $FLP_TPC_SAC == 1 ]]; then # SAC are coming from FLP 145
+        # define port for FLP; should be in 47900 - 47999; if nobody defined it, we use 47901
+        [[ -z $TPC_SAC_FLP_PORT ]] && TPC_SAC_FLP_PORT=47901
+        FLP_ADDRESS_SAC="tcp://alio2-cr1-flp145-ib:${TPC_SAC_FLP_PORT}"
+        CHANNEL_SAC="type=pull,name=tpcsac,transport=zeromq,address=$FLP_ADDRESS_SAC,method=connect,rateLogging=10;"
+        add_W o2-dpl-raw-proxy "--proxy-name tpcsac --dataspec \"$CALIBDATASPEC_TPCSAC\" --channel-config \"$CHANNEL_SAC\" --timeframes-shm-limit $TIMEFRAME_SHM_LIMIT" "" 0
+      else
+        add_W o2-dpl-raw-proxy "--dataspec \"$CALIBDATASPEC_TPCSAC\" $(get_proxy_connection tpcsac input)" "" 0
       fi
     fi
   elif [[ $AGGREGATOR_TASKS == TPCIDC_A ]]; then
@@ -144,7 +158,7 @@ if workflow_has_parameter CALIB_PROXIES; then
     fi
   elif [[ $AGGREGATOR_TASKS == FORWARD_TF ]]; then
     if [[ ! -z $CALIBDATASPEC_FORWARD_TF ]]; then
-      add_W o2-dpl-raw-proxy "--dataspec \"$CALIBDATASPEC_FORWARD_TF\" $(get_proxy_connection zdc_tf input)" "" 0
+      add_W o2-dpl-raw-proxy "--dataspec \"$CALIBDATASPEC_FORWARD_TF\" $(get_proxy_connection fwd_tf input)" "" 0
     fi
   fi
 fi
@@ -177,7 +191,7 @@ if [[ $AGGREGATOR_TASKS == BARREL_TF ]] || [[ $AGGREGATOR_TASKS == ALL ]]; then
   if [[ $CALIB_TPC_SCDCALIB == 1 ]]; then
     # TODO: the residual aggregator should have --output-dir and --meta-output-dir defined
     # without that the residuals will be stored in the local working directory (and deleted after a week)
-    add_W o2-calibration-residual-aggregator "$ENABLE_TRACK_INPUT --output-type trackParams,unbinnedResid,binnedResid --autosave-interval $RESIDUAL_AGGREGATOR_AUTOSAVE"
+    add_W o2-calibration-residual-aggregator "--disable-root-input $ENABLE_TRACK_INPUT --output-type trackParams,unbinnedResid,binnedResid --autosave-interval $RESIDUAL_AGGREGATOR_AUTOSAVE"
   fi
   if [[ $CALIB_TPC_VDRIFTTGL == 1 ]]; then
     # options available via ARGS_EXTRA_PROCESS_o2_tpc_vdrift_tgl_calibration_workflow="--nbins-tgl 20 --nbins-dtgl 50 --max-tgl-its 2. --max-dtgl-itstpc 0.15 --min-entries-per-slot 1000 --time-slot-seconds 600 <--vdtgl-histos-file-name name> "
@@ -185,7 +199,7 @@ if [[ $AGGREGATOR_TASKS == BARREL_TF ]] || [[ $AGGREGATOR_TASKS == ALL ]]; then
   fi
   # TRD
   if [[ $CALIB_TRD_VDRIFTEXB == 1 ]]; then
-    add_W o2-calibration-trd-vdrift-exb ""
+    add_W o2-calibration-trd-workflow "--vDriftAndExB"
   fi
 fi
 
@@ -197,8 +211,8 @@ if [[ $AGGREGATOR_TASKS == BARREL_SPORADIC ]] || [[ $AGGREGATOR_TASKS == ALL ]];
   fi
 fi
 
-# TPC IDCs
-crus="0-359"  # to be used with $AGGREGATOR_TASKS == TPCIDC_BOTH or ALL
+# TPC IDCs and SAC
+crus="0-359"  # to be used with $AGGREGATOR_TASKS == TPC_IDCBOTH_SAC or ALL
 if [[ $AGGREGATOR_TASKS == TPCIDC_A ]]; then
   crus="0-179"
 elif [[ $AGGREGATOR_TASKS == TPCIDC_C ]]; then
@@ -206,11 +220,19 @@ elif [[ $AGGREGATOR_TASKS == TPCIDC_C ]]; then
 fi
 lanesFactorize=6
 nTFs=1000
+nTFs_SAC=1000
 
-if ! workflow_has_parameter CALIB_LOCAL_INTEGRATED_AGGREGATOR && [[ $CALIB_TPC_IDC == 1 ]] && [[ $AGGREGATOR_TASKS == TPCIDC_A || $AGGREGATOR_TASKS == TPCIDC_C || $AGGREGATOR_TASKS == TPCIDC_BOTH || $AGGREGATOR_TASKS == ALL ]]; then
-  add_W o2-tpc-idc-distribute "--crus ${crus} --timeframes ${nTFs} --output-lanes ${lanesFactorize} --send-precise-timestamp true --condition-tf-per-query ${nTFs}"
-  add_W o2-tpc-idc-factorize "--input-lanes ${lanesFactorize} --crus ${crus} --timeframes ${nTFs} --nthreads-grouping 8 --nthreads-IDC-factorization 8 --sendOutputFFT true --nTFsMessage 500 --enable-CCDB-output true --enablePadStatusMap true --use-precise-timestamp true --add-offset-for-CCDB-timestamp true" "TPCIDCGroupParam.groupPadsSectorEdges=32211"
-  add_W o2-tpc-idc-ft-aggregator "--rangeIDC 200 --inputLanes ${lanesFactorize} --nFourierCoeff 40 --nthreads 8"
+if ! workflow_has_parameter CALIB_LOCAL_INTEGRATED_AGGREGATOR; then
+  if [[ $CALIB_TPC_IDC == 1 ]] && [[ $AGGREGATOR_TASKS == TPCIDC_A || $AGGREGATOR_TASKS == TPCIDC_C || $AGGREGATOR_TASKS == TPC_IDCBOTH_SAC || $AGGREGATOR_TASKS == ALL ]]; then
+    add_W o2-tpc-idc-distribute "--crus ${crus} --timeframes ${nTFs} --output-lanes ${lanesFactorize} --send-precise-timestamp true --condition-tf-per-query ${nTFs}"
+    add_W o2-tpc-idc-factorize "--input-lanes ${lanesFactorize} --crus ${crus} --timeframes ${nTFs} --nthreads-grouping 8 --nthreads-IDC-factorization 8 --sendOutputFFT true --enable-CCDB-output true --enablePadStatusMap true --use-precise-timestamp true --add-offset-for-CCDB-timestamp true" "TPCIDCGroupParam.groupPadsSectorEdges=32211"
+    add_W o2-tpc-idc-ft-aggregator "--rangeIDC 200 --inputLanes ${lanesFactorize} --nFourierCoeff 40 --nthreads 8"
+  fi
+  if [[ $CALIB_TPC_SAC == 1 ]] && [[ $AGGREGATOR_TASKS == TPC_IDCBOTH_SAC || $AGGREGATOR_TASKS == ALL ]]; then
+    add_W o2-tpc-sac-distribute "--timeframes ${nTFs_SAC} --output-lanes 1 "
+    add_W o2-tpc-sac-factorize "--timeframes ${nTFs_SAC} --nthreads-SAC-factorization 4 --input-lanes 1 --compression 2"
+    add_W o2-tpc-idc-ft-aggregator "--rangeIDC 200 --nFourierCoeff 40 --process-SACs true --inputLanes 1"
+  fi
 fi
 
 # Calo cal
@@ -249,6 +271,9 @@ if [[ $AGGREGATOR_TASKS == FORWARD_TF || $AGGREGATOR_TASKS == ALL ]]; then
   # ZDC
   if [[ $CALIB_ZDC_TDC == 1 ]]; then
     add_W o2-zdc-tdccalib-workflow
+  fi
+  if [[ $CALIB_FT0_TIMEOFFSET == 1 ]]; then
+    add_W o2-calibration-ft0-time-offset-calib "--tf-per-slot $FT0_TIMEOFFSET_TF_PER_SLOT --max-delay 0" "FT0CalibParam.mNExtraSlots=0;FT0CalibParam.mRebinFactorPerChID[180]=4;"
   fi
 fi
 

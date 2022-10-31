@@ -112,6 +112,47 @@ struct ServiceRegistry {
   /// The mask to use to calculate the initial slot id.
   constexpr static uint32_t MAX_SERVICES_MASK = MAX_SERVICES - 1;
 
+  /// A salt which is global to the whole device.
+  /// This can be used to query services which are not
+  /// bound to a specific stream or data processor, e.g.
+  /// the services to send metrics to the driver or
+  /// to send messages to the control.
+  static Salt globalDeviceSalt()
+  {
+    return GLOBAL_CONTEXT_SALT;
+  }
+
+  /// A salt which is global to a given stream
+  /// but which multiple dataprocessors can share.
+  static Salt globalStreamSalt(short streamId)
+  {
+    // FIXME: old behaviour for now
+    // return {streamId, 0};
+    return GLOBAL_CONTEXT_SALT;
+  }
+
+  /// A salt which is global to a specific data processor.
+  /// This can be used to query properties which are
+  /// not bonded to a specific stream, e.g. the
+  /// name of the data processor, its inputs and outputs,
+  /// it's algorithm.
+  static Salt dataProcessorSalt(short dataProcessorId)
+  {
+    // FIXME: old behaviour for now
+    // return {0, dataProcessorId};
+    return GLOBAL_CONTEXT_SALT;
+  }
+
+  /// A salt which is specific to a given stream.
+  /// This can be used to query properties which are of the stream
+  /// itself, e.g. the currently processed time frame by a given stream.
+  static Salt streamSalt(short streamId, short dataProcessorId)
+  {
+    // FIXME: old behaviour for now
+    // return {streamId, dataProcessorId};
+    return GLOBAL_CONTEXT_SALT;
+  }
+
   constexpr InstanceId instanceFromTypeSalt(ServiceTypeHash type, Salt salt) const
   {
     return InstanceId{type.hash ^ salt.value};
@@ -203,7 +244,9 @@ struct ServiceRegistry {
   /// If it is of kind "Stream" we will create the Service only
   /// when requested by a given thread. This function is not
   /// thread safe.
-  void declareService(ServiceSpec const& spec, DeviceState& state, fair::mq::ProgOptions& options);
+  /// @a salt is used to create the service in the proper context
+  /// FIXME: for now we create everything in the global context
+  void declareService(ServiceSpec const& spec, DeviceState& state, fair::mq::ProgOptions& options, ServiceRegistry::Salt salt = ServiceRegistry::globalDeviceSalt());
 
   /// Bind the callbacks of a service spec to a given service.
   void bindService(ServiceSpec const& spec, void* service);
@@ -286,11 +329,8 @@ struct ServiceRegistry {
   }
 
   /// Register a service given an handle
-  void registerService(ServiceHandle handle)
+  void registerService(ServiceHandle handle, Salt salt = ServiceRegistry::globalDeviceSalt())
   {
-    auto tid = std::this_thread::get_id();
-    std::hash<std::thread::id> hasher;
-    Salt salt{Context{.streamId = (short)hasher(tid)}};
     ServiceRegistry::registerService({handle.hash}, handle.instance, handle.kind, salt, handle.name.c_str());
   }
 
@@ -302,7 +342,7 @@ struct ServiceRegistry {
 
   /// @deprecated old API to be substituted with the ServiceHandle one
   template <class I, class C, enum ServiceKind K = ServiceKind::Serial>
-  void registerService(C* service)
+  void registerService(C* service, Salt salt = ServiceRegistry::globalDeviceSalt())
   {
     // This only works for concrete implementations of the type T.
     // We need type elision as we do not want to know all the services in
@@ -310,15 +350,12 @@ struct ServiceRegistry {
     static_assert(std::is_base_of<I, C>::value == true,
                   "Registered service is not derived from declared interface");
     constexpr ServiceTypeHash typeHash{TypeIdHelpers::uniqueId<I>()};
-    auto tid = std::this_thread::get_id();
-    std::hash<std::thread::id> hasher;
-    Salt salt = Salt{Context{.streamId = (short)hasher(tid)}};
     ServiceRegistry::registerService(typeHash, reinterpret_cast<void*>(service), K, salt, typeid(C).name());
   }
 
   /// @deprecated old API to be substituted with the ServiceHandle one
   template <class I, class C, enum ServiceKind K = ServiceKind::Serial>
-  void registerService(C const* service)
+  void registerService(C const* service, Salt salt = ServiceRegistry::globalDeviceSalt())
   {
     // This only works for concrete implementations of the type T.
     // We need type elision as we do not want to know all the services in
@@ -326,23 +363,17 @@ struct ServiceRegistry {
     static_assert(std::is_base_of<I, C>::value == true,
                   "Registered service is not derived from declared interface");
     constexpr ServiceTypeHash typeHash{TypeIdHelpers::uniqueId<I const>()};
-    auto tid = std::this_thread::get_id();
-    std::hash<std::thread::id> hasher;
-    Salt salt = Salt{Context{.streamId = (short)hasher(tid)}};
     this->registerService(typeHash, reinterpret_cast<void*>(const_cast<C*>(service)), K, salt, typeid(C).name());
   }
 
   /// Check if service of type T is currently active.
   template <typename T>
-  std::enable_if_t<std::is_const_v<T> == false, bool> active() const
+  std::enable_if_t<std::is_const_v<T> == false, bool> active(Salt salt) const
   {
     constexpr ServiceTypeHash typeHash{TypeIdHelpers::uniqueId<T>()};
-    auto tid = std::this_thread::get_id();
-    std::hash<std::thread::id> hasher;
     if (this->getPos(typeHash, GLOBAL_CONTEXT_SALT) != -1) {
       return true;
     }
-    Salt salt = Salt{Context{.streamId = (short)hasher(tid)}};
     auto result = this->getPos(typeHash, salt) != -1;
     return result;
   }
@@ -351,12 +382,9 @@ struct ServiceRegistry {
   /// the user is actually of the last concrete type C registered, however this
   /// should not be a problem.
   template <typename T>
-  T& get() const
+  T& get(Salt salt) const
   {
     constexpr ServiceTypeHash typeHash{TypeIdHelpers::uniqueId<T>()};
-    auto tid = std::this_thread::get_id();
-    std::hash<std::thread::id> hasher;
-    Salt salt = Salt{Context{.streamId = (short)hasher(tid)}};
     auto ptr = this->get(typeHash, salt, ServiceKind::Serial, typeid(T).name());
     if (O2_BUILTIN_LIKELY(ptr != nullptr)) {
       if constexpr (std::is_const_v<T>) {
@@ -369,10 +397,6 @@ struct ServiceRegistry {
     O2_BUILTIN_UNREACHABLE();
   }
 };
-
-// This is to migrate the code in QC.
-// FIXME: move this to the proper smart reference class once done
-using ServiceRegistryRef = o2::framework::ServiceRegistry &;
 
 } // namespace o2::framework
 

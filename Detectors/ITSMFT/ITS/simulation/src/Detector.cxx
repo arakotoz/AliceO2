@@ -24,12 +24,12 @@
 #include "SimulationDataFormat/TrackReference.h"
 
 // FairRoot includes
-#include "FairDetector.h"    // for FairDetector
+#include "FairDetector.h"      // for FairDetector
 #include <fairlogger/Logger.h> // for LOG, LOG_IF
-#include "FairRootManager.h" // for FairRootManager
-#include "FairRun.h"         // for FairRun
-#include "FairRuntimeDb.h"   // for FairRuntimeDb
-#include "FairVolume.h"      // for FairVolume
+#include "FairRootManager.h"   // for FairRootManager
+#include "FairRun.h"           // for FairRun
+#include "FairRuntimeDb.h"     // for FairRuntimeDb
+#include "FairVolume.h"        // for FairVolume
 #include "FairRootManager.h"
 
 #include "TGeoManager.h"     // for TGeoManager, gGeoManager
@@ -116,8 +116,8 @@ static void configITS(Detector* its)
 
   const int kNWrapVol = 3;
   const double wrpRMin[kNWrapVol] = {2.1, 19.2, 33.32};
-  const double wrpRMax[kNWrapVol] = {15.4, 29.14, 44.9};
-  const double wrpZSpan[kNWrapVol] = {70., 93., 163.6};
+  const double wrpRMax[kNWrapVol] = {16.4, 29.14, 44.9};
+  const double wrpZSpan[kNWrapVol] = {70., 93., 163.0};
 
   for (int iw = 0; iw < kNWrapVol; iw++) {
     its->defineWrapperVolume(iw, wrpRMin[iw], wrpRMax[iw], wrpZSpan[iw]);
@@ -441,6 +441,12 @@ void Detector::createMaterials()
   Float_t wRohac[4] = {9., 13., 1., 2.};
   Float_t dRohac = 0.05;
 
+  // EN AW 7075 (Al alloy with Cu Mg Zn)
+  Float_t aENAW7075[4] = {26.98, 63.55, 24.31, 65.41};
+  Float_t zENAW7075[4] = {13., 29., 12., 30.};
+  Float_t wENAW7075[4] = {0., 0.015, 0.025, 0.055}; // [0] will be computed
+  Float_t dENAW7075 = 2.85;
+
   // Brass CuZn39Pb3 (Cu Zn Pb)
   Float_t aBrass[3] = {63.55, 65.41, 207.2};
   Float_t zBrass[3] = {29., 30., 82.};
@@ -551,6 +557,11 @@ void Detector::createMaterials()
   // Tungsten (for gamma converter rods)
   o2::base::Detector::Material(28, "TUNGSTEN$", 183.84, 74, 19.25, 999, 999);
   o2::base::Detector::Medium(28, "TUNGSTEN$", 28, 0, ifield, fieldm, tmaxfdSi, stemaxSi, deemaxSi, epsilSi, stminSi);
+
+  // EN AW 7075 (Al alloy with Cu Mg Zn) (for Cage rails)
+  wENAW7075[0] = 1. - wENAW7075[1] - wENAW7075[2] - wENAW7075[3];
+  o2::base::Detector::Mixture(36, "ENAW7075$", aENAW7075, zENAW7075, dENAW7075, 4, wENAW7075);
+  o2::base::Detector::Medium(36, "ENAW7075$", 36, 0, ifield, fieldm, tmaxfd, stemax, deemaxSi, epsilSi, stminSi);
 
   // Brass CuZn39Pb3
   o2::base::Detector::Mixture(34, "BRASS$", aBrass, zBrass, dBrass, 3, wBrass);
@@ -721,8 +732,8 @@ TGeoVolume* Detector::createWrapperVolume(Int_t id)
 
   const Double_t suppRingAZlen = 4.;
   const Double_t coneRingARmax = 33.96;
-  const Double_t coneRingAZlen = 5.6;
-  const Double_t suppRingCZlen[3] = {4.8, 4.0, 2.4};
+  const Double_t coneRingAZlen[2] = {5.6, 0.3};
+  const Double_t suppRingCZlen[3] = {4.8, 4.0, 2.1};
   const Double_t suppRingsRmin[3] = {23.35, 20.05, 35.4};
 
   if (mWrapperMinRadius[id] < 0 || mWrapperMaxRadius[id] < 0 || mWrapperZSpan[id] < 0) {
@@ -760,10 +771,11 @@ TGeoVolume* Detector::createWrapperVolume(Int_t id)
       zlen -= suppRingCZlen[2];
       wrap->DefineSection(1, -zlen, suppRingsRmin[2], mWrapperMaxRadius[id]);
       wrap->DefineSection(2, -zlen, mWrapperMinRadius[id], mWrapperMaxRadius[id]);
-      zlen = mWrapperZSpan[id] / 2 - coneRingAZlen;
+      zlen = mWrapperZSpan[id] / 2 - coneRingAZlen[0];
       wrap->DefineSection(3, zlen, mWrapperMinRadius[id], mWrapperMaxRadius[id]);
       wrap->DefineSection(4, zlen, coneRingARmax, mWrapperMaxRadius[id]);
-      wrap->DefineSection(5, mWrapperZSpan[id] / 2, coneRingARmax, mWrapperMaxRadius[id]);
+      zlen = mWrapperZSpan[id] / 2 + coneRingAZlen[1];
+      wrap->DefineSection(5, zlen, coneRingARmax, mWrapperMaxRadius[id]);
       tube = (TGeoShape*)wrap;
     } break;
     default: // Can never happen, keeps gcc quiet
@@ -907,6 +919,7 @@ void Detector::constructDetectorGeometry()
   createOuterBarrelServices(wrapVols[2]);
   createOuterBarrelSupports(vITSV);
 
+  mServicesGeometry->createIBGammaConvWire(wrapVols[0]);
   mServicesGeometry->createOBGammaConvWire(vITSV);
 
   // Finally create and place the cage
