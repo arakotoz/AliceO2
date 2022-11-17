@@ -39,8 +39,8 @@ constexpr int NCRUPERFLP = 3;        // the number of CRU per FLP
 constexpr int TRDLINKID = 15;        // hard coded link id, specific to TRD
 
 constexpr int NCOLUMN = 144; // the number of pad columns for each chamber
-constexpr int NROWC0 = 12;   // the number of pad rows for chambers of type C0 (installed stack 0,1,3 and 4)
-constexpr int NROWC1 = 16;   // the number of pad rows for chambers of type C1 (installed in stack 2)
+constexpr int NROWC0 = 12;   // the number of pad rows for chambers of type C0 (installed in stack 2)
+constexpr int NROWC1 = 16;   // the number of pad rows for chambers of type C1 (installed in stacks 0, 1, 3 and 4)
 
 constexpr int NMCMROB = 16;     // the number of MCMs per ROB
 constexpr int NMCMHCMAX = 64;   // the maximum number of MCMs for one half chamber (C1 type)
@@ -90,6 +90,7 @@ constexpr int MAXPARSEERRORHISTOGRAMS = 60;    // size of the array holding the 
 constexpr unsigned int ETYPEPHYSICSTRIGGER = 0x2;     // CRU Half Chamber header eventtype definition
 constexpr unsigned int ETYPECALIBRATIONTRIGGER = 0x3; // CRU Half Chamber header eventtype definition
 constexpr int MAXCRUERRORVALUE = 0x2;          // Max possible value for a CRU Halfchamber link error. As of may 2022, can only be 0x0, 0x1, and 0x2, at least that is all so far(may2022).
+constexpr int INVALIDPRETRIGGERPHASE = 0xf;    // Invalid value for phase, used to signify there is no hcheader.
 
 } // namespace constants
 } // namespace trd

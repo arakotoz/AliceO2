@@ -245,6 +245,7 @@ void WorkflowHelpers::injectServiceDevices(WorkflowSpec& workflow, ConfigContext
                 {"condition-not-after", VariantType::Int64, 3385078236000ll, {"do not fetch from CCDB objects created after the timestamp"}},
                 {"condition-remap", VariantType::String, "", {"remap condition path in CCDB based on the provided string."}},
                 {"condition-tf-per-query", VariantType::Int64, defaultConditionQueryRate(), {"check condition validity per requested number of TFs, fetch only once if <0"}},
+                {"condition-time-tolerance", VariantType::Int64, 5000ll, {"prefer creation time if its difference to orbit-derived time exceeds threshold (ms), impose if <0"}},
                 {"orbit-offset-enumeration", VariantType::Int64, 0ll, {"initial value for the orbit"}},
                 {"orbit-multiplier-enumeration", VariantType::Int64, 0ll, {"multiplier to get the orbit from the counter"}},
                 {"start-value-enumeration", VariantType::Int64, 0ll, {"initial value for the enumeration"}},
@@ -973,7 +974,9 @@ std::shared_ptr<DataOutputDirector> WorkflowHelpers::getDataOutputDirector(Confi
 
   // analyze options and take actions accordingly
   // default values
+  std::string rdn, resdir("./");
   std::string fnb, fnbase("AnalysisResults_trees");
+  float mfs, maxfilesize(-1.);
   std::string fmo, filemode("RECREATE");
   int ntfm, ntfmerge = 1;
 
@@ -981,12 +984,18 @@ std::shared_ptr<DataOutputDirector> WorkflowHelpers::getDataOutputDirector(Confi
   if (options.isSet("aod-writer-json")) {
     auto fnjson = options.get<std::string>("aod-writer-json");
     if (!fnjson.empty()) {
-      std::tie(fnb, fmo, ntfm) = dod->readJson(fnjson);
+      std::tie(rdn, fnb, fmo, mfs, ntfm) = dod->readJson(fnjson);
+      if (!rdn.empty()) {
+        resdir = rdn;
+      }
       if (!fnb.empty()) {
         fnbase = fnb;
       }
       if (!fmo.empty()) {
         filemode = fmo;
+      }
+      if (mfs > 0.) {
+        maxfilesize = mfs;
       }
       if (ntfm > 0) {
         ntfmerge = ntfm;
@@ -995,6 +1004,12 @@ std::shared_ptr<DataOutputDirector> WorkflowHelpers::getDataOutputDirector(Confi
   }
 
   // values from command line options, information from json is overwritten
+  if (options.isSet("aod-writer-resdir")) {
+    rdn = options.get<std::string>("aod-writer-resdir");
+    if (!rdn.empty()) {
+      resdir = rdn;
+    }
+  }
   if (options.isSet("aod-writer-resfile")) {
     fnb = options.get<std::string>("aod-writer-resfile");
     if (!fnb.empty()) {
@@ -1005,6 +1020,12 @@ std::shared_ptr<DataOutputDirector> WorkflowHelpers::getDataOutputDirector(Confi
     fmo = options.get<std::string>("aod-writer-resmode");
     if (!fmo.empty()) {
       filemode = fmo;
+    }
+  }
+  if (options.isSet("aod-writer-maxfilesize")) {
+    mfs = options.get<float>("aod-writer-maxfilesize");
+    if (mfs > 0) {
+      maxfilesize = mfs;
     }
   }
   if (options.isSet("aod-writer-ntfmerge")) {
@@ -1039,8 +1060,10 @@ std::shared_ptr<DataOutputDirector> WorkflowHelpers::getDataOutputDirector(Confi
       }
     }
   }
+  dod->setResultDir(resdir);
   dod->setFilenameBase(fnbase);
   dod->setFileMode(filemode);
+  dod->setMaximumFileSize(maxfilesize);
   dod->setNumberTimeFramesToMerge(ntfmerge);
 
   return dod;
