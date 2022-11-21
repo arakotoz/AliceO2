@@ -9,15 +9,25 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifdef __CLING__
+/// @file  NoInpDummyOutSpec.h
+/// Dummy device to drive w/o input, to drive execution sending dummy output with the timing info defined via HBFUtilsInitializer
 
-#pragma link off all globals;
-#pragma link off all classes;
-#pragma link off all functions;
+#ifndef O2_NOINP_DUMMYOUT_SPEC
+#define O2_NOINP_DUMMYOUT_SPEC
 
-#pragma link C++ class o2::its3::SegmentationSuperAlpide + ;
-#pragma link C++ class o2::its3::MisalignmentParameter + ;
+#include "Framework/DataProcessorSpec.h"
 
+using namespace o2::framework;
 
+namespace o2
+{
+namespace globaltracking
+{
+
+/// create a processor spec
+framework::DataProcessorSpec getNoInpDummyOutSpec(int nloop = -1);
+
+} // namespace globaltracking
+} // namespace o2
 
 #endif
