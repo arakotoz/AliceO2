@@ -9,15 +9,22 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifdef __CLING__
+#ifndef O2_TPC_DCSConfigSpec_H_
+#define O2_TPC_DCSConfigSpec_H_
 
-#pragma link off all globals;
-#pragma link off all classes;
-#pragma link off all functions;
+/// @file   DCSConfigSpec.h
+/// @author Jens Wiechula
+/// @brief  DCS configuration processing
 
-#pragma link C++ class o2::focal::ASICData + ;
-#pragma link C++ class o2::focal::ASICContainer + ;
-#pragma link C++ class o2::focal::PadData + ;
-#pragma link C++ class o2::focal::PadDecoder + ;
-#pragma link C++ class o2::focal::PadMapper + ;
+#include "Framework/DataProcessorSpec.h"
+using namespace o2::framework;
+
+namespace o2::tpc
+{
+
+/// create DCS processor
+DataProcessorSpec getDCSConfigSpec();
+
+} // end namespace o2::tpc
+
 #endif
