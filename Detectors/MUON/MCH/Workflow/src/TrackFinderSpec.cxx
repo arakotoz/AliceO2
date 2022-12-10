@@ -104,6 +104,7 @@ class TrackFinderTask
   void run(framework::ProcessingContext& pc)
   {
     /// for each event in the current TF, read the clusters and find tracks, then send them all
+    uint32_t firstTForbit = pc.services().get<o2::framework::TimingInfo>().firstTForbit;
 
     // get the input messages with clusters
     auto clusterROFs = pc.inputs().get<gsl::span<ROFRecord>>("clusterrofs");
@@ -141,7 +142,7 @@ class TrackFinderTask
 
       // fill the ouput messages
       int trackOffset(mchTracks.size());
-      writeTracks(tracks, mchTracks, usedClusters, digitsIn, usedDigits);
+      writeTracks(tracks, mchTracks, usedClusters, clusterROF, digitsIn, usedDigits, firstTForbit);
       trackROFs.emplace_back(clusterROF.getBCData(), trackOffset, mchTracks.size() - trackOffset,
                              clusterROF.getBCWidth());
     }
@@ -153,12 +154,40 @@ class TrackFinderTask
   }
 
  private:
+  void setTrackTime(TrackMCH& track, const ROFRecord& clusterROF, uint32_t firstTForbit, const gsl::span<const Cluster> usedClusters, const gsl::span<const Digit> usedDigits) const
+  {
+    double trackBCinTF = 0;
+    int nDigits = 0;
+
+    // loop over digits and compute the average track time
+    for (const auto& cluster : usedClusters.subspan(track.getFirstClusterIdx(), track.getNClusters())) {
+      for (const auto& digit : usedDigits.subspan(cluster.firstDigit, cluster.nDigits)) {
+        nDigits += 1;
+        trackBCinTF += (double(digit.getTime()) - trackBCinTF) / nDigits;
+      }
+    }
+
+    // set the track IR from the computed average digits time
+    if (nDigits > 0) {
+      // convert the average digit time from bunch-crossing units to microseconds
+      // add 1.5 BC to account for the fact that the actual digit time in BC units
+      // can be between t and t+3, hence t+1.5 in average
+      float tMean = o2::constants::lhc::LHCBunchSpacingMUS * (trackBCinTF + 1.5);
+      float tErr = o2::constants::lhc::LHCBunchSpacingMUS * mTrackTime3Sigma;
+      track.setTimeMUS(tMean, tErr);
+    } else {
+      // if no digits are found, compute the time directly from the track's ROF
+      LOG(fatal) << "MCH: no digits found when computing the track mean time";
+      track.setTimeMUS(clusterROF.getTimeMUS({0, firstTForbit}).first);
+    }
+  }
+
   //_________________________________________________________________________________________________
   void writeTracks(const std::list<Track>& tracks,
                    std::vector<TrackMCH, o2::pmr::polymorphic_allocator<TrackMCH>>& mchTracks,
                    std::vector<Cluster, o2::pmr::polymorphic_allocator<Cluster>>& usedClusters,
-                   const gsl::span<const Digit>& digitsIn,
-                   std::vector<Digit, o2::pmr::polymorphic_allocator<Digit>>* usedDigits) const
+                   const ROFRecord& clusterROF, const gsl::span<const Digit>& digitsIn,
+                   std::vector<Digit, o2::pmr::polymorphic_allocator<Digit>>* usedDigits, uint32_t firstTForbit) const
   {
     /// fill the output messages with tracks and attached clusters and digits if requested
 
@@ -198,10 +227,18 @@ class TrackFinderTask
           cluster.firstDigit = digitLoc.first->second;
         }
       }
+
+      // compute the track time
+      if (mDigits) {
+        setTrackTime(mchTracks.back(), clusterROF, firstTForbit, usedClusters, *usedDigits);
+      } else {
+        mchTracks.back().setTimeMUS(clusterROF.getTimeMUS({0, firstTForbit}).first);
+      }
     }
   }
 
   bool mDigits = false;                         ///< send to associated digits
+  float mTrackTime3Sigma{6.0};                  ///< three times the digit time resolution, in BC units
   TrackFinder mTrackFinder{};                   ///< track finder
   std::chrono::duration<double> mElapsedTime{}; ///< timer
 };
