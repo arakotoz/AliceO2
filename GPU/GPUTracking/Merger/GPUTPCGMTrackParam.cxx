@@ -79,8 +79,8 @@ GPUd() bool GPUTPCGMTrackParam::Fit(GPUTPCGMMerger* GPUrestrict() merger, int iT
     }
   }
 
-  int nWays = param.rec.tpc.nWays;
-  int maxN = N;
+  const int nWays = param.rec.tpc.nWays;
+  const int maxN = N;
   int ihitStart = 0;
   float covYYUpd = 0.f;
   float lastUpdateX = -1.f;
@@ -362,7 +362,7 @@ GPUd() bool GPUTPCGMTrackParam::Fit(GPUTPCGMMerger* GPUrestrict() merger, int iT
       }
     }
     if (((nWays - iWay) & 1) && (clusters[0].slice < 18) == (clusters[maxN - 1].slice < 18)) {
-      ShiftZ2(clusters, clustersXYZ, merger, N);
+      ShiftZ2(clusters, clustersXYZ, merger, maxN);
     }
   }
   ConstrainSinPhi();
@@ -940,9 +940,9 @@ GPUd() void GPUTPCGMTrackParam::ShiftZ(const GPUTPCGMMerger* GPUrestrict() merge
     } else if (zMax > 0 && zMax - mTZOffset > 250) {
       deltaZ = zMax - mTZOffset - 250;
     }
-    if (zMin < 0 && zMax - mTZOffset > 0) {
+    if (zMin < 0 && zMax - (mTZOffset + deltaZ) > 0) {
       deltaZ = zMax - mTZOffset;
-    } else if (zMax > 0 && zMin - mTZOffset < 0) {
+    } else if (zMax > 0 && zMin - (mTZOffset + deltaZ) < 0) {
       deltaZ = zMin - mTZOffset;
     }
     // if (deltaZ != 0) printf("Moving clusters to TPC Range: Shift %f in Z: %f to %f --> %f to %f in Z\n", deltaZ, tz2 - mTZOffset, tz1 - mTZOffset, tz2 - mTZOffset - deltaZ, tz1 - mTZOffset - deltaZ);
@@ -959,12 +959,12 @@ GPUd() void GPUTPCGMTrackParam::ShiftZ(const GPUTPCGMMerger* GPUrestrict() merge
     if (mTZOffset < minT) {
       deltaT = minT - mTZOffset;
     }
-    if (mTZOffset > maxT) {
+    if (mTZOffset + deltaT > maxT) {
       deltaT = maxT - mTZOffset;
     }
     if (deltaT != 0.f) {
       deltaZ = merger->GetConstantMem()->calibObjects.fastTransformHelper->getCorrMap()->convDeltaTimeToDeltaZinTimeFrame(slice, deltaT);
-      // printf("Moving clusters to TPC Range: Shift %f in Z: %f to %f --> %f to %f in T\n", deltaZ, tz2 - mTZOffset, tz1 - mTZOffset, tz2 - mTZOffset - deltaT, tz1 - mTZOffset - deltaT);
+      // printf("Moving clusters to TPC Range: QPt %f, New mTZOffset %f, t1 %f, t2 %f, Shift %f in Z: %f to %f --> %f to %f in T\n", mP[4], mTZOffset + deltaT, tz1, tz2, deltaZ, tz2 - mTZOffset, tz1 - mTZOffset, tz2 - mTZOffset - deltaT, tz1 - mTZOffset - deltaT);
       mTZOffset += deltaT;
       mP[1] -= deltaZ;
     }

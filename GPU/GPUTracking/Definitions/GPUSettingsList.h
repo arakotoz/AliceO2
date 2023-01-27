@@ -101,6 +101,8 @@ AddOptionRTC(stopTrkAfterNMissLy, unsigned char, 6, "", 0, "Abandon track follow
 AddOptionRTC(nTrackletsMin, unsigned char, 3, "", 0, "Tracks with less attached tracklets are discarded after the tracking")
 AddOptionRTC(useExternalO2DefaultPropagator, unsigned char, 0, "", 0, "Use the default instance of the o2::Propagator, instead of the GPU Reconstruciton one with GPU B field")
 AddOptionRTC(matCorrType, unsigned char, 2, "", 0, "Material correction to use: 0 - none, 1 - TGeo, 2 - matLUT")
+AddOptionRTC(pileupFwdNBC, unsigned char, 60, "", 0, "Post-trigger Pile-up integration time in BCs")
+AddOptionRTC(pileupBwdNBC, unsigned char, 80, "", 0, "Pre-trigger Pile-up integration time in BCs")
 AddHelp("help", 'h')
 EndConfig()
 
@@ -317,7 +319,7 @@ AddOption(filterCharge, int, 0, "", 0, "Filter for positive (+1) or negative (-1
 AddOption(filterPID, int, -1, "", 0, "Filter for Particle Type (0 Electron, 1 Muon, 2 Pion, 3 Kaon, 4 Proton)")
 AddOption(nativeFitResolutions, bool, false, "", 0, "Create resolution histograms in the native fit units (sin(phi), tan(lambda), Q/Pt)")
 AddOption(enableLocalOutput, bool, true, "", 0, "Enable normal output to local PDF files / console")
-AddOption(csvDump, bool, false, "", 0, "Dump all clusters and Pt information into csv file")
+AddOption(dumpToROOT, int, 0, "", 0, "Dump all clusters and tracks to a ROOT file, 1 = combined TNTUple dump, 2 = also individual cluster / track branch dump")
 AddOption(writeMCLabels, bool, false, "", 0, "Store mc labels to file for later matching")
 AddOption(writeRootFiles, bool, false, "", 0, "Create ROOT canvas files")
 AddOptionVec(matchMCLabels, std::string, "", 0, "Read labels from files and match them, only process tracks where labels differ")

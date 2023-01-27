@@ -33,6 +33,7 @@ struct VertexerParamConfig : public o2::conf::ConfigurableParamHelper<VertexerPa
   float tanLambdaCut = 0.002f; // tanLambda = deltaZ/deltaR
   float lowMultXYcut2 = 0.25f; // XY cut for low-multiplicity pile up
   float baseBeamError = 0.005f;
+  float maxZPositionAllowed = 25.f; // 4x sZ of the beam
   int clusterContributorsCut = 16;
   int maxTrackletsPerCluster = 1e2;
   int phiSpan = -1;
@@ -50,6 +51,8 @@ struct TrackerParamConfig : public o2::conf::ConfigurableParamHelper<TrackerPara
   bool useFastMaterial = false;
   float sysErrY2[7] = {0}; // systematic error^2 in Y per layer
   float sysErrZ2[7] = {0}; // systematic error^2 in Z per layer
+  float maxChi2ClusterAttachment = -1.f;
+  float maxChi2NDF = -1.f;
   float nSigmaCut = -1.f;
   float deltaTanLres = -1.f;
   float minPt = -1.f;
