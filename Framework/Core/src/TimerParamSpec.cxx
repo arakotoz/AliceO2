@@ -9,16 +9,18 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifdef __CLING__
+#include "Framework/TimerParamSpec.h"
+#include <fmt/format.h>
 
-#pragma link off all globals;
-#pragma link off all classes;
-#pragma link off all functions;
+namespace o2::framework
+{
+std::vector<ConfigParamSpec> timerSpecs(std::vector<TimerSpec> timers)
+{
+  std::vector<o2::framework::ConfigParamSpec> specs;
+  for (auto& timer : timers) {
+    specs.push_back({fmt::format("period-{}", timer.validity).c_str(), o2::framework::VariantType::UInt64, timer.period, {"Timer period in milliseconds"}});
+  }
+  return specs;
+}
 
-#pragma link C++ class o2::its3::ITS3Layer + ;
-#pragma link C++ class o2::its3::ITS3Services + ;
-#pragma link C++ class o2::its3::DescriptorInnerBarrelITS3 + ;
-#pragma link C++ class o2::its3::DescriptorInnerBarrelITS3Param + ;
-#pragma link C++ class o2::its3::Digitizer + ;
-
-#endif
+} // namespace o2::framework
