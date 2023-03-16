@@ -1,4 +1,4 @@
-// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// Copyright 2019-2023 CERN and copyright holders of ALICE O2.
 // See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
 // All rights not expressly granted are reserved.
 //
@@ -12,6 +12,8 @@
 #include <CCDB/CCDBDownloader.h>
 
 #include <curl/curl.h>
+#include <uv.h>
+
 #include <unordered_map>
 #include <cstdio>
 #include <cstdlib>
@@ -25,9 +27,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-namespace o2
-{
-namespace ccdb
+namespace o2::ccdb
 {
 
 CCDBDownloader::CCDBDownloader(uv_loop_t* uv_loop)
@@ -81,6 +81,9 @@ CCDBDownloader::~CCDBDownloader()
     uv_timer_stop(socketTimerPair.second);
     uv_close((uv_handle_t*)socketTimerPair.second, onUVClose);
   }
+  // all timers have been closed --> so clear this map (otherwise it may get accessed in different callbacks again
+  // ... for instance when called from within curl_multi_cleanup)
+  mSocketTimerMap.clear();
 
   // Close loop thread
   mCloseLoop = true;
@@ -172,7 +175,6 @@ void CCDBDownloader::closeSocketByTimer(uv_timer_t* handle)
     uv_timer_stop(CD->mSocketTimerMap[sock]);
     CD->mSocketTimerMap.erase(sock);
     close(sock);
-    return;
   }
 }
 
@@ -227,14 +229,14 @@ int CCDBDownloader::handleSocket(CURL* easy, curl_socket_t s, int action, void* 
         uv_timer_stop(CD->mSocketTimerMap[s]);
       }
 
-      uv_poll_start(&curl_context->poll_handle, events, curlPerform);
+      uv_poll_start(curl_context->poll_handle, events, curlPerform);
       break;
     case CURL_POLL_REMOVE:
       if (socketp) {
         if (CD->mSocketTimerMap.find(s) != CD->mSocketTimerMap.end()) {
           uv_timer_start(CD->mSocketTimerMap[s], closeSocketByTimer, CD->mSocketTimeoutMS, 0);
         }
-        uv_poll_stop(&((CCDBDownloader::curl_context_t*)socketp)->poll_handle);
+        uv_poll_stop(((CCDBDownloader::curl_context_t*)socketp)->poll_handle);
         CD->destroyCurlContext((CCDBDownloader::curl_context_t*)socketp);
         curl_multi_assign(socketData->curlm, s, nullptr);
       }
@@ -275,23 +277,25 @@ CCDBDownloader::curl_context_t* CCDBDownloader::createCurlContext(curl_socket_t 
   context = (curl_context_t*)malloc(sizeof(*context));
   context->CD = this;
   context->sockfd = sockfd;
+  context->poll_handle = new uv_poll_t();
 
-  uv_poll_init_socket(mUVLoop, &context->poll_handle, sockfd);
-  mHandleMap[(uv_handle_t*)(&context->poll_handle)] = true;
-  context->poll_handle.data = context;
+  uv_poll_init_socket(mUVLoop, context->poll_handle, sockfd);
+  mHandleMap[(uv_handle_t*)(context->poll_handle)] = true;
+  context->poll_handle->data = context;
 
   return context;
 }
 
 void CCDBDownloader::curlCloseCB(uv_handle_t* handle)
 {
-  curl_context_t* context = (curl_context_t*)handle->data;
+  auto* context = (curl_context_t*)handle->data;
+  delete context->poll_handle;
   free(context);
 }
 
 void CCDBDownloader::destroyCurlContext(curl_context_t* context)
 {
-  uv_close((uv_handle_t*)&context->poll_handle, curlCloseCB);
+  uv_close((uv_handle_t*)context->poll_handle, curlCloseCB);
 }
 
 void callbackWrappingFunction(void (*cbFun)(void*), void* data, bool* completionFlag)
@@ -408,7 +412,7 @@ CURLcode CCDBDownloader::perform(CURL* handle)
   return batchBlockingPerform(handleVector).back();
 }
 
-std::vector<CURLcode>* CCDBDownloader::batchAsynchPerform(std::vector<CURL*> handleVector, bool* completionFlag)
+std::vector<CURLcode>* CCDBDownloader::batchAsynchPerform(std::vector<CURL*> const& handleVector, bool* completionFlag)
 {
   auto codeVector = new std::vector<CURLcode>(handleVector.size());
   size_t* requestsLeft = new size_t();
@@ -433,7 +437,7 @@ std::vector<CURLcode>* CCDBDownloader::batchAsynchPerform(std::vector<CURL*> han
   return codeVector;
 }
 
-std::vector<CURLcode> CCDBDownloader::batchBlockingPerform(std::vector<CURL*> handleVector)
+std::vector<CURLcode> CCDBDownloader::batchBlockingPerform(std::vector<CURL*> const& handleVector)
 {
   std::condition_variable cv;
   std::mutex cv_m;
@@ -461,7 +465,7 @@ std::vector<CURLcode> CCDBDownloader::batchBlockingPerform(std::vector<CURL*> ha
   return codeVector;
 }
 
-std::vector<CURLcode>* CCDBDownloader::asynchBatchPerformWithCallback(std::vector<CURL*> handleVector, bool* completionFlag, void (*cbFun)(void*), void* cbData)
+std::vector<CURLcode>* CCDBDownloader::asynchBatchPerformWithCallback(std::vector<CURL*> const& handleVector, bool* completionFlag, void (*cbFun)(void*), void* cbData)
 {
   auto codeVector = new std::vector<CURLcode>(handleVector.size());
   size_t* requestsLeft = new size_t();
@@ -496,5 +500,4 @@ void CCDBDownloader::makeLoopCheckQueueAsync()
   uv_async_send(asyncHandle);
 }
 
-} // namespace ccdb
 } // namespace o2
