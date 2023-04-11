@@ -64,6 +64,8 @@ void GBTLink::clear(bool resetStat, bool resetTFRaw)
     rawData.clear();
     dataOffset = 0;
     gbtErrStatUpadated = false;
+    rofJumpWasSeen = false;
+    ir.clear();
   }
   //  lastRDH = nullptr;
   if (resetStat) {
@@ -155,6 +157,7 @@ uint8_t GBTLink::checkErrorsRDH(const RDH& rdh)
     err |= uint8_t(Abort);
     return err; // fatal error
   }
+  /*
   if (expectPadding && (RDHUtils::getPacketCounter(rdh) > packetCounter + 1) && packetCounter >= 0) { // packet counter check makes sense only for data with padding (no UL)
     if (irHBF.isDummy()) {
       irHBF = RDHUtils::getHeartBeatIR(rdh);
@@ -170,6 +173,7 @@ uint8_t GBTLink::checkErrorsRDH(const RDH& rdh)
     err |= uint8_t(Warning);
   }
   packetCounter = RDHUtils::getPacketCounter(rdh);
+  */
   return err;
 }
 
