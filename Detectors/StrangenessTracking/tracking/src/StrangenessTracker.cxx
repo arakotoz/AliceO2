@@ -152,8 +152,8 @@ void StrangenessTracker::process()
 
           decayVtxTrackClone.getPxPyPzGlo(mStrangeTrack.mDecayMom);
           auto p2mom = decayVtxTrackClone.getP2();
-          auto p2pos = mFitter3Body.getTrack(1).getP2(); // positive V0 daughter
-          auto p2neg = mFitter3Body.getTrack(2).getP2(); // negative V0 daughter
+          auto p2pos = mFitter3Body.getTrack(0).getP2(); // positive V0 daughter
+          auto p2neg = mFitter3Body.getTrack(1).getP2(); // negative V0 daughter
           if (alphaV0 > 0) {
             mStrangeTrack.mMasses[0] = calcMotherMass(p2mom, p2pos, p2neg, PID::Helium3, PID::Pion); // Hypertriton invariant mass at decay vertex
             mStrangeTrack.mMasses[1] = calcMotherMass(p2mom, p2pos, p2neg, PID::Alpha, PID::Pion);   // Hyperhydrogen4Lam invariant mass at decay vertex
@@ -216,8 +216,8 @@ void StrangenessTracker::process()
           }
           decayVtxTrackClone.getPxPyPzGlo(mStrangeTrack.mDecayMom);
           auto p2mom = decayVtxTrackClone.getP2();
-          auto p2V0 = mFitter3Body.getTrack(1).getP2();
-          auto p2bach = mFitter3Body.getTrack(2).getP2();
+          auto p2V0 = mFitter3Body.getTrack(0).getP2();
+          auto p2bach = mFitter3Body.getTrack(1).getP2();
           mStrangeTrack.mMasses[0] = calcMotherMass(p2mom, p2V0, p2bach, PID::Lambda, PID::Pion); // Xi invariant mass at decay vertex
           mStrangeTrack.mMasses[1] = calcMotherMass(p2mom, p2V0, p2bach, PID::Lambda, PID::Kaon); // Omega invariant mass at decay vertex
 
@@ -244,7 +244,7 @@ bool StrangenessTracker::matchDecayToITStrack(float decayR)
   auto trackClusters = getTrackClusters();
   auto trackClusSizes = getTrackClusterSizes();
   auto& lastClus = trackClusters[0];
-  mStrangeTrack.mMatchChi2 = getMatchingChi2(mStrangeTrack.mMother, mITStrack, lastClus);
+  mStrangeTrack.mMatchChi2 = getMatchingChi2(mStrangeTrack.mMother, mITStrack);
 
   auto radTol = decayR < 4 ? mStrParams->mRadiusTolIB : mStrParams->mRadiusTolOB;
   auto nMinClusMother = trackClusters.size() < 4 ? 2 : mStrParams->mMinMotherClus;
