@@ -52,6 +52,16 @@ using DataRequest = o2::globaltracking::DataRequest;
 namespace o2::aodproducer
 {
 
+template <typename T>
+void addTableToOutput(std::vector<OutputSpec>& o, int t = 0)
+{
+  o.emplace_back(OutputLabel{o2::aod::MetadataTrait<T>::metadata::tableLabel()},
+                 o2::aod::MetadataTrait<T>::metadata::origin(),
+                 o2::aod::MetadataTrait<T>::metadata::description(),
+                 t,
+                 Lifetime::Timeframe);
+}
+
 /// A structure or container to organize bunch crossing data of a timeframe
 /// and to facilitate fast lookup and search within bunch crossings.
 class BunchCrossings
@@ -229,6 +239,15 @@ class AODProducerWorkflowDPL : public Task
     return std::uint64_t(mStartIR.toLong()) + relativeTime_to_LocalBC(relativeTimeStampInNS);
   }
 
+  template <typename T>
+  Produces<T> createTableCursor(ProcessingContext& pc)
+  {
+    Produces<T> c;
+    c.resetCursor(pc.outputs().make<TableBuilder>(c.ref()));
+    c.setLabel(o2::aod::MetadataTrait<T>::metadata::tableLabel());
+    return c;
+  }
+
   int mNThreads = 1;
   bool mUseMC = true;
   bool mEnableSV = true; // enable secondary vertices
@@ -246,6 +265,7 @@ class AODProducerWorkflowDPL : public Task
   TString mAnchorProd{""};
   TString mRecoPass{""};
   TStopwatch mTimer;
+  bool mEMCselectLeading{false};
 
   // unordered map connects global indices and table indices of barrel tracks
   std::unordered_map<GIndex, int> mGIDToTableID;
@@ -264,6 +284,7 @@ class AODProducerWorkflowDPL : public Task
   int mTableV0ID{0};
 
   // Strangeness tracking indices lookup tables
+  std::vector<int> mVertexStrLUT;                    /// LUT for accessing strangeness tracks for each vertex
   std::vector<std::pair<int, int>> mCollisionStrTrk; /// collision index and original index of the strangeness track
   std::vector<int> mStrTrkIndices;                   /// indices of strangeness tracks in the track table
 
@@ -297,6 +318,7 @@ class AODProducerWorkflowDPL : public Task
   // The first two indices are not sparse whereas the trackID index is sparse which explains
   // the combination of vector and map
   std::vector<std::vector<std::unordered_map<int, int>*>> mToStore;
+  o2::steer::MCKinematicsReader* mMCKineReader = nullptr; //!
 
   // production metadata
   std::vector<TString> mMetaDataKeys;
@@ -497,19 +519,20 @@ class AODProducerWorkflowDPL : public Task
 
   template <typename MCParticlesCursorType>
   void fillMCParticlesTable(o2::steer::MCKinematicsReader& mcReader,
-                            const MCParticlesCursorType& mcParticlesCursor,
+                            MCParticlesCursorType& mcParticlesCursor,
                             const gsl::span<const o2::dataformats::VtxTrackRef>& primVer2TRefs,
                             const gsl::span<const GIndex>& GIndices,
                             const o2::globaltracking::RecoContainer& data,
                             const std::vector<std::vector<int>>& mcColToEvSrc);
 
   template <typename MCTrackLabelCursorType, typename MCMFTTrackLabelCursorType, typename MCFwdTrackLabelCursorType>
-  void fillMCTrackLabelsTable(const MCTrackLabelCursorType& mcTrackLabelCursor,
-                              const MCMFTTrackLabelCursorType& mcMFTTrackLabelCursor,
-                              const MCFwdTrackLabelCursorType& mcFwdTrackLabelCursor,
+  void fillMCTrackLabelsTable(MCTrackLabelCursorType& mcTrackLabelCursor,
+                              MCMFTTrackLabelCursorType& mcMFTTrackLabelCursor,
+                              MCFwdTrackLabelCursorType& mcFwdTrackLabelCursor,
                               const o2::dataformats::VtxTrackRef& trackRef,
                               const gsl::span<const GIndex>& primVerGIs,
-                              const o2::globaltracking::RecoContainer& data);
+                              const o2::globaltracking::RecoContainer& data,
+                              int vertexId = -1);
 
   std::uint64_t fillBCSlice(int (&slice)[2], double tmin, double tmax, const std::map<uint64_t, int>& bcsMap) const;
 
@@ -519,13 +542,13 @@ class AODProducerWorkflowDPL : public Task
   // helper for trd pattern
   uint8_t getTRDPattern(const o2::trd::TrackTRD& track);
 
-  template <typename TCaloHandler, typename TCaloCursor, typename TCaloTRGCursor>
-  void addToCaloTable(const TCaloHandler& caloHandler, const TCaloCursor& caloCellCursor, const TCaloTRGCursor& caloTRGCursor,
-                      int eventID, int bcID, int8_t caloType);
+  template <typename TCaloHandler, typename TCaloCursor, typename TCaloTRGCursor, typename TMCCaloLabelCursor>
+  void addToCaloTable(TCaloHandler& caloHandler, TCaloCursor& caloCellCursor, TCaloTRGCursor& caloTRGCursor,
+                      TMCCaloLabelCursor& mcCaloCellLabelCursor, int eventID, int bcID, int8_t caloType);
 
-  template <typename TCaloCursor, typename TCaloTRGCursor>
-  void fillCaloTable(const TCaloCursor& caloCellCursor, const TCaloTRGCursor& caloTRGCursor,
-                     const std::map<uint64_t, int>& bcsMap,
+  template <typename TCaloCursor, typename TCaloTRGCursor, typename TMCCaloLabelCursor>
+  void fillCaloTable(TCaloCursor& caloCellCursor, TCaloTRGCursor& caloTRGCursor,
+                     TMCCaloLabelCursor& mcCaloCellLabelCursor, const std::map<uint64_t, int>& bcsMap,
                      const o2::globaltracking::RecoContainer& data);
 };
 

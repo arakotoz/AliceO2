@@ -19,13 +19,13 @@
 
 #include <fairlogger/Logger.h> // for LOG
 
-//#include <TGeoArb8.h>           // for TGeoArb8
-//#include <TGeoBBox.h>    // for TGeoBBox
-//#include <TGeoCone.h>    // for TGeoConeSeg, TGeoCone
+// #include <TGeoArb8.h>           // for TGeoArb8
+// #include <TGeoBBox.h>    // for TGeoBBox
+// #include <TGeoCone.h>    // for TGeoConeSeg, TGeoCone
 #include <TGeoPcon.h>    // for TGeoPcon
 #include <TGeoManager.h> // for TGeoManager, gGeoManager
 #include <TGeoMatrix.h>  // for TGeoCombiTrans, TGeoRotation, etc
-//#include <TGeoTrd1.h>           // for TGeoTrd1
+// #include <TGeoTrd1.h>           // for TGeoTrd1
 #include <TGeoTube.h>           // for TGeoTube, TGeoTubeSeg
 #include <TGeoVolume.h>         // for TGeoVolume, TGeoVolumeAssembly
 #include <TGeoXtru.h>           // for TGeoXtru
@@ -79,6 +79,8 @@ const Double_t V3Cage::sCageSidePanelGuideInHi = 204.0 * sMm;
 const Double_t V3Cage::sCageSidePanelGuideWide = 44.0 * sMm;
 const Double_t V3Cage::sCageSidePanelGuidThik1 = 6.0 * sMm;
 const Double_t V3Cage::sCageSidePanelGuidThik2 = 8.0 * sMm;
+const Double_t V3Cage::sCageSidePanelMidBarWid = 15.0 * sMm;
+const Double_t V3Cage::sCageSidePanelSidBarWid = 15.0 * sMm;
 
 const Double_t V3Cage::sCageSidePanelRail1Ypos[2] = {226.5 * sMm, 147.5 * sMm};
 const Double_t V3Cage::sCageSidePanelRail2Ypos = 74.5 * sMm;
@@ -105,6 +107,16 @@ const Double_t V3Cage::sCageECCableCrosInXWid = 266.8 * sMm;
 const Double_t V3Cage::sCageECCableCrosInThik = 4 * sMm;
 const Double_t V3Cage::sCageECCableCrosInZLen = 10.2 * sMm;
 const Double_t V3Cage::sCageECCableCrosSidWid = 8 * sMm;
+
+const Double_t V3Cage::sCageCrossXWidthTot = 973 * sMm;
+const Double_t V3Cage::sCageCrossXWidthExt = 944 * sMm;
+const Double_t V3Cage::sCageCrossXWidthInt = 904 * sMm;
+const Double_t V3Cage::sCageCrossYHeightTot = 244 * sMm;
+const Double_t V3Cage::sCageCrossYHeightInt = 220 * sMm;
+const Double_t V3Cage::sCageCrossYMid = (126 + 5.5) * sMm;
+const Double_t V3Cage::sCageCrossZLength = 8 * sMm;
+const Double_t V3Cage::sCageCrossBarThick = 20 * sMm;
+const Double_t V3Cage::sCageCrossBarPhi = 25; // Deg
 
 ClassImp(V3Cage);
 
@@ -144,6 +156,7 @@ void V3Cage::createAndPlaceCage(TGeoVolume* mother, const TGeoManager* mgr)
   TGeoVolume* cageCoverRib = createCageCoverRib(mgr);
   TGeoVolume* cageEndCap = createCageEndCap(mgr);
   TGeoVolume* cageSidePanel = createCageSidePanel(mgr);
+  TGeoVolume* cageClosingCross = createCageClosingCross(mgr);
 
   // Now place all elements
   mother->AddNode(cageCover, 1, new TGeoTranslation(0, sCageYInBarrel, 0));
@@ -169,6 +182,10 @@ void V3Cage::createAndPlaceCage(TGeoVolume* mother, const TGeoManager* mgr)
   xpos = sCageSidePanelXDist / 2 - sCageSidePanelCoreThick / 2 - sCageSidePanelFoilThick;
   mother->AddNode(cageSidePanel, 1, new TGeoTranslation(xpos, sCageYInBarrel, zposSP));
   mother->AddNode(cageSidePanel, 2, new TGeoCombiTrans(-xpos, sCageYInBarrel, zposSP, new TGeoRotation("", 180, 0, 0)));
+
+  Double_t zposCC = -zpos + sCageSidePanelLength + sCageCrossZLength / 2;
+  mother->AddNode(cageClosingCross, 1, new TGeoTranslation(0, sCageYInBarrel, zposCC));
+  mother->AddNode(cageClosingCross, 2, new TGeoCombiTrans(0, sCageYInBarrel, zposCC, new TGeoRotation("", 0, 180, 0)));
 
   // The end cap is only on C side
   zpos += sCageECCableCrosTotZ / 2;
@@ -347,6 +364,7 @@ TGeoVolume* V3Cage::createCageSidePanel(const TGeoManager* mgr)
   //         The side panel as a TGeoVolumeAssembly
   //
   // Created:      30 Sep 2022  Mario Sitta
+  // Updated:      20 May 2023  Mario Sitta  Mid and side bars added
   //
 
   // Local variables
@@ -376,6 +394,18 @@ TGeoVolume* V3Cage::createCageSidePanel(const TGeoManager* mgr)
 
   // The shortest rails
   TGeoCompositeShape* rail3Sh = createCageSidePanelRail(sCageSidePanelRail3Len, 3);
+
+  // The middle bar: a BBox
+  xlen = sCageSidePanelCoreThick / 2;
+  ylen = sCageSidePanelMidBarWid / 2;
+  zlen = (sCageSidePanelLength - sCageSidePanelRail3Len - sCageSidePanelSidBarWid) / 2;
+  TGeoBBox* midBarSh = new TGeoBBox(xlen, ylen, zlen);
+
+  // The side bar: a BBox
+  xlen = sCageSidePanelCoreThick / 2;
+  ylen = sCageSidePanelWidth / 2;
+  zlen = sCageSidePanelSidBarWid / 2;
+  TGeoBBox* sidBarSh = new TGeoBBox(xlen, ylen, zlen);
 
   // The elements of the guide:
   // - the vertical part: a BBox
@@ -433,6 +463,14 @@ TGeoVolume* V3Cage::createCageSidePanel(const TGeoManager* mgr)
   rail3Vol->SetFillColor(kGray);
   rail3Vol->SetLineColor(kGray);
 
+  TGeoVolume* midBarVol = new TGeoVolume("CageSidePanelMiddleBar", midBarSh, medAlAlloy);
+  midBarVol->SetFillColor(kGray);
+  midBarVol->SetLineColor(kGray);
+
+  TGeoVolume* sidBarVol = new TGeoVolume("CageSidePanelSideBar", sidBarSh, medAlAlloy);
+  sidBarVol->SetFillColor(kGray);
+  sidBarVol->SetLineColor(kGray);
+
   TGeoVolume* guideVol = new TGeoVolume("CageSidePanelGuide", guideSh, medFabric);
   guideVol->SetFillColor(kViolet);
   guideVol->SetLineColor(kViolet);
@@ -464,6 +502,12 @@ TGeoVolume* V3Cage::createCageSidePanel(const TGeoManager* mgr)
     sidePanelVol->AddNode(rail3Vol, j + 4, new TGeoTranslation(xpos, -ypos, zpos));
   }
 
+  zpos = sCageSidePanelLength / 2 - midBarSh->GetDZ() - sCageSidePanelSidBarWid;
+  sidePanelVol->AddNode(midBarVol, 1, new TGeoTranslation(0, 0, -zpos));
+
+  zpos = sCageSidePanelLength / 2 - sidBarSh->GetDZ();
+  sidePanelVol->AddNode(sidBarVol, 1, new TGeoTranslation(0, 0, -zpos));
+
   xpos = sCageSidePanelCoreThick / 2 + sCageSidePanelFoilThick + sCageSidePanelGuidThik2 / 2;
   zpos = (sCageSidePanelLength - sCageSidePanelGuideLen) / 2;
   sidePanelVol->AddNode(guideVol, 1, new TGeoTranslation(xpos, 0, -zpos));
@@ -488,6 +532,7 @@ TGeoCompositeShape* V3Cage::createCageSidePanelCoreFoil(const Double_t xthick, c
   //         The side panel core or foil as a TGeoCompositeShape
   //
   // Created:      07 Oct 2022  Mario Sitta
+  // Updated:      20 May 2023  Mario Sitta  Mid and side bars added
   //
 
   // Local variables
@@ -550,6 +595,30 @@ TGeoCompositeShape* V3Cage::createCageSidePanelCoreFoil(const Double_t xthick, c
     rail3Mat[j + 3]->RegisterYourself();
   }
 
+  // The hole for the middle bar: a BBox
+  xlen = 1.1 * sCageSidePanelCoreThick / 2;
+  ylen = sCageSidePanelMidBarWid / 2;
+  zlen = (sCageSidePanelLength - sCageSidePanelRail3Len) / 2;
+  TGeoBBox* midBarHol = new TGeoBBox(xlen, ylen, zlen);
+  midBarHol->SetName("midbar");
+
+  zpos = sCageSidePanelRail3Len / 2;
+  TGeoTranslation* midBarMat = new TGeoTranslation(0, 0, -zpos);
+  midBarMat->SetName("midbarmat");
+  midBarMat->RegisterYourself();
+
+  // The hole for the side bar: a BBox
+  xlen = 1.1 * sCageSidePanelCoreThick / 2;
+  ylen = 1.1 * sCageSidePanelWidth / 2;
+  zlen = sCageSidePanelSidBarWid;
+  TGeoBBox* sidBarHol = new TGeoBBox(xlen, ylen, zlen);
+  sidBarHol->SetName("sidebar");
+
+  zpos = sCageSidePanelLength / 2;
+  TGeoTranslation* sidBarMat = new TGeoTranslation(0, 0, -zpos);
+  sidBarMat->SetName("sidebarmat");
+  sidBarMat->RegisterYourself();
+
   // The actual shape: a CompositeShape
   TString compoShape = Form("%sbodyshape", shpref);
   for (Int_t j = 0; j < 4; j++) {
@@ -560,6 +629,11 @@ TGeoCompositeShape* V3Cage::createCageSidePanelCoreFoil(const Double_t xthick, c
   }
   for (Int_t j = 0; j < 6; j++) {
     compoShape += Form("-%sshortrail:shortrailmat%d", shpref, j);
+  }
+
+  // The mid and side bar holes are present only in the core shape
+  if (strcmp(shpref, "core") == 0) {
+    compoShape += "-midbar:midbarmat-sidebar:sidebarmat";
   }
 
   TGeoCompositeShape* corefoilSh = new TGeoCompositeShape(compoShape);
@@ -897,4 +971,99 @@ TGeoCompositeShape* V3Cage::createCageEndCapCableCross(const TGeoManager* mgr)
   TGeoCompositeShape* cableCross = new TGeoCompositeShape(crossShape.Data());
 
   return cableCross;
+}
+
+TGeoVolume* V3Cage::createCageClosingCross(const TGeoManager* mgr)
+{
+  //
+  // Creates the Cage Closing Cross (from drawings ALIITSUP0242)
+  //
+  // Input:
+  //         mgr : the GeoManager (used only to get the proper material)
+  //
+  // Output:
+  //
+  // Return:
+  //         The closing cross as a TGeoVolume
+  //
+  // Created:      29 May 2023  Mario Sitta
+  //
+
+  // Local variables
+  const Int_t nv = 8;
+  Double_t xv[nv], yv[nv];
+  Double_t xlen, ylen, zlen;
+  Double_t xpos, ypos;
+
+  TString compoShape;
+
+  // A single vertical post: a Xtru
+  xv[0] = 0.;
+  yv[0] = 0.;
+  xv[1] = (sCageCrossXWidthTot - sCageCrossXWidthInt) / 2;
+  yv[1] = yv[0];
+  xv[2] = xv[1];
+  yv[2] = (sCageCrossYHeightTot - sCageCrossYHeightInt) / 2;
+  xv[3] = (sCageCrossXWidthExt - sCageCrossXWidthInt) / 2;
+  yv[3] = yv[2];
+  xv[4] = xv[3];
+  yv[4] = yv[3] + sCageCrossYHeightInt;
+  xv[5] = xv[2];
+  yv[5] = yv[4];
+  xv[6] = xv[5];
+  yv[6] = sCageCrossYHeightTot;
+  xv[7] = xv[0];
+  yv[7] = yv[6];
+
+  zlen = sCageCrossZLength / 2;
+
+  TGeoXtru* vpost = new TGeoXtru(2);
+  vpost->SetName("crossvertpost");
+  vpost->DefinePolygon(nv, xv, yv);
+  vpost->DefineSection(0, -zlen);
+  vpost->DefineSection(1, zlen);
+
+  // The vertical post matrices
+  xpos = sCageCrossXWidthInt / 2;
+  TGeoTranslation* vpostmat1 = new TGeoTranslation("vertpostmat1", xpos, 0, 0);
+  vpostmat1->RegisterYourself();
+
+  TGeoCombiTrans* vpostmat2 = new TGeoCombiTrans(-xpos, 0, 0, new TGeoRotation("", 90, 180, -90));
+  vpostmat2->SetName("vertpostmat2");
+  vpostmat2->RegisterYourself();
+
+  compoShape = Form("crossvertpost:vertpostmat1+crossvertpost:vertpostmat2");
+
+  // A single oblique post: a BBox
+  Double_t leg = vpost->GetY(4);
+  xlen = TMath::Sqrt(sCageCrossXWidthInt * sCageCrossXWidthInt + leg * leg) / 2;
+  ylen = sCageCrossBarThick / 2;
+  TGeoBBox* xpost = new TGeoBBox("crossoblqpost", xlen, ylen, zlen);
+
+  // The oblique post matrices
+  Double_t phi = sCageCrossBarPhi / 2;
+  ypos = sCageCrossYHeightTot - sCageCrossYMid;
+
+  TGeoCombiTrans* xpostmat1 = new TGeoCombiTrans(0, ypos, 0, new TGeoRotation("", phi, 0, 0));
+  xpostmat1->SetName("oblqpostmat1");
+  xpostmat1->RegisterYourself();
+
+  TGeoCombiTrans* xpostmat2 = new TGeoCombiTrans(0, ypos, 0, new TGeoRotation("", -phi, 0, 0));
+  xpostmat2->SetName("oblqpostmat2");
+  xpostmat2->RegisterYourself();
+
+  compoShape += Form("+crossoblqpost:oblqpostmat1+crossoblqpost:oblqpostmat2");
+
+  // The actual closing cross shape: a CompositeShape
+  TGeoCompositeShape* closCrossSh = new TGeoCompositeShape(compoShape);
+
+  // We have the shape: now create the real volume
+  TGeoMedium* medAl = mgr->GetMedium(Form("%s_ALUMINUM$", GetDetName()));
+
+  TGeoVolume* closCrossVol = new TGeoVolume("CageClosingCross", closCrossSh, medAl);
+  closCrossVol->SetFillColor(kGray);
+  closCrossVol->SetLineColor(kGray);
+
+  // Finally return the closing cross volume
+  return closCrossVol;
 }

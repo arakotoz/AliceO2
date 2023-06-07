@@ -258,7 +258,7 @@ o2::framework::ServiceSpec CommonServices::driverClientSpec()
       }
       auto [ip, port] = o2::framework::parse_websocket_url(backend.c_str());
       return ServiceHandle{TypeIdHelpers::uniqueId<DriverClient>(),
-                           new WSDriverClient(services, state, ip.c_str(), port)};
+                           new WSDriverClient(services, ip.c_str(), port)};
     },
     .configure = noConfiguration(),
     .kind = ServiceKind::Global};
@@ -341,9 +341,8 @@ o2::framework::ServiceSpec CommonServices::dataSender()
   return ServiceSpec{
     .name = "datasender",
     .init = [](ServiceRegistryRef services, DeviceState&, fair::mq::ProgOptions& options) -> ServiceHandle {
-      auto& spec = services.get<DeviceSpec const>();
       return ServiceHandle{TypeIdHelpers::uniqueId<DataSender>(),
-                           new DataSender(services, spec.sendingPolicy)};
+                           new DataSender(services)};
     },
     .configure = noConfiguration(),
     .preProcessing = [](ProcessingContext&, void* service) {
@@ -764,6 +763,13 @@ o2::framework::ServiceSpec CommonServices::dataProcessingStats()
                    .minPublishInterval = quickUpdateInterval,
                    .maxRefreshLatency = onlineRefreshLatency,
                    .sendInitialValue = true},
+        MetricSpec{.name = "cpu_usage_fraction",
+                   .metricId = (int)ProcessingStatsId::CPU_USAGE_FRACTION,
+                   .kind = Kind::Rate,
+                   .scope = Scope::Online,
+                   .minPublishInterval = quickUpdateInterval,
+                   .maxRefreshLatency = onlineRefreshLatency,
+                   .sendInitialValue = true},
         MetricSpec{.name = "performed_computations",
                    .metricId = (int)ProcessingStatsId::PERFORMED_COMPUTATIONS,
                    .kind = Kind::UInt64,
@@ -941,7 +947,7 @@ o2::framework::ServiceSpec CommonServices::dataAllocatorSpec()
 }
 
 /// Split a string into a vector of strings using : as a separator.
-std::vector<ServiceSpec> CommonServices::defaultServices(int numThreads)
+std::vector<ServiceSpec> CommonServices::defaultServices(std::string extraPlugins, int numThreads)
 {
   std::vector<ServiceSpec> specs{
     dataProcessorContextSpec(),
@@ -970,10 +976,10 @@ std::vector<ServiceSpec> CommonServices::defaultServices(int numThreads)
     CommonMessageBackends::stringBackendSpec(),
     decongestionSpec()};
 
-  std::string loadableServicesStr;
+  std::string loadableServicesStr = extraPlugins;
   // Do not load InfoLogger by default if we are not at P2.
   DeploymentMode deploymentMode = DefaultsHelpers::deploymentMode();
-  if (deploymentMode == DeploymentMode::OnlineDDS || deploymentMode == DeploymentMode::OnlineECS) {
+  if (deploymentMode == DeploymentMode::OnlineDDS || deploymentMode == DeploymentMode::OnlineECS || deploymentMode == DeploymentMode::OnlineAUX) {
     loadableServicesStr += "O2FrameworkDataTakingSupport:InfoLoggerContext,O2FrameworkDataTakingSupport:InfoLogger";
   }
   // Load plugins depending on the environment

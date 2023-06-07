@@ -279,6 +279,7 @@ bool SVertexer::acceptTrack(GIndex gid, const o2::track::TrackParCov& trc) const
   if (gid.isPVContributor() && mSVParams->maxPVContributors < 1) {
     return false;
   }
+
   // DCA to mean vertex
   if (mSVParams->minDCAToPV > 0.f) {
     o2::track::TrackPar trp(trc);
@@ -309,6 +310,7 @@ void SVertexer::buildT2V(const o2::globaltracking::RecoContainer& recoData) // a
   // build track->vertices from vertices->tracks, rejecting vertex contributors if requested
   auto trackIndex = recoData.getPrimaryVertexMatchedTracks(); // Global ID's for associated tracks
   auto vtxRefs = recoData.getPrimaryVertexMatchedTrackRefs(); // references from vertex to these track IDs
+  bool isTPCloaded = recoData.isTrackSourceLoaded(GIndex::TPC);
 
   std::unordered_map<GIndex, std::pair<int, int>> tmap;
   std::unordered_map<GIndex, bool> rejmap;
@@ -326,11 +328,17 @@ void SVertexer::buildT2V(const o2::globaltracking::RecoContainer& recoData) // a
       if (!recoData.isTrackSourceLoaded(tvid.getSource())) {
         continue;
       }
-      // unconstrained TPC tracks require special treatment: there is no point in checking DCA to mean vertex since it is not precise,
-      // but we need to create a clone of TPC track constrained to this particular vertex time.
-      if (tvid.getSource() == GIndex::TPC && processTPCTrack(recoData.getTPCTrack(tvid), tvid, iv)) { // processTPCTrack may decide that this track does not need special treatment (e.g. it is constrained...)
-        continue;
+      if (tvid.getSource() == GIndex::TPC) {
+        if (mSVParams->mExcludeTPCtracks) {
+          continue;
+        }
+        // unconstrained TPC tracks require special treatment: there is no point in checking DCA to mean vertex since it is not precise,
+        // but we need to create a clone of TPC track constrained to this particular vertex time.
+        if (processTPCTrack(recoData.getTPCTrack(tvid), tvid, iv)) {
+          continue;
+        }
       }
+
       if (tvid.isAmbiguous()) { // was this track already processed?
         auto tref = tmap.find(tvid);
         if (tref != tmap.end()) {
@@ -343,7 +351,19 @@ void SVertexer::buildT2V(const o2::globaltracking::RecoContainer& recoData) // a
         }
       }
       const auto& trc = recoData.getTrackParam(tvid);
-      if (!acceptTrack(tvid, trc)) {
+
+      bool heavyIonisingParticle = false;
+      auto tpcGID = recoData.getTPCContributorGID(tvid);
+      if (tpcGID.isIndexSet() && isTPCloaded) {
+        auto& tpcTrack = recoData.getTPCTrack(tpcGID);
+        float dEdxTPC = tpcTrack.getdEdx().dEdxTotTPC;
+        if (dEdxTPC > mSVParams->minTPCdEdx && trc.getP() > mSVParams->minMomTPCdEdx) // accept high dEdx tracks (He3, He4)
+        {
+          heavyIonisingParticle = true;
+        }
+      }
+
+      if (!acceptTrack(tvid, trc) && !heavyIonisingParticle) {
         if (tvid.isAmbiguous()) {
           rejmap[tvid] = true;
         }
@@ -877,7 +897,7 @@ float SVertexer::correctTPCTrack(o2::track::TrackParCov& trc, const o2::tpc::Tra
   // TODO: at the moment, apply simple shift, but with Z-dependent calibration we may
   // need to do corrections on TPC cluster level and refit
   // This is a clone of MatchTPCITS::correctTPCTrack
-  float dDrift = ((tmus + mTPCDriftTimeOffset) * mMUS2TPCBin - tTPC.getTime0()) * mTPCBin2Z;
+  float dDrift = (tmus * mMUS2TPCBin - tTPC.getTime0()) * mTPCBin2Z;
   float driftErr = tmusErr * mMUS2TPCBin * mTPCBin2Z;
   // eventually should be refitted, at the moment we simply shift...
   trc.setZ(tTPC.getZ() + (tTPC.hasASideClustersOnly() ? dDrift : -dDrift));

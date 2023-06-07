@@ -217,7 +217,7 @@ class TPCFactorizeIDCSpec : public o2::framework::Task
       output.snapshot(Output{gDataOriginTPC, getDataDescriptionLane()}, mLaneId);
     }
 
-    if (mSendOutCCDB) {
+    if (mSendOutCCDB && (timeStampEnd > mTimestampStart)) {
       for (int iSide = 0; iSide < mSides.size(); ++iSide) {
         const Side side = mSides[iSide];
         LOGP(info, "Writing IDCs to CCDB for Side {}", static_cast<int>(side));
@@ -274,6 +274,7 @@ class TPCFactorizeIDCSpec : public o2::framework::Task
             } else {
               // check if map changed. if it changed update the map in the CCDB and store new map in buffer
               if (!(*padStatusMap.get() == *mPadFlagsMap.get())) {
+                mPadFlagsMap = std::move(padStatusMap);
                 LOGP(info, "Pad status map changed");
                 LOGP(info, "Writing pad status map to CCDB");
                 o2::ccdb::CcdbObjectInfo ccdbInfoPadFlags(CDBTypeMap.at(sideA ? CDBType::CalIDCPadStatusMapA : CDBType::CalIDCPadStatusMapC), std::string{}, std::string{}, std::map<std::string, std::string>{}, mTimestampStart, timeStampEnd);

@@ -42,6 +42,12 @@ namespace o2
 namespace strangeness_tracking
 {
 
+enum DauType : int {
+  kV0DauPos = 0,
+  kV0DauNeg = 1,
+  kBach = 2
+};
+
 struct ClusAttachments {
 
   std::array<unsigned int, 7> arr;
@@ -118,13 +124,19 @@ class StrangenessTracker
     return (qPos - qNeg) / (qPos + qNeg);
   };
 
-  double calcMotherMass(double p2Mother, double p2DauFirst, double p2DauSecond, PID pidDauFirst, PID pidDauSecond)
+  double calcMotherMass(const std::array<float, 3>& pDauFirst, const std::array<float, 3>& pDauSecond, PID pidDauFirst, PID pidDauSecond)
   {
-
     double m2DauFirst = PID::getMass2(pidDauFirst);
     double m2DauSecond = PID::getMass2(pidDauSecond);
+    double p2DauFirst = (pDauFirst[0] * pDauFirst[0]) + (pDauFirst[1] * pDauFirst[1]) + (pDauFirst[2] * pDauFirst[2]);
+    double p2DauSecond = (pDauSecond[0] * pDauSecond[0]) + (pDauSecond[1] * pDauSecond[1]) + (pDauSecond[2] * pDauSecond[2]);
     float ePos = std::sqrt(p2DauFirst + m2DauFirst), eNeg = std::sqrt(p2DauSecond + m2DauSecond);
+
     double e2Mother = (ePos + eNeg) * (ePos + eNeg);
+    double pxMother = (pDauFirst[0] + pDauSecond[0]);
+    double pyMother = (pDauFirst[1] + pDauSecond[1]);
+    double pzMother = (pDauFirst[2] + pDauSecond[2]);
+    double p2Mother = (pxMother * pxMother) + (pyMother * pyMother) + (pzMother * pzMother);
     return std::sqrt(e2Mother - p2Mother);
   }
 
@@ -150,7 +162,7 @@ class StrangenessTracker
     propPos.getPxPyPzGlo(pP);
     propNeg.getPxPyPzGlo(pN);
     std::array<float, 3> pV0 = {pP[0] + pN[0], pP[1] + pN[1], pP[2] + pN[2]};
-    newV0 = V0(v0XYZ, pV0, mFitterV0.calcPCACovMatrixFlat(0), propPos, propNeg, mV0dauIDs[0], mV0dauIDs[1], PID::HyperTriton);
+    newV0 = V0(v0XYZ, pV0, mFitterV0.calcPCACovMatrixFlat(0), propPos, propNeg, mV0dauIDs[kV0DauPos], mV0dauIDs[kV0DauNeg], PID::HyperTriton);
     return true;
   };
 

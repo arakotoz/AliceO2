@@ -170,7 +170,7 @@ void EMCALChannelCalibrator<DataInput, DataOutput>::finalizeSlot(o2::calibration
     // for the CCDB entry
     auto clName = o2::utils::MemFileHelper::getClassName(bcm);
     auto flName = o2::ccdb::CcdbApi::generateFileName(clName);
-    mInfoVector.emplace_back(CalibDB::getCDBPathBadChannelMap(), clName, flName, md, slot.getStartTimeMS(), o2::ccdb::CcdbObjectInfo::INFINITE_TIMESTAMP);
+    mInfoVector.emplace_back(CalibDB::getCDBPathBadChannelMap(), clName, flName, md, slot.getStartTimeMS(), slot.getEndTimeMS() + EMCALCalibParams::Instance().endTimeMargin, true);
     mCalibObjectVector.push_back(bcm);
 
     if ((EMCALCalibParams::Instance().localRootFilePath).find(".root") != std::string::npos) {
@@ -200,7 +200,7 @@ void EMCALChannelCalibrator<DataInput, DataOutput>::finalizeSlot(o2::calibration
     auto flName = o2::ccdb::CcdbApi::generateFileName(clName);
 
     //prepareCCDBobjectInfo
-    mInfoVector.emplace_back(CalibDB::getCDBPathTimeCalibrationParams(), clName, flName, md, slot.getStartTimeMS(), o2::ccdb::CcdbObjectInfo::INFINITE_TIMESTAMP);
+    mInfoVector.emplace_back(CalibDB::getCDBPathTimeCalibrationParams(), clName, flName, md, slot.getStartTimeMS(), slot.getEndTimeMS() + EMCALCalibParams::Instance().endTimeMargin, true);
     mCalibObjectVector.push_back(tcd);
 
     if ((EMCALCalibParams::Instance().localRootFilePath).find(".root") != std::string::npos) {
@@ -249,7 +249,7 @@ bool EMCALChannelCalibrator<DataInput, DataOutput>::saveLastSlotData(TFile& fl)
     auto histTime = c->getHistoTime();
 
     TH2F hEnergy = o2::utils::TH2FFromBoost(hist);
-    TH2F hTime = o2::utils::TH2FFromBoost(histTime);
+    TH2F hTime = o2::utils::TH2FFromBoost(histTime, "histTime");
     TH1D hNEvents("hNEvents", "hNEvents", 1, 0, 1);
     hNEvents.SetBinContent(1, c->getNEvents());
 

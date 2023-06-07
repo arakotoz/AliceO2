@@ -63,16 +63,32 @@ class CorrectionMapsHelper
 
   void setCorrMap(GPUCA_NAMESPACE::gpu::TPCFastTransform* m);
   void setCorrMapRef(GPUCA_NAMESPACE::gpu::TPCFastTransform* m);
-
+  void reportScaling();
   void setInstLumi(float v)
   {
-    mInstLumi = v;
-    mLumiScale = mMeanLumi ? mInstLumi / mMeanLumi : 0.f;
+    if (v != mInstLumi) {
+      mInstLumi = v;
+      updateLumiScale();
+    }
   }
+
   void setMeanLumi(float v)
   {
-    mMeanLumi = v;
-    mLumiScale = mMeanLumi ? mInstLumi / mMeanLumi : 0.f;
+    if (v != mMeanLumi) {
+      mMeanLumi = v;
+      updateLumiScale();
+    }
+  }
+
+  void updateLumiScale()
+  {
+    if (mMeanLumi < 0.f || mInstLumi < 0.f) {
+      mLumiScale = -1.f;
+    } else {
+      mLumiScale = mMeanLumi ? mInstLumi / mMeanLumi : 0.f;
+    }
+    setUpdatedLumi();
+    reportScaling();
   }
 
   GPUd() float getInstLumi() const { return mInstLumi; }
@@ -94,15 +110,27 @@ class CorrectionMapsHelper
   void setOwner(bool v);
   void acknowledgeUpdate() { mUpdatedFlags = 0; }
 
+  void setUseCTPLumi(bool v) { mUseCTPLumi = v; }
+  bool getUseCTPLumi() const { return mUseCTPLumi; }
+
+  void setMeanLumiOverride(float f) { mMeanLumiOverride = f; }
+  float getMeanLumiOverride() const { return mMeanLumiOverride; }
+
+  void setInstLumiOverride(float f) { mInstLumiOverride = f; }
+  float getInstLumiOverride() const { return mInstLumiOverride; }
+
  protected:
   enum UpdateFlags { MapBit = 0x1,
                      MapRefBit = 0x2,
                      LumiBit = 0x4 };
   bool mOwner = false; // is content of pointers owned by the helper
+  bool mUseCTPLumi = false; // require CTP Lumi for mInstLumi
   int mUpdatedFlags = 0;
   float mInstLumi = 0.;                            // instanteneous luminosity (a.u)
   float mMeanLumi = 0.;                            // mean luminosity of the map (a.u)
   float mLumiScale = 0.;                           // precalculated mInstLumi/mMeanLumi
+  float mMeanLumiOverride = -1.f;                  // optional value to override mean lumi
+  float mInstLumiOverride = -1.f;                  // optional value to override inst lumi
   GPUCA_NAMESPACE::gpu::TPCFastTransform* mCorrMap{nullptr};    // current transform
   GPUCA_NAMESPACE::gpu::TPCFastTransform* mCorrMapRef{nullptr}; // reference transform
 #ifndef GPUCA_ALIROOT_LIB
