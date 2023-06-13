@@ -8,23 +8,24 @@
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
-#include "TextDriverClient.h"
-#include "Framework/Logger.h"
 
-namespace o2::framework
+#ifndef O2_K0SINVMASS_STUDY_H
+#define O2_K0SINVMASS_STUDY_H
+
+#include "Framework/DataProcessorSpec.h"
+#include "ReconstructionDataFormats/GlobalTrackID.h"
+
+namespace o2
 {
-
-TextDriverClient::TextDriverClient(ServiceRegistryRef registry, DeviceState& deviceState)
+namespace its
 {
-}
-
-void TextDriverClient::tell(const char* msg, size_t s, bool flush)
+namespace study
 {
-  LOG(debug) << std::string_view{msg, s};
-}
+using mask_t = o2::dataformats::GlobalTrackID::mask_t;
 
-void TextDriverClient::flushPending(ServiceRegistryRef ref)
-{
-}
+o2::framework::DataProcessorSpec getK0sInvMassStudy(mask_t srcTracksMask, bool useMC = false);
+} // namespace study
+} // namespace its
+} // namespace o2
 
-} // namespace o2::framework
+#endif
