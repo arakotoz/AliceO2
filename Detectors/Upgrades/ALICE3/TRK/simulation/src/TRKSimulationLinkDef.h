@@ -16,6 +16,7 @@
 #pragma link off all functions;
 
 #pragma link C++ class o2::trk::TRKLayer + ;
+#pragma link C++ class o2::trk::TRKServices + ;
 #pragma link C++ class o2::trk::Detector + ;
 #pragma link C++ class o2::base::DetImpl < o2::trk::Detector> + ;
 
