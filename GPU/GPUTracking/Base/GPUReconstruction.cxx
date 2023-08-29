@@ -671,8 +671,8 @@ void* GPUReconstruction::AllocateUnmanagedMemory(size_t size, int type)
     mUnmanagedChunks.emplace_back(new char[size + GPUCA_BUFFER_ALIGNMENT]);
     return GPUProcessor::alignPointer<GPUCA_BUFFER_ALIGNMENT>(mUnmanagedChunks.back().get());
   } else {
-    void* pool = type == GPUMemoryResource::MEMORY_GPU ? mDeviceMemoryPool : mHostMemoryPool;
-    void* poolend = type == GPUMemoryResource::MEMORY_GPU ? mDeviceMemoryPoolEnd : mHostMemoryPoolEnd;
+    void*& pool = type == GPUMemoryResource::MEMORY_GPU ? mDeviceMemoryPool : mHostMemoryPool;
+    void*& poolend = type == GPUMemoryResource::MEMORY_GPU ? mDeviceMemoryPoolEnd : mHostMemoryPoolEnd;
     char* retVal;
     GPUProcessor::computePointerWithAlignment(pool, retVal, size);
     if (pool > poolend) {
@@ -903,6 +903,31 @@ void GPUReconstruction::PrintMemoryStatistics()
   for (unsigned int i = 0; i < mChains.size(); i++) {
     mChains[i]->PrintMemoryStatistics();
   }
+}
+
+int GPUReconstruction::registerMemoryForGPU(const void* ptr, size_t size)
+{
+  if (mProcessingSettings.noGPUMemoryRegistration) {
+    return 0;
+  }
+  int retVal = registerMemoryForGPU_internal(ptr, size);
+  if (retVal == 0) {
+    mRegisteredMemoryPtrs.emplace(ptr);
+  }
+  return retVal;
+}
+
+int GPUReconstruction::unregisterMemoryForGPU(const void* ptr)
+{
+  if (mProcessingSettings.noGPUMemoryRegistration) {
+    return 0;
+  }
+  const auto& pos = mRegisteredMemoryPtrs.find(ptr);
+  if (pos != mRegisteredMemoryPtrs.end()) {
+    mRegisteredMemoryPtrs.erase(pos);
+    return unregisterMemoryForGPU_internal(ptr);
+  }
+  return 1;
 }
 
 template <class T>

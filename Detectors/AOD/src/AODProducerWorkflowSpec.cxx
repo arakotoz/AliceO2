@@ -63,6 +63,7 @@
 #include "ReconstructionDataFormats/Track.h"
 #include "ReconstructionDataFormats/TrackTPCITS.h"
 #include "ReconstructionDataFormats/TrackMCHMID.h"
+#include "ReconstructionDataFormats/MatchInfoHMP.h"
 #include "ReconstructionDataFormats/V0.h"
 #include "ReconstructionDataFormats/VtxTrackIndex.h"
 #include "ReconstructionDataFormats/VtxTrackRef.h"
@@ -783,6 +784,10 @@ void clearMCKeepStore(std::vector<std::vector<std::unordered_map<int, int>*>>& s
 // helper function to add a particle/track to the MC keep store
 void keepMCParticle(std::vector<std::vector<std::unordered_map<int, int>*>>& store, int source, int event, int track, int value = 1)
 {
+  if (track < 0) {
+    LOG(warn) << "trackID is smaller than 0. Neglecting";
+    return;
+  }
   if (!store[source][event]) {
     store[source][event] = new std::unordered_map<int, int>;
   }
@@ -1138,9 +1143,9 @@ template <typename V0CursorType, typename CascadeCursorType, typename Decay3Body
 void AODProducerWorkflowDPL::fillSecondaryVertices(const o2::globaltracking::RecoContainer& recoData, V0CursorType& v0Cursor, CascadeCursorType& cascadeCursor, Decay3BodyCursorType& decay3BodyCursor)
 {
 
-  auto v0s = recoData.getV0s();
-  auto cascades = recoData.getCascades();
-  auto decays3Body = recoData.getDecays3Body();
+  auto v0s = recoData.getV0sIdx();
+  auto cascades = recoData.getCascadesIdx();
+  auto decays3Body = recoData.getDecays3BodyIdx();
 
   v0Cursor.reserve(v0s.size());
   // filling v0s table
@@ -1232,11 +1237,43 @@ void AODProducerWorkflowDPL::fillSecondaryVertices(const o2::globaltracking::Rec
   }
 }
 
+template <typename HMPCursorType>
+void AODProducerWorkflowDPL::fillHMPID(const o2::globaltracking::RecoContainer& recoData, HMPCursorType& hmpCursor)
+{
+  auto hmpMatches = recoData.getHMPMatches();
+
+  hmpCursor.reserve(hmpMatches.size());
+
+  // filling HMPs table
+  for (size_t iHmp = 0; iHmp < hmpMatches.size(); iHmp++) {
+
+    const auto& match = hmpMatches[iHmp];
+
+    float xTrk, yTrk, theta, phi;
+    float xMip, yMip;
+    int charge, nph;
+
+    match.getHMPIDtrk(xTrk, yTrk, theta, phi);
+    match.getHMPIDmip(xMip, yMip, charge, nph);
+
+    auto photChargeVec = match.getPhotCharge();
+
+    float photChargeVec2[10]; // = {0.,0.,0.,0.,0.,0.,0.,0.,0.,0.};
+
+    for (Int_t i = 0; i < 10; i++) {
+
+      photChargeVec2[i] = photChargeVec[i];
+    }
+
+    hmpCursor(match.getTrackIndex(), match.getHMPsignal(), xTrk, yTrk, xMip, yMip, nph, charge, match.getMipClusSize(), match.getHmpMom(), photChargeVec2);
+  }
+}
+
 void AODProducerWorkflowDPL::prepareStrangenessTracking(const o2::globaltracking::RecoContainer& recoData)
 {
-  auto v0s = recoData.getV0s();
-  auto cascades = recoData.getCascades();
-  auto decays3Body = recoData.getDecays3Body();
+  auto v0s = recoData.getV0sIdx();
+  auto cascades = recoData.getCascadesIdx();
+  auto decays3Body = recoData.getDecays3BodyIdx();
 
   int sTrkID = 0;
   mCollisionStrTrk.clear();
@@ -1722,6 +1759,7 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   auto ambigFwdTracksCursor = createTableCursor<o2::aod::AmbiguousFwdTracks>(pc);
   auto v0sCursor = createTableCursor<o2::aod::V0s>(pc);
   auto zdcCursor = createTableCursor<o2::aod::Zdcs>(pc);
+  auto hmpCursor = createTableCursor<o2::aod::HMPIDs>(pc);
   auto caloCellsCursor = createTableCursor<o2::aod::Calos>(pc);
   auto caloCellsTRGTableCursor = createTableCursor<o2::aod::CaloTriggers>(pc);
   auto mcCaloLabelsCursor = createTableCursor<o2::aod::McCaloLabels_001>(pc);
@@ -1822,8 +1860,6 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   std::vector<std::vector<int>> mcColToEvSrc;
 
   if (mUseMC) {
-    // TODO: figure out collision weight
-    float mcColWeight = 1.;
     // filling mcCollision table
     int nMCCollisions = mcReader->getDigitizationContext()->getNCollisions();
     const auto& mcRecords = mcReader->getDigitizationContext()->getEventRecords();
@@ -1856,10 +1892,15 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
           // FIXME:
           // use generators' names for generatorIDs (?)
           auto& header = mcReader->getMCEventHeader(sourceID, eventID);
-          bool isValid{};
+          bool isValid = false;
           int subGeneratorId{-1};
           if (header.hasInfo(o2::mcgenid::GeneratorProperty::SUBGENERATORID)) {
             subGeneratorId = header.getInfo<int>(o2::mcgenid::GeneratorProperty::SUBGENERATORID, isValid);
+          }
+          isValid = false;
+          float mcColWeight = 1.;
+          if (header.hasInfo("weight")) {
+            mcColWeight = header.getInfo<float>("weight", isValid);
           }
           mcCollisionsCursor(bcID,
                              o2::mcgenid::getEncodedGenId(header.getInfo<int>(o2::mcgenid::GeneratorProperty::GENERATORID, isValid), sourceID, subGeneratorId),
@@ -1995,9 +2036,9 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   mGIDToTableMFTID.clear();
 
   if (mPropTracks) {
-    auto v0s = recoData.getV0s();
-    auto cascades = recoData.getCascades();
-    auto decays3Body = recoData.getDecays3Body();
+    auto v0s = recoData.getV0sIdx();
+    auto cascades = recoData.getCascadesIdx();
+    auto decays3Body = recoData.getDecays3BodyIdx();
     mGIDUsedBySVtx.reserve(v0s.size() * 2 + cascades.size() + decays3Body.size() * 3);
     for (const auto& v0 : v0s) {
       mGIDUsedBySVtx.insert(v0.getProngID(0));
@@ -2066,6 +2107,7 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   }
 
   fillSecondaryVertices(recoData, v0sCursor, cascadesCursor, decay3BodyCursor);
+  fillHMPID(recoData, hmpCursor);
   fillStrangenessTrackingTables(recoData, trackedV0Cursor, trackedCascadeCursor, tracked3BodyCurs);
 
   // helper map for fast search of a corresponding class mask for a bc
@@ -2516,6 +2558,9 @@ void AODProducerWorkflowDPL::finaliseCCDB(ConcreteDataMatcher& matcher, void* ob
 {
   // Note: strictly speaking, for Configurable params we don't need finaliseCCDB check, the singletons are updated at the CCDB fetcher level
   if (o2::base::GRPGeomHelper::instance().finaliseCCDB(matcher, obj)) {
+    if (matcher == ConcreteDataMatcher("GLO", "GRPMAGFIELD", 0)) {
+      o2::mch::TrackExtrap::setField();
+    }
     return;
   }
   if (matcher == ConcreteDataMatcher("ITS", "ALPIDEPARAM", 0)) {
@@ -2743,6 +2788,7 @@ DataProcessorSpec getAODProducerWorkflowSpec(GID::mask_t src, bool enableSV, boo
     OutputForTable<AmbiguousMFTTracks>::spec(),
     OutputForTable<AmbiguousFwdTracks>::spec(),
     OutputForTable<V0s>::spec(),
+    OutputForTable<HMPIDs>::spec(),
     OutputForTable<Zdcs>::spec(),
     OutputForTable<Calos>::spec(),
     OutputForTable<CaloTriggers>::spec(),
