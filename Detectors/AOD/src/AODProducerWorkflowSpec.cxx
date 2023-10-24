@@ -2111,33 +2111,33 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
   fillStrangenessTrackingTables(recoData, trackedV0Cursor, trackedCascadeCursor, tracked3BodyCurs);
 
   // helper map for fast search of a corresponding class mask for a bc
-  std::unordered_map<uint64_t, uint64_t> bcToClassMask;
+  std::unordered_map<uint64_t, std::pair<uint64_t, uint64_t>> bcToClassMask;
   if (mInputSources[GID::CTP]) {
     LOG(debug) << "CTP input available";
     for (auto& ctpDigit : ctpDigits) {
       uint64_t bc = ctpDigit.intRecord.toLong();
       uint64_t classMask = ctpDigit.CTPClassMask.to_ulong();
-      bcToClassMask[bc] = classMask;
+      uint64_t inputMask = ctpDigit.CTPInputMask.to_ulong();
+      bcToClassMask[bc] = {classMask, inputMask};
       // LOG(debug) << Form("classmask:0x%llx", classMask);
     }
   }
 
   // filling BC table
-  uint64_t triggerMask = 0;
   bcCursor.reserve(bcsMap.size());
   for (auto& item : bcsMap) {
     uint64_t bc = item.first;
+    std::pair<uint64_t, uint64_t> masks{0, 0};
     if (mInputSources[GID::CTP]) {
       auto bcClassPair = bcToClassMask.find(bc);
       if (bcClassPair != bcToClassMask.end()) {
-        triggerMask = bcClassPair->second;
-      } else {
-        triggerMask = 0;
+        masks = bcClassPair->second;
       }
     }
     bcCursor(runNumber,
              bc,
-             triggerMask);
+             masks.first,
+             masks.second);
   }
 
   bcToClassMask.clear();
@@ -2728,6 +2728,9 @@ DataProcessorSpec getAODProducerWorkflowSpec(GID::mask_t src, bool enableSV, boo
   if (enableStrangenessTracking) {
     dataRequest->requestStrangeTracks(useMC);
     LOGF(info, "requestStrangeTracks Finish");
+  }
+  if (src[GID::ITS]) {
+    dataRequest->requestClusters(GIndex::getSourcesMask("ITS"), false);
   }
   if (src[GID::TPC]) {
     dataRequest->requestClusters(GIndex::getSourcesMask("TPC"), false); // no need to ask for TOF clusters as they are requested with TOF tracks
