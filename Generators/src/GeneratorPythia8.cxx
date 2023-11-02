@@ -21,7 +21,7 @@
 #include "SimulationDataFormat/MCEventHeader.h"
 #include "SimulationDataFormat/MCGenProperties.h"
 #include "SimulationDataFormat/ParticleStatus.h"
-#include "Pythia8/HIUserHooks.h"
+#include "Pythia8/HIInfo.h"
 #include "Pythia8Plugins/PowhegHooks.h"
 #include "TSystem.h"
 #include "ZDCBase/FragmentParam.h"
