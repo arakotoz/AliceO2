@@ -1128,14 +1128,17 @@ void AODProducerWorkflowDPL::fillMCTrackLabelsTable(MCTrackLabelCursorType& mcTr
 
   // filling the tables with the strangeness tracking labels
   auto sTrackLabels = data.getStrangeTracksMCLabels();
-  mcTrackLabelCursor.reserve(mVertexStrLUT[vertexId + 1] + mcTrackLabelCursor.lastIndex());
-  for (int iS{mVertexStrLUT[vertexId]}; iS < mVertexStrLUT[vertexId + 1]; ++iS) {
-    auto& collStrTrk = mCollisionStrTrk[iS];
-    auto& label = sTrackLabels[collStrTrk.second];
-    MCLabels labelHolder;
-    labelHolder.labelID = label.isValid() ? (*mToStore[label.getSourceID()][label.getEventID()])[label.getTrackID()] : -1;
-    labelHolder.labelMask = (label.isFake() << 15) | (label.isNoise() << 14);
-    mcTrackLabelCursor(labelHolder.labelID, labelHolder.labelMask);
+  // check if vertexId and vertexId + 1 maps into mVertexStrLUT
+  if (!(vertexId < 0 || vertexId >= mVertexStrLUT.size() - 1)) {
+    mcTrackLabelCursor.reserve(mVertexStrLUT[vertexId + 1] + mcTrackLabelCursor.lastIndex());
+    for (int iS{mVertexStrLUT[vertexId]}; iS < mVertexStrLUT[vertexId + 1]; ++iS) {
+      auto& collStrTrk = mCollisionStrTrk[iS];
+      auto& label = sTrackLabels[collStrTrk.second];
+      MCLabels labelHolder;
+      labelHolder.labelID = label.isValid() ? (*mToStore[label.getSourceID()][label.getEventID()])[label.getTrackID()] : -1;
+      labelHolder.labelMask = (label.isFake() << 15) | (label.isNoise() << 14);
+      mcTrackLabelCursor(labelHolder.labelID, labelHolder.labelMask);
+    }
   }
 }
 
@@ -1261,11 +1264,14 @@ void AODProducerWorkflowDPL::fillHMPID(const o2::globaltracking::RecoContainer& 
     float photChargeVec2[10]; // = {0.,0.,0.,0.,0.,0.,0.,0.,0.,0.};
 
     for (Int_t i = 0; i < 10; i++) {
-
       photChargeVec2[i] = photChargeVec[i];
     }
-
-    hmpCursor(match.getTrackIndex(), match.getHMPsignal(), xTrk, yTrk, xMip, yMip, nph, charge, match.getMipClusSize(), match.getHmpMom(), photChargeVec2);
+    auto tref = mGIDToTableID.find(match.getTrackRef());
+    if (tref != mGIDToTableID.end()) {
+      hmpCursor(tref->second, match.getHMPsignal(), xTrk, yTrk, xMip, yMip, nph, charge, match.getMipClusSize(), match.getHmpMom(), photChargeVec2);
+    } else {
+      LOG(error) << "Could not find AOD track table entry for HMP-matched track " << match.getTrackRef().asString();
+    }
   }
 }
 
