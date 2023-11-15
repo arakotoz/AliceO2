@@ -52,13 +52,15 @@ void customize(std::vector<ConfigParamSpec>& workflowOptions)
   std::vector<ConfigParamSpec> options{
     {"input-type", VariantType::String, "digits", {"digitizer, digits, zsraw, zsonthefly, clustersnative, compressed-clusters-root, compressed-clusters-ctf, trd-tracklets"}},
     {"output-type", VariantType::String, "tracks", {"clustersnative, tracks, compressed-clusters-ctf, qa, no-shared-cluster-map, send-clusters-per-sector, trd-tracks, error-qa, tpc-triggers"}},
-    {"require-ctp-lumi", VariantType::Bool, false, {"require CTP lumi for TPC correction scaling"}},
+    {"lumi-type", VariantType::Int, 0, {"1 = require CTP lumi for TPC correction scaling, 2 = require TPC scalers for TPC correction scaling"}},
     {"disable-root-input", VariantType::Bool, true, {"disable root-files input reader"}},
     {"disable-mc", VariantType::Bool, false, {"disable sending of MC information"}},
     {"ignore-dist-stf", VariantType::Bool, false, {"do not subscribe to FLP/DISTSUBTIMEFRAME/0 message (no lost TF recovery)"}},
     {"configKeyValues", VariantType::String, "", {"Semicolon separated key=value strings (e.g.: 'TPCHwClusterer.peakChargeThreshold=4;...')"}},
     {"configFile", VariantType::String, "", {"configuration file for configurable parameters"}},
-    {"enableDoublePipeline", VariantType::Bool, false, {"enable GPU double pipeline mode"}}};
+    {"enableDoublePipeline", VariantType::Bool, false, {"enable GPU double pipeline mode"}},
+    {"tpc-deadMap-sources", VariantType::Int, -1, {"Sources to consider for TPC dead channel map creation; -1=all, 0=deactivated"}},
+  };
   o2::raw::HBFUtilsInitializer::addConfigOption(options);
   std::swap(workflowOptions, options);
 }
@@ -134,7 +136,7 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
   std::iota(tpcSectors.begin(), tpcSectors.end(), 0);
 
   auto inputType = cfgc.options().get<std::string>("input-type");
-  auto requireCTPLumi = cfgc.options().get<bool>("require-ctp-lumi");
+  auto lumiType = cfgc.options().get<int>("lumi-type");
   bool doMC = !cfgc.options().get<bool>("disable-mc");
 
   o2::conf::ConfigurableParam::updateFromFile(cfgc.options().get<std::string>("configFile"));
@@ -155,7 +157,7 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 
   GPURecoWorkflowSpec::Config cfg;
   cfg.runTPCTracking = true;
-  cfg.requireCTPLumi = requireCTPLumi;
+  cfg.lumiScaleType = lumiType;
   cfg.decompressTPC = isEnabled(inputTypes, ioType::CompClustCTF);
   cfg.decompressTPCFromROOT = isEnabled(inputTypes, ioType::CompClustROOT);
   cfg.zsDecoder = isEnabled(inputTypes, ioType::ZSRaw);
@@ -175,6 +177,7 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
   cfg.runTRDTracking = isEnabled(outputTypes, ioType::TRDTracks);
   cfg.tpcTriggerHandling = isEnabled(outputTypes, ioType::TPCTriggers) || cfg.caClusterer;
   cfg.enableDoublePipeline = cfgc.options().get<bool>("enableDoublePipeline");
+  cfg.tpcDeadMapSources = cfgc.options().get<int>("tpc-deadMap-sources");
 
   Inputs ggInputs;
   auto ggRequest = std::make_shared<o2::base::GRPGeomRequest>(false, true, false, true, true, o2::base::GRPGeomRequest::Aligned, ggInputs, true);

@@ -135,6 +135,10 @@ o2::framework::ServiceSpec CommonServices::asyncQueue()
     .name = "async-queue",
     .init = simpleServiceInit<AsyncQueue, AsyncQueue>(),
     .configure = noConfiguration(),
+    .stop = [](ServiceRegistryRef services, void* service) {
+      auto& queue = services.get<AsyncQueue>();
+      AsyncQueueHelpers::reset(queue);
+    },
     .kind = ServiceKind::Serial};
 }
 
@@ -503,6 +507,18 @@ o2::framework::ServiceSpec CommonServices::decongestionSpec()
         }
       }
       decongestion->lastTimeslice = oldestPossibleOutput.timeslice.value; },
+    .stop = [](ServiceRegistryRef services, void* service) {
+      auto* decongestion = (DecongestionService*)service;
+      services.get<TimesliceIndex>().reset();
+      decongestion->nextEnumerationTimeslice = 0;
+      decongestion->nextEnumerationTimesliceRewinded = false;
+      decongestion->lastTimeslice = 0;
+      decongestion->nextTimeslice = 0;
+      decongestion->oldestPossibleTimesliceTask = {0};
+      auto &state = services.get<DeviceState>();
+      for (auto &channel : state.inputChannelInfos) {
+        channel.oldestForChannel = {0};
+      } },
     .domainInfoUpdated = [](ServiceRegistryRef services, size_t oldestPossibleTimeslice, ChannelIndex channel) {
       auto& decongestion = services.get<DecongestionService>();
       auto& relayer = services.get<DataRelayer>();
@@ -930,8 +946,7 @@ o2::framework::ServiceSpec CommonServices::dataProcessingStats()
     .configure = noConfiguration(),
     .preProcessing = [](ProcessingContext& context, void* service) {
       auto* stats = (DataProcessingStats*)service;
-      flushMetrics(context.services(), *stats);
-    },
+      flushMetrics(context.services(), *stats); },
     .postProcessing = [](ProcessingContext& context, void* service) {
       auto* stats = (DataProcessingStats*)service;
       stats->updateStats({(short)ProcessingStatsId::PERFORMED_COMPUTATIONS, DataProcessingStats::Op::Add, 1});
