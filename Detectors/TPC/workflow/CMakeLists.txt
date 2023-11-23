@@ -43,8 +43,6 @@ o2_add_library(TPCWorkflow
                        src/TPCMergeIntegrateClusterSpec.cxx
                        src/TPCTimeSeriesSpec.cxx
                        src/TPCTimeSeriesWriterSpec.cxx
-                       src/TPCTimeSeriesReaderSpec.cxx
-                       src/TPCMergeTimeSeriesSpec.cxx
                        src/TPCScalerSpec.cxx
                TARGETVARNAME targetName
                PUBLIC_LINK_LIBRARIES O2::Framework O2::DataFormatsTPC
@@ -52,6 +50,7 @@ o2_add_library(TPCWorkflow
                                      O2::TPCCalibration O2::TPCSimulation
                                      O2::TPCQC O2::DetectorsCalibration
                                      O2::TPCReaderWorkflow
+                                     O2::CTPWorkflowIO
                PRIVATE_LINK_LIBRARIES O2::GPUTracking # For the Zero Suppression includes
                                       O2::GPUWorkflow
            )
@@ -235,16 +234,6 @@ o2_add_executable(merge-integrate-cluster-workflow
 o2_add_executable(time-series-workflow
                   COMPONENT_NAME tpc
                   SOURCES src/tpc-time-series.cxx
-                  PUBLIC_LINK_LIBRARIES O2::TPCWorkflow)
-
-o2_add_executable(time-series-reader-workflow
-                  SOURCES src/time-series-reader.cxx
-                  COMPONENT_NAME tpc
-                  PUBLIC_LINK_LIBRARIES O2::TPCWorkflow)
-
-o2_add_executable(merge-time-series-workflow
-                  SOURCES src/time-series-merge-integrator.cxx
-                  COMPONENT_NAME tpc
                   PUBLIC_LINK_LIBRARIES O2::TPCWorkflow)
 
 o2_add_executable(scaler-workflow

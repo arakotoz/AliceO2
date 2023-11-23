@@ -9,19 +9,10 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifndef O2_TPC_TPCMERGETIMESERIESSPEC_SPEC
-#define O2_TPC_TPCMERGETIMESERIESSPEC_SPEC
+/// \file CorrMapParam.cxx
+/// \brief Implementation of the parameter class for the CorrectionMapsLoader options
+/// \author ruben.shahoyan@cern.ch
 
-#include "Framework/DataProcessorSpec.h"
+#include "TPCCalibration/CorrMapParam.h"
 
-namespace o2
-{
-namespace tpc
-{
-
-o2::framework::DataProcessorSpec getTPCMergeTimeSeriesSpec();
-
-} // end namespace tpc
-} // end namespace o2
-
-#endif
+O2ParamImpl(o2::tpc::CorrMapParam);
