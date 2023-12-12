@@ -112,7 +112,7 @@ void SimConfig::determineActiveModules(std::vector<std::string> const& inputargs
       activeModules.emplace_back("SHIL");
       for (int d = DetID::First; d <= DetID::Last; ++d) {
 #ifdef ENABLE_UPGRADES
-        if (d != DetID::IT3 && d != DetID::TRK && d != DetID::FT3 && d != DetID::FCT && d != DetID::TF3) {
+        if (d != DetID::IT3 && d != DetID::TRK && d != DetID::FT3 && d != DetID::FCT && d != DetID::TF3 && d != DetID::RCH && d != DetID::MI3) {
           activeModules.emplace_back(DetID::getName(d));
         }
       }
@@ -245,9 +245,9 @@ bool SimConfig::resetFromParsedMap(boost::program_options::variables_map const& 
   // analyse field options
   // either: "ccdb" or +-2[U],+-5[U] and 0[U]; +-<intKGaus>U
   auto& fieldstring = vm["field"].as<std::string>();
-  std::regex re("(ccdb)|([+-]?[250]U?)");
+  std::regex re("(ccdb)|([+-]?(0|[2-9]|[12][0-9]|20)U?)");
   if (!std::regex_match(fieldstring, re)) {
-    LOG(error) << "Invalid field option";
+    LOG(error) << "Invalid field option " << fieldstring;
     return false;
   }
   if (fieldstring == "ccdb") {
@@ -286,9 +286,9 @@ bool SimConfig::parseFieldString(std::string const& fieldstring, int& fieldvalue
 {
   // analyse field options
   // either: "ccdb" or +-2[U],+-5[U] and 0[U]; +-<intKGaus>U
-  std::regex re("(ccdb)|([+-]?[250]U?)");
+  std::regex re("(ccdb)|([+-]?(0|[2-9]|[12][0-9]|20)U?)");
   if (!std::regex_match(fieldstring, re)) {
-    LOG(error) << "Invalid field option";
+    LOG(error) << "Invalid field option " << fieldstring;
     return false;
   }
   if (fieldstring == "ccdb") {
