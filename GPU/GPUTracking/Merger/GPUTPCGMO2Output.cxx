@@ -46,6 +46,9 @@ GPUdii() void GPUTPCGMO2Output::Thread<GPUTPCGMO2Output::prepare>(int nBlocks, i
   GPUTPCGMMerger::tmpSort* GPUrestrict() trackSort = merger.TrackSortO2();
   uint2* GPUrestrict() tmpData = merger.ClusRefTmp();
   for (unsigned int i = get_global_id(0); i < nTracks; i += get_global_size(0)) {
+    if (!tracks[i].OK()) {
+      continue;
+    }
     unsigned int nCl = 0;
     for (unsigned int j = 0; j < tracks[i].NClusters(); j++) {
       if ((trackClusters[tracks[i].FirstClusterRef() + j].state & flagsReject) || (merger.ClusterAttachment()[trackClusters[tracks[i].FirstClusterRef() + j].num] & flagsRequired) != flagsRequired) {
@@ -84,7 +87,7 @@ GPUdii() void GPUTPCGMO2Output::Thread<GPUTPCGMO2Output::sort>(int nBlocks, int 
 #endif
 }
 
-#if defined(GPUCA_SPECIALIZE_THRUST_SORTS) && !defined(GPUCA_GPUCODE_GENRTC) // Specialize GPUTPCGMO2Output::Thread<GPUTPCGMO2Output::sort>
+#if defined(GPUCA_SPECIALIZE_THRUST_SORTS) && !defined(GPUCA_GPUCODE_COMPILEKERNELS) // Specialize GPUTPCGMO2Output::Thread<GPUTPCGMO2Output::sort>
 struct GPUTPCGMO2OutputSort_comp {
   GPUd() bool operator()(const GPUTPCGMMerger::tmpSort& a, const GPUTPCGMMerger::tmpSort& b)
   {
@@ -162,8 +165,8 @@ GPUdii() void GPUTPCGMO2Output::Thread<GPUTPCGMO2Output::output>(int nBlocks, in
       if (pidRemap >= 0) {
         pid = pidRemap;
       }
-      oTrack.setPID(pid);
-      oTrack.getParamOut().setPID(pid);
+      oTrack.setPID(pid, true);
+      oTrack.getParamOut().setPID(pid, true);
     }
 
     unsigned int nOutCl = tmpData[i].x;

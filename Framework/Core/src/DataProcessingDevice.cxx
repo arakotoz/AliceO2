@@ -35,6 +35,9 @@
 #include "Framework/TMessageSerializer.h"
 #include "Framework/InputRecord.h"
 #include "Framework/InputSpan.h"
+#if defined(__APPLE__) || defined(NDEBUG)
+#define O2_SIGNPOST_IMPLEMENTATION
+#endif
 #include "Framework/Signpost.h"
 #include "Framework/TimingHelpers.h"
 #include "Framework/SourceInfoHeader.h"
@@ -79,6 +82,8 @@
 #include <execinfo.h>
 #include <sstream>
 #include <boost/property_tree/json_parser.hpp>
+
+O2_DECLARE_DYNAMIC_LOG(device);
 
 using namespace o2::framework;
 using ConfigurationInterface = o2::configuration::ConfigurationInterface;
@@ -274,21 +279,22 @@ struct PollerContext {
 void on_socket_polled(uv_poll_t* poller, int status, int events)
 {
   auto* context = (PollerContext*)poller->data;
+  assert(context);
+  O2_SIGNPOST_ID_FROM_POINTER(sid, device, poller);
   context->state->loopReason |= DeviceState::DATA_SOCKET_POLLED;
   switch (events) {
     case UV_READABLE: {
-      ZoneScopedN("socket readable event");
-      LOG(debug) << "socket polled UV_READABLE: " << context->name;
+      O2_SIGNPOST_EVENT_EMIT(device, sid, "socket_state", "Data pending on socket for channel %{public}s", context->name);
       context->state->loopReason |= DeviceState::DATA_INCOMING;
     } break;
     case UV_WRITABLE: {
-      ZoneScopedN("socket writeable");
+      O2_SIGNPOST_END(device, sid, "socket_state", "Socket connected for channel %{public}s", context->name);
       if (context->read) {
-        LOG(debug) << "socket polled UV_CONNECT" << context->name;
+        O2_SIGNPOST_START(device, sid, "socket_state", "Socket connected for read in context %{public}s", context->name);
         uv_poll_start(poller, UV_READABLE | UV_DISCONNECT | UV_PRIORITIZED, &on_socket_polled);
         context->state->loopReason |= DeviceState::DATA_CONNECTED;
       } else {
-        LOG(debug) << "socket polled UV_WRITABLE" << context->name;
+        O2_SIGNPOST_START(device, sid, "socket_state", "Socket connected for write for channel %{public}s", context->name);
         context->state->loopReason |= DeviceState::DATA_OUTGOING;
         // If the socket is writable, fairmq will handle the rest, so we can stop polling and
         // just wait for the disconnect.
@@ -297,12 +303,10 @@ void on_socket_polled(uv_poll_t* poller, int status, int events)
       context->pollerState = PollerContext::PollerState::Connected;
     } break;
     case UV_DISCONNECT: {
-      ZoneScopedN("socket disconnect");
-      LOG(debug) << "socket polled UV_DISCONNECT";
+      O2_SIGNPOST_END(device, sid, "socket_state", "Socket disconnected in context %{public}s", context->name);
     } break;
     case UV_PRIORITIZED: {
-      ZoneScopedN("socket prioritized");
-      LOG(debug) << "socket polled UV_PRIORITIZED";
+      O2_SIGNPOST_EVENT_EMIT(device, sid, "socket_state", "Data pending on socket for context %{public}s", context->name);
     } break;
   }
   // We do nothing, all the logic for now stays in DataProcessingDevice::doRun()
@@ -491,11 +495,12 @@ void DataProcessingDevice::Init()
 
 void on_signal_callback(uv_signal_t* handle, int signum)
 {
-  ZoneScopedN("Signal callaback");
-  LOG(debug) << "Signal " << signum << " received.";
+  O2_SIGNPOST_ID_FROM_POINTER(sid, device, handle);
+  O2_SIGNPOST_START(device, sid, "signal_state", "Signal %d received.", signum);
+
   auto* registry = (ServiceRegistry*)handle->data;
   if (!registry) {
-    LOG(debug) << "No registry active. Ignoring signal";
+    O2_SIGNPOST_END(device, sid, "signal_state", "No registry active. Ignoring signal.");
     return;
   }
   ServiceRegistryRef ref{*registry};
@@ -512,6 +517,7 @@ void on_signal_callback(uv_signal_t* handle, int signum)
     //        available and being offered, however we
     //        want to get out of the woods for now.
     if (offer.valid && offer.sharedMemory != 0) {
+      O2_SIGNPOST_END(device, sid, "signal_state", "Memory already offered.");
       return;
     }
     ri++;
@@ -528,6 +534,7 @@ void on_signal_callback(uv_signal_t* handle, int signum)
     }
   }
   stats.updateStats({(int)ProcessingStatsId::TOTAL_SIGUSR1, DataProcessingStats::Op::Add, 1});
+  O2_SIGNPOST_END(device, sid, "signal_state", "Done processing signals.");
 }
 
 static auto toBeForwardedHeader = [](void* header) -> bool {
@@ -873,7 +880,9 @@ void DataProcessingDevice::startPollers()
   auto& deviceContext = ref.get<DeviceContext>();
   auto& state = ref.get<DeviceState>();
 
-  for (auto& poller : state.activeInputPollers) {
+  for (auto* poller : state.activeInputPollers) {
+    O2_SIGNPOST_ID_FROM_POINTER(sid, device, poller);
+    O2_SIGNPOST_START(device, sid, "socket_state", "Input socket waiting for connection.");
     uv_poll_start(poller, UV_WRITABLE, &on_socket_polled);
     ((PollerContext*)poller->data)->pollerState = PollerContext::PollerState::Disconnected;
   }
@@ -881,7 +890,9 @@ void DataProcessingDevice::startPollers()
     uv_poll_start(poller, UV_WRITABLE, &on_out_of_band_polled);
     ((PollerContext*)poller->data)->pollerState = PollerContext::PollerState::Disconnected;
   }
-  for (auto& poller : state.activeOutputPollers) {
+  for (auto* poller : state.activeOutputPollers) {
+    O2_SIGNPOST_ID_FROM_POINTER(sid, device, poller);
+    O2_SIGNPOST_START(device, sid, "socket_state", "Output socket waiting for connection.");
     uv_poll_start(poller, UV_WRITABLE, &on_socket_polled);
     ((PollerContext*)poller->data)->pollerState = PollerContext::PollerState::Disconnected;
   }
@@ -897,17 +908,21 @@ void DataProcessingDevice::stopPollers()
   auto& deviceContext = ref.get<DeviceContext>();
   auto& state = ref.get<DeviceState>();
   LOGP(detail, "Stopping {} input pollers", state.activeInputPollers.size());
-  for (auto& poller : state.activeInputPollers) {
+  for (auto* poller : state.activeInputPollers) {
+    O2_SIGNPOST_ID_FROM_POINTER(sid, device, poller);
+    O2_SIGNPOST_END(device, sid, "socket_state", "Output socket closed.");
     uv_poll_stop(poller);
     ((PollerContext*)poller->data)->pollerState = PollerContext::PollerState::Stopped;
   }
   LOGP(detail, "Stopping {} out of band pollers", state.activeOutOfBandPollers.size());
-  for (auto& poller : state.activeOutOfBandPollers) {
+  for (auto* poller : state.activeOutOfBandPollers) {
     uv_poll_stop(poller);
     ((PollerContext*)poller->data)->pollerState = PollerContext::PollerState::Stopped;
   }
   LOGP(detail, "Stopping {} output pollers", state.activeOutOfBandPollers.size());
-  for (auto& poller : state.activeOutputPollers) {
+  for (auto* poller : state.activeOutputPollers) {
+    O2_SIGNPOST_ID_FROM_POINTER(sid, device, poller);
+    O2_SIGNPOST_END(device, sid, "socket_state", "Output socket closed.");
     uv_poll_stop(poller);
     ((PollerContext*)poller->data)->pollerState = PollerContext::PollerState::Stopped;
   }
@@ -2282,8 +2297,8 @@ bool DataProcessingDevice::tryDispatchComputation(ServiceRegistryRef ref, std::v
       if (spec.forwards.empty() == false) {
         auto& timesliceIndex = ref.get<TimesliceIndex>();
         forwardInputs(ref, action.slot, currentSetOfInputs, timesliceIndex.getOldestPossibleOutput(), false);
-        continue;
       }
+      continue;
     }
     // If there is no optional inputs we canForwardEarly
     // the messages to that parallel processing can happen.

@@ -1000,7 +1000,7 @@ void MatchTOF::doMatching(int sec)
           foundCluster = true;
           // set event indexes (to be checked)
           int eventIndexTOFCluster = mTOFClusSectIndexCache[indices[0]][itof];
-          mMatchedTracksPairsSec[sec].emplace_back(cacheTrk[itrk], eventIndexTOFCluster, mTOFClusWork[cacheTOF[itof]].getTime(), chi2, trkLTInt[iPropagation], mTrackGid[sec][type][cacheTrk[itrk]], type, (trefTOF.getTime() - (minTrkTime + maxTrkTime - 100E3) * 0.5) * 1E-6, 0., resX, resZ); // subracting 100 ns to max track which was artificially added
+          mMatchedTracksPairsSec[sec].emplace_back(cacheTrk[itrk], eventIndexTOFCluster, mTOFClusWork[cacheTOF[itof]].getTime(), chi2, trkLTInt[iPropagation], mTrackGid[sec][type][cacheTrk[itrk]], type, (trefTOF.getTime() - (minTrkTime + maxTrkTime - 100E3) * 0.5) * 1E-6, trefTOF.getZ(), resX, resZ); // subracting 100 ns to max track which was artificially added
         }
       }
     }
@@ -1353,7 +1353,7 @@ int MatchTOF::findFITIndex(int bc, const gsl::span<const o2::ft0::RecPoints>& FI
   }
 
   int index = -1;
-  int distMax = 0;
+  int distMax = 10;
   bool bestQuality = false; // prioritize FT0 BC with good quality (FT0-AC + vertex) to remove umbiguity in Pb-Pb (not a strict cut because inefficient in pp)
   const int distThr = 8;
 
@@ -1369,8 +1369,8 @@ int MatchTOF::findFITIndex(int bc, const gsl::span<const o2::ft0::RecPoints>& FI
     int bct0 = (ir.orbit - firstOrbit) * o2::constants::lhc::LHCMaxBunches + ir.bc;
     int dist = bc - bct0;
 
-    bool worseDistance = dist < 0 || dist > distThr || dist < distMax;
-    if (worseDistance && (!quality || bestQuality)) { // discard if BC is later than the one selected, but is has a better quality
+    bool worseDistance = dist < 0 || dist > distThr || dist > distMax;
+    if (worseDistance) { // discard if BC is not in the proper range or it is worse than the one already found
       continue;
     }
 

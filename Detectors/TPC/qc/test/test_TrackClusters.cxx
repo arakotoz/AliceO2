@@ -9,7 +9,14 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// \author R+Preghenella - January 2020
+#define BOOST_TEST_MODULE Test TPC QC
+#define BOOST_TEST_MAIN
+#define BOOST_TEST_DYN_LINK
+#include <boost/test/unit_test.hpp>
+#include "DataFormatsTPC/Defs.h"
+#include "TPCQC/TrackClusters.h"
 
-#include "Generators/GeneratorPythia6Param.h"
-O2ParamImpl(o2::eventgen::GeneratorPythia6Param);
+BOOST_AUTO_TEST_CASE(ReadWriteROOTFile)
+{
+  o2::tpc::qc::TrackClusters trackClusters;
+}
