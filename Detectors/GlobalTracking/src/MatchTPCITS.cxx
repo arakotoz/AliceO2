@@ -55,6 +55,7 @@ using MatrixDSym4 = ROOT::Math::SMatrix<double, 4, 4, ROOT::Math::MatRepSym<doub
 using MatrixD4 = ROOT::Math::SMatrix<double, 4, 4, ROOT::Math::MatRepStd<double, 4>>;
 using NAMES = o2::base::NameConf;
 using GTrackID = o2::dataformats::GlobalTrackID;
+using TrackTunePar = o2::globaltracking::TrackTuneParams;
 constexpr float MatchTPCITS::Tan70, MatchTPCITS::Cos70I2, MatchTPCITS::MaxSnp, MatchTPCITS::MaxTgp;
 
 LinksPoolMT* TPCABSeed::gLinksPool = nullptr;
@@ -219,7 +220,7 @@ void MatchTPCITS::init()
   // make sure T2GRot matrices are loaded into ITS geometry helper
   o2::its::GeometryTGeo::Instance()->fillMatrixCache(o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2GRot) | o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L));
 
-  mSectEdgeMargin2 = mParams->crudeAbsDiffCut[o2::track::kY] * mParams->crudeAbsDiffCut[o2::track::kY]; ///< precalculated ^2
+  mSectEdgeMargin = mParams->crudeAbsDiffCut[o2::track::kY] / std::sqrt(Cos70I2);
 
 #ifdef _ALLOW_DEBUG_TREES_
   // debug streamer
@@ -265,6 +266,14 @@ void MatchTPCITS::updateTimeDependentParams()
   o2::math_utils::Point3D<float> p0(90., 1., 1), p1(90., 100., 100.);
   auto matbd = o2::base::Propagator::Instance()->getMatBudget(mParams->matCorr, p0, p1);
   mTPCmeanX0Inv = matbd.meanX2X0 / matbd.length;
+
+  const auto& trackTune = TrackTuneParams::Instance();
+  float scale = mTPCCorrMapsHelper->getInstLumiCTP();
+  if (scale < 0.f) {
+    scale = 0.f;
+  }
+  mCovDiagInner = trackTune.getCovInnerTotal(scale);
+  mCovDiagOuter = trackTune.getCovOuterTotal(scale);
 }
 
 //______________________________________________
@@ -419,15 +428,15 @@ void MatchTPCITS::addTPCSeed(const o2::track::TrackParCov& _tr, float t0, float 
                 MinusOne,
                 (extConstrained || tpcOrig.hasBothSidesClusters()) ? TrackLocTPC::Constrained : (tpcOrig.hasASideClustersOnly() ? TrackLocTPC::ASide : TrackLocTPC::CSide)});
   // propagate to matching Xref
-  const auto& trackTune = o2::globaltracking::TrackTuneParams::Instance();
+  const auto& trackTune = TrackTuneParams::Instance();
   // only TPC standalone need to be corrected on the input, provided they were not corrected at the source level,
   // other inputs are corrected in respective upstream matching processes
   if (srcGID.getSource() == GTrackID::TPC && !trackTune.sourceLevelTPC) {
     if (trackTune.useTPCInnerCorr) {
       trc.updateParams(trackTune.tpcParInner);
     }
-    if (trackTune.tpcCovInnerType != o2::globaltracking::TrackTuneParams::AddCovType::Disable) {
-      trc.updateCov(trackTune.tpcCovInner, trackTune.tpcCovInnerType == o2::globaltracking::TrackTuneParams::AddCovType::WithCorrelations);
+    if (trackTune.tpcCovInnerType != TrackTuneParams::AddCovType::Disable) {
+      trc.updateCov(mCovDiagInner, trackTune.tpcCovInnerType == TrackTuneParams::AddCovType::WithCorrelations);
     }
   }
   if (!propagateToRefX(trc)) {
@@ -437,7 +446,6 @@ void MatchTPCITS::addTPCSeed(const o2::track::TrackParCov& _tr, float t0, float 
   if (mMCTruthON) {
     mTPCLblWork.emplace_back(mTPCTrkLabels[tpcID]);
   }
-
   // cache work track index
   mTPCSectIndexCache[o2::math_utils::angle2Sector(trc.getAlpha())].push_back(mTPCWork.size() - 1);
 }
@@ -629,6 +637,8 @@ bool MatchTPCITS::prepareITSData()
   }
   long nHBF = o2::base::GRPGeomHelper::getNHBFPerTF();
   long maxBCs = nHBF * long(o2::constants::lhc::LHCMaxBunches);
+  o2::track::TrackLTIntegral trackLTInt;
+  trackLTInt.setTimeNotNeeded();
 
   for (int irof = 0; irof < nROFs; irof++) {
     const auto& rofRec = mITSTrackROFRec[irof];
@@ -676,10 +686,14 @@ bool MatchTPCITS::prepareITSData()
         continue;
       }
       // make sure the track is at the ref. radius
-      if (!propagateToRefX(trc)) {
+      trackLTInt.clearFast();
+      if (!propagateToRefX(trc, &trackLTInt)) {
         mITSWork.pop_back(); // discard failed track
         continue;            // add to cache only those ITS tracks which reached ref.X and have reasonable snp
       }
+      trc.xrho = trackLTInt.getXRho(); // we collect seen x*rho and distance to the reference X for further PID correcrions
+      trc.dL = trackLTInt.getL();
+
       if (mMCTruthON) {
         mITSLblWork.emplace_back(mITSTrkLabels[it]);
       }
@@ -693,19 +707,16 @@ bool MatchTPCITS::prepareITSData()
       // when propagated to Xr (in this neighbouring sector) and the edge will be (neglecting the curvature)
       // [(Xr*tg(10)-Yr)/(tgPhir+tg70)]^2  / cos(70)^2  // for the next sector
       // [(Xr*tg(10)+Yr)/(tgPhir-tg70)]^2  / cos(70)^2  // for the prev sector
-      // Distances to the sector edges in neighbourings sectors (at Xref in theit proper frames)
+      // Distances to the sector edges in neighbourings sectors (at Xref in their proper frames)
       float trcY = trc.getY(), tgp = trc.getSnp();
       tgp /= std::sqrt((1.f - tgp) * (1.f + tgp)); // tan of track direction XY
 
-      // sector up
-      float dy2Up = (YMaxAtXMatchingRef - trcY) / (tgp + Tan70);
-      if ((dy2Up * dy2Up * Cos70I2) < mSectEdgeMargin2) { // need to check this track for matching in sector up
-        addLastTrackCloneForNeighbourSector(sector < (o2::constants::math::NSectors - 1) ? sector + 1 : 0);
-      }
-      // sector down
-      float dy2Dn = (YMaxAtXMatchingRef + trcY) / (tgp - Tan70);
-      if ((dy2Dn * dy2Dn * Cos70I2) < mSectEdgeMargin2) { // need to check this track for matching in sector down
-        addLastTrackCloneForNeighbourSector(sector > 1 ? sector - 1 : o2::constants::math::NSectors - 1);
+      float dyUpDn[2] = {std::abs((YMaxAtXMatchingRef - trcY) / (tgp + Tan70)), std::abs((YMaxAtXMatchingRef + trcY) / (tgp - Tan70))}; // sector up, down edge distances
+      // we do the cloning for closest edge only
+      int sel = dyUpDn[0] < dyUpDn[1] ? 0 : 1;
+      if (dyUpDn[sel] < mSectEdgeMargin) { // need to check this track for matching in sector up or down
+        int sectNeib = sel == 0 ? (sector < (o2::constants::math::NSectors - 1) ? sector + 1 : 0) : (sector > 1 ? sector - 1 : o2::constants::math::NSectors - 1);
+        addLastTrackCloneForNeighbourSector(sectNeib, &trackLTInt);
       }
     }
   }
@@ -1005,7 +1016,7 @@ bool MatchTPCITS::registerMatchRecordTPC(int iITS, int iTPC, float chi2, int can
 }
 
 //______________________________________________
-void MatchTPCITS::registerMatchRecordITS(int iITS, int iTPC, float chi2, int candIC)
+void MatchTPCITS::registerMatchRecordITS(const int iITS, int iTPC, float chi2, int candIC)
 {
   ///< register TPC match in ITS tracks match records, ordering them in quality
   auto& tITS = mITSWork[iITS];
@@ -1059,7 +1070,26 @@ int MatchTPCITS::compareTPCITSTracks(const TrackLocITS& tITS, const TrackLocTPC&
   if ((rejFlag = roughCheckDif(diff, mParams->crudeNSigma2Cut[o2::track::kTgl], RejectOnTgl + NSigmaShift))) {
     return rejFlag;
   }
-  diff = tITS.getParam(o2::track::kY) - tTPC.getParam(o2::track::kY);
+  // do we need to account for different PID hypotheses used for ITS and TPC tracks propagation to ref. X?
+  bool testOtherPID = false;
+  float itsParam[5] = {tITS.getY(), tITS.getZ(), tITS.getSnp(), tITS.getTgl(), tITS.getQ2Pt()};
+  if (tTPC.getPID() > tITS.getPID() && tITS.dL > 0.f && tTPC.getP2() / tTPC.getPID().getMass2() < mParams->minBetaGammaForPIDDiff) {
+    o2::track::TrackPar tPID(mITSTracksArray[tITS.sourceID].getParamOut()); // clone original ITS track at highest update point
+    tPID.setPID(tTPC.getPID(), true);
+    if (!tPID.correctForELoss(tITS.xrho)) {
+      return RejectoOnPIDCorr;
+    }
+    float dCurv = (tPID.getQ2Pt() - tITS.getQ2Pt()) * mBz * o2::constants::math::B2C, dLEff = tITS.dL * mParams->ITSStepEffFraction, dCurvL = dCurv * dLEff;
+    itsParam[o2::track::kQ2Pt] = tPID.getQ2Pt();
+    itsParam[o2::track::kSnp] += dCurvL;
+    if (std::abs(itsParam[o2::track::kSnp]) >= 1.) {
+      itsParam[o2::track::kSnp] = std::copysign(0.99, itsParam[o2::track::kSnp]);
+    }
+    itsParam[o2::track::kY] += dCurvL * dLEff * 0.5;
+    testOtherPID = true;
+  }
+
+  diff = itsParam[o2::track::kY] - tTPC.getParam(o2::track::kY);
   if ((rejFlag = roughCheckDif(diff, mParams->crudeAbsDiffCut[o2::track::kY], RejectOnY))) {
     return rejFlag;
   }
@@ -1069,7 +1099,7 @@ int MatchTPCITS::compareTPCITSTracks(const TrackLocITS& tITS, const TrackLocTPC&
   }
 
   if (tTPC.constraint == TrackLocTPC::Constrained) { // in continuous only constrained tracks can be compared in Z
-    diff = tITS.getParam(o2::track::kZ) - tTPC.getParam(o2::track::kZ);
+    diff = itsParam[o2::track::kZ] - tTPC.getParam(o2::track::kZ);
     if ((rejFlag = roughCheckDif(diff, mParams->crudeAbsDiffCut[o2::track::kZ], RejectOnZ))) {
       return rejFlag;
     }
@@ -1079,7 +1109,7 @@ int MatchTPCITS::compareTPCITSTracks(const TrackLocITS& tITS, const TrackLocTPC&
     }
   }
 
-  diff = tITS.getParam(o2::track::kSnp) - tTPC.getParam(o2::track::kSnp);
+  diff = itsParam[o2::track::kSnp] - tTPC.getParam(o2::track::kSnp);
   if ((rejFlag = roughCheckDif(diff, mParams->crudeAbsDiffCut[o2::track::kSnp], RejectOnSnp))) {
     return rejFlag;
   }
@@ -1088,7 +1118,7 @@ int MatchTPCITS::compareTPCITSTracks(const TrackLocITS& tITS, const TrackLocTPC&
     return rejFlag;
   }
 
-  diff = tITS.getParam(o2::track::kQ2Pt) - tTPC.getParam(o2::track::kQ2Pt);
+  diff = itsParam[o2::track::kQ2Pt] - tTPC.getParam(o2::track::kQ2Pt);
   if ((rejFlag = roughCheckDif(diff, mParams->crudeAbsDiffCut[o2::track::kQ2Pt], RejectOnQ2Pt))) {
     return rejFlag;
   }
@@ -1096,9 +1126,18 @@ int MatchTPCITS::compareTPCITSTracks(const TrackLocITS& tITS, const TrackLocTPC&
   if ((rejFlag = roughCheckDif(diff, mParams->crudeNSigma2Cut[o2::track::kQ2Pt], RejectOnQ2Pt + NSigmaShift))) {
     return rejFlag;
   }
-  // calculate mutual chi2 excluding Z in continuos mode
-  chi2 = getPredictedChi2NoZ(tITS, tTPC);
-  if (chi2 > mParams->cutMatchingChi2 || chi2 < 0.) { // sometime due to the numerical stability the chi2 is negative, reject it.
+  // calculate mutual chi2 excluding Z in continuous mode
+  if (testOtherPID) { // temporarily substitute pion params by alternative ones
+    auto tITSAlt = tITS;
+    tITSAlt.setPID(tTPC.getPID());
+    tITSAlt.setParam(itsParam[o2::track::kY], o2::track::kY);
+    tITSAlt.setParam(itsParam[o2::track::kSnp], o2::track::kSnp);
+    tITSAlt.setParam(itsParam[o2::track::kQ2Pt], o2::track::kQ2Pt);
+    chi2 = getPredictedChi2NoZ(tITSAlt, tTPC);
+  } else {
+    chi2 = getPredictedChi2NoZ(tITS, tTPC);
+  }
+  if (chi2 > mParams->cutMatchingChi2 || chi2 < 0.) { // sometimes due to the numerical stability the chi2 is negative, reject it.
     return RejectOnChi2;
   }
 
@@ -1197,7 +1236,7 @@ float MatchTPCITS::getPredictedChi2NoZ(const o2::track::TrackParCov& trITS, cons
 }
 
 //______________________________________________
-void MatchTPCITS::addLastTrackCloneForNeighbourSector(int sector)
+void MatchTPCITS::addLastTrackCloneForNeighbourSector(int sector, o2::track::TrackLTIntegral* trackLTInt)
 {
   // add clone of the src ITS track cache, propagate it to ref.X in requested sector
   // and register its index in the sector cache. Used for ITS tracks which are so close
@@ -1205,11 +1244,15 @@ void MatchTPCITS::addLastTrackCloneForNeighbourSector(int sector)
   mITSWork.push_back(mITSWork.back()); // clone the last track defined in given sector
   auto& trc = mITSWork.back();
   if (trc.rotate(o2::math_utils::sector2Angle(sector)) &&
-      o2::base::Propagator::Instance()->PropagateToXBxByBz(trc, mParams->XMatchingRef, MaxSnp, 2., MatCorrType::USEMatCorrNONE)) {
+      o2::base::Propagator::Instance()->PropagateToXBxByBz(trc, mParams->XMatchingRef, MaxSnp, 2., mUseMatCorrFlag, trackLTInt)) {
     // TODO: use faster prop here, no 3d field, materials
     mITSSectIndexCache[sector].push_back(mITSWork.size() - 1); // register track CLONE
     // flag clone
     mITSWork.back().setCloneBefore();
+    if (trackLTInt) {
+      mITSWork.back().xrho = trackLTInt->getXRho(); // we collect seen x*rho and distance to the reference X for further PID correcrions
+      mITSWork.back().dL = trackLTInt->getL();
+    }
     mITSWork[mITSWork.size() - 2].setCloneAfter();
     if (mMCTruthON) {
       mITSLblWork.emplace_back(mITSTrkLabels[trc.sourceID]);
@@ -1220,19 +1263,20 @@ void MatchTPCITS::addLastTrackCloneForNeighbourSector(int sector)
 }
 
 //______________________________________________
-bool MatchTPCITS::propagateToRefX(o2::track::TrackParCov& trc)
+bool MatchTPCITS::propagateToRefX(o2::track::TrackParCov& trc, o2::track::TrackLTIntegral* lti)
 {
   // propagate track to matching reference X, making sure its assigned alpha
   // is consistent with TPC sector
+  constexpr float TgHalfSector = 0.17632698f;
   bool refReached = false;
   refReached = mParams->XMatchingRef < 10.; // RS: tmp, to cover XMatchingRef~0
   int trialsLeft = 2;
-  while (o2::base::Propagator::Instance()->PropagateToXBxByBz(trc, mParams->XMatchingRef, MaxSnp, 2., mUseMatCorrFlag)) {
+  while (o2::base::Propagator::Instance()->PropagateToXBxByBz(trc, mParams->XMatchingRef, MaxSnp, 2., mUseMatCorrFlag, lti)) {
     if (refReached) {
       break;
     }
     // make sure the track is indeed within the sector defined by alpha
-    if (fabs(trc.getY()) < mParams->XMatchingRef * tan(o2::constants::math::SectorSpanRad / 2)) {
+    if (fabs(trc.getY()) < mParams->XMatchingRef * TgHalfSector) {
       refReached = true;
       break; // ok, within
     }
@@ -1412,10 +1456,30 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS, pmr::vector<o2::dataform
                                   maxStep, MatCorrType::USEMatCorrNONE, nullptr, &trfit.getLTIntegralOut())) {
     LOG(error) << "LTOF integral might be incorrect";
   }
+  auto& tofL = trfit.getLTIntegralOut(); // this is TL integral calculated from the RefX to the DCA to the beamline, invert material integrals for outward propagation
+  tofL.setX2X0(-tofL.getX2X0());
+  tofL.setXRho(-tofL.getXRho());
 
   // outward refit
+#ifdef _ALLOW_DEBUG_TREES_
+  o2::track::TrackParCov itsRefAltPID;
+#endif
   auto& tracOut = trfit.getParamOut(); // this is a clone of ITS outward track already at the matching reference X
-  auto& tofL = trfit.getLTIntegralOut();
+  if (tTPC.getPID() > tITS.getPID() && tTPC.getP2() / tTPC.getPID().getMass2() < mParams->minBetaGammaForPIDDiff) {
+    // in case the TPC track hypothesis is not pion, we redo the outward propagation to ref.x with TPC PID
+    tracOut = mITSTracksArray[tITS.sourceID].getParamOut();
+    tracOut.setPID(tTPC.getPID(), true);
+    if (!tracOut.rotate(tTPC.getAlpha()) || !o2::base::Propagator::Instance()->PropagateToXBxByBz(tracOut, mParams->XMatchingRef, MaxSnp, 2., mUseMatCorrFlag)) {
+      LOGP(debug, "Failed to rotate ITSouter with imposed PID to TPC alpha {} or propagate to X={}: {:s}", tTPC.getAlpha(), mParams->XMatchingRef, tracOut.asString());
+      matchedTracks.pop_back(); // destroy failed track
+      return false;
+    }
+#ifdef _ALLOW_DEBUG_TREES_
+    if (mDBGOut) {
+      itsRefAltPID = tracOut;
+    }
+#endif
+  }
   {
     float xtogo = 0;
     if (!tracOut.getXatLabR(o2::constants::geom::XTPCInnerRef, xtogo, mBz, o2::track::DirOutward) ||
@@ -1449,12 +1513,12 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS, pmr::vector<o2::dataform
     tofL.addX2X0(lInt * mTPCmeanX0Inv);
     propagator->PropagateToXBxByBz(tracOut, o2::constants::geom::XTPCOuterRef, MaxSnp, 10., mUseMatCorrFlag, &tofL);
 
-    const auto& trackTune = o2::globaltracking::TrackTuneParams::Instance();
+    const auto& trackTune = TrackTuneParams::Instance();
     if (trackTune.useTPCOuterCorr) {
       tracOut.updateParams(trackTune.tpcParOuter);
     }
-    if (trackTune.tpcCovOuterType != o2::globaltracking::TrackTuneParams::AddCovType::Disable) {
-      tracOut.updateCov(trackTune.tpcCovOuter, trackTune.tpcCovOuterType == o2::globaltracking::TrackTuneParams::AddCovType::WithCorrelations);
+    if (trackTune.tpcCovOuterType != TrackTuneParams::AddCovType::Disable) {
+      tracOut.updateCov(mCovDiagOuter, trackTune.tpcCovOuterType == TrackTuneParams::AddCovType::WithCorrelations);
     }
   }
   trfit.setChi2Match(tpcMatchRec.chi2);
@@ -1500,14 +1564,36 @@ bool MatchTPCITS::refitTrackTPCITS(int iTPC, int& iITS, pmr::vector<o2::dataform
   }
 #ifdef _ALLOW_DEBUG_TREES_
   if (mDBGOut) {
+    o2::track::TrackPar itsRefPIDCorr(tITS);
+    itsRefPIDCorr.setX(0);
+    if (tTPC.getPID() > tITS.getPID() && tITS.dL > 0.f && tTPC.getP2() / tTPC.getPID().getMass2() < mParams->minBetaGammaForPIDDiff) {
+      itsRefPIDCorr = mITSTracksArray[tITS.sourceID].getParamOut(); // clone original ITS track at highest update point
+      itsRefPIDCorr.setPID(tTPC.getPID(), true);
+      if (!itsRefPIDCorr.correctForELoss(tITS.xrho)) {
+        itsRefPIDCorr.setX(-10);
+      } else {
+        float q2ptPID = itsRefPIDCorr.getQ2Pt();
+        float dCurv = (q2ptPID - tITS.getQ2Pt()) * mBz * o2::constants::math::B2C, dLEff = tITS.dL * mParams->ITSStepEffFraction, dCurvL = dCurv * dLEff;
+        itsRefPIDCorr = tITS;
+        itsRefPIDCorr.setPID(tTPC.getPID(), true);
+        itsRefPIDCorr.setQ2Pt(q2ptPID);
+        auto snp = tITS.getSnp() + dCurvL;
+        if (std::abs(snp) >= 1.) {
+          snp = std::copysign(0.99, snp);
+        }
+        itsRefPIDCorr.setSnp(snp);
+        itsRefPIDCorr.setY(tITS.getY() + dCurvL * dLEff * 0.5);
+      }
+    }
     (*mDBGOut) << "refit"
-               << "tpcOrig=" << mTPCTracksArray[tTPC.sourceID] << "itsOrig=" << itsTrOrig << "itsRef=" << tITS << "tpcRef=" << tTPC << "matchRefit=" << trfit << "timeCorr=" << timeC << "dTimeFT0=" << minDiffFT0 << "dTimes=" << dtimes;
+               << "tpcOrig=" << mTPCTracksArray[tTPC.sourceID] << "itsOrig=" << itsTrOrig << "itsRef=" << tITS << "tpcRef=" << tTPC << "matchRefit=" << trfit << "timeCorr=" << timeC << "dTimeFT0=" << minDiffFT0 << "dTimes=" << dtimes
+               << "itsRefAltPID=" << itsRefAltPID << "itsRefPIDCorr=" << itsRefPIDCorr;
     if (mMCTruthON) {
       (*mDBGOut) << "refit"
                  << "itsLbl=" << mITSLblWork[iITS] << "tpcLbl=" << mTPCLblWork[iTPC];
     }
     (*mDBGOut) << "refit"
-               << "\n";
+               << "tf=" << mTFCount << "\n";
   }
 #endif
 
@@ -1583,12 +1669,12 @@ bool MatchTPCITS::refitABTrack(int iITSAB, const TPCABSeed& seed, pmr::vector<o2
     tofL.addStep(lInt, tracOut.getP2Inv());
     tofL.addX2X0(lInt * mTPCmeanX0Inv);
     propagator->PropagateToXBxByBz(tracOut, o2::constants::geom::XTPCOuterRef, MaxSnp, 10., mUseMatCorrFlag, &tofL);
-    const auto& trackTune = o2::globaltracking::TrackTuneParams::Instance();
+    const auto& trackTune = TrackTuneParams::Instance();
     if (trackTune.useTPCOuterCorr) {
       tracOut.updateParams(trackTune.tpcParOuter);
     }
-    if (trackTune.tpcCovOuterType != o2::globaltracking::TrackTuneParams::AddCovType::Disable) {
-      tracOut.updateCov(trackTune.tpcCovOuter, trackTune.tpcCovOuterType == o2::globaltracking::TrackTuneParams::AddCovType::WithCorrelations);
+    if (trackTune.tpcCovOuterType != TrackTuneParams::AddCovType::Disable) {
+      tracOut.updateCov(mCovDiagOuter, trackTune.tpcCovOuterType == TrackTuneParams::AddCovType::WithCorrelations);
     }
   }
 
