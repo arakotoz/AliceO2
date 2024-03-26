@@ -16,9 +16,8 @@ if(DEFINED CUDA_COMPUTETARGET)
 endif()
 message(STATUS "Building GPUTracking with CUDA support ${TMP_TARGET}")
 
-set(SRCS GPUReconstructionCUDA.cu GPUReconstructionCUDAGenRTC.cu GPUReconstructionCUDAKernels.cu)
+set(SRCS GPUReconstructionCUDA.cu GPUReconstructionCUDAGenRTC.cxx GPUReconstructionCUDAKernels.cu)
 set(HDRS GPUReconstructionCUDA.h GPUReconstructionCUDAInternals.h GPUReconstructionCUDADef.h GPUReconstructionCUDAIncludes.h CUDAThrustHelpers.h)
-
 # -------------------------------- Prepare RTC -------------------------------------------------------
 if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
   enable_language(ASM)
@@ -37,7 +36,7 @@ if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
   endif()
   #set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -keep")
 
-  set(CUDARTC_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_${CMAKE_BUILD_TYPE}} -std=c++${CMAKE_CUDA_STANDARD}")
+  set(CUDARTC_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_${CMAKE_BUILD_TYPE_UPPER}} -std=c++${CMAKE_CUDA_STANDARD}")
   if(CUDA_COMPUTETARGET)
       foreach(CUDA_ARCH ${CUDA_COMPUTETARGET})
           set(CUDARTC_FLAGS "${CUDARTC_FLAGS} -gencode arch=compute_${CUDA_ARCH},code=sm_${CUDA_ARCH}")
@@ -67,6 +66,7 @@ if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
       MAIN_DEPENDENCY ${CURTC_SRC}
       IMPLICIT_DEPENDS CXX ${CURTC_SRC}
       COMMAND_EXPAND_LISTS
+      COMMENT "Preparing CUDA RTC source file ${CURTC_BIN}.src"
   )
   create_binary_resource(${CURTC_BIN}.src ${CURTC_BIN}.src.o)
 
@@ -75,6 +75,7 @@ if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
       COMMAND echo -n "${CMAKE_CUDA_COMPILER} ${CUDARTC_FLAGS} ${CURTC_DEFINES}" > ${CURTC_BIN}.command
       COMMAND_EXPAND_LISTS
       VERBATIM
+      COMMENT "Preparing CUDA RTC command file ${CURTC_BIN}.command"
   )
   create_binary_resource(${CURTC_BIN}.command ${CURTC_BIN}.command.o)
 
@@ -165,7 +166,7 @@ elseif(GPUCA_CUDA_COMPILE_MODE STREQUAL "perkernel")
     COMMAND cp -u $<TARGET_OBJECTS:GPUTrackingCUDAKernels> ${CMAKE_CURRENT_BINARY_DIR}/cuda_kernel_module_fatbin/
     COMMAND ${CMAKE_LINKER} --relocatable --format binary --output ${CMAKE_CURRENT_BINARY_DIR}/GPUTrackingCUDAKernelModules.o $<PATH:RELATIVE_PATH,$<LIST:TRANSFORM,$<PATH:GET_FILENAME,$<TARGET_OBJECTS:GPUTrackingCUDAKernels>>,PREPEND,${CMAKE_CURRENT_BINARY_DIR}/cuda_kernel_module_fatbin/>,${CMAKE_CURRENT_BINARY_DIR}>
     DEPENDS GPUTrackingCUDAKernels $<TARGET_OBJECTS:GPUTrackingCUDAKernels>
-    COMMENT "Compiling fatbin kernels"
+    COMMENT "Compiling fatbin kernels ${CMAKE_CURRENT_BINARY_DIR}/GPUTrackingCUDAKernelModules.o"
     VERBATIM
     COMMAND_EXPAND_LISTS
   )
@@ -175,6 +176,8 @@ elseif(GPUCA_CUDA_COMPILE_MODE STREQUAL "perkernel")
   # Disable all non-deterministic floating point to make TPC track model encoding / decoding precise
   set_source_files_properties(${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCCompressionKernels_step0attached.cu
                               ${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCCompressionKernels_step1unattached.cu
+                              ${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCDecompressionKernels_step0attached.cu
+                              ${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCDecompressionKernels_step1unattached.cu
                               TARGET_DIRECTORY ${targetName}
                               PROPERTIES
                               COMPILE_FLAGS "${GPUCA_CUDA_NO_FAST_MATH_FLAGS}"
@@ -187,3 +190,9 @@ elseif(GPUCA_CUDA_COMPILE_MODE STREQUAL "rdc")
 else()
   message(FATAL_ERROR "Invalid compile mode")
 endif()
+
+add_library(GPUTrackingCUDAExternalProvider OBJECT GPUReconstructionCUDAExternalProvider.cu)
+add_library(O2::GPUTrackingCUDAExternalProvider ALIAS GPUTrackingCUDAExternalProvider)
+set_property(TARGET GPUTrackingCUDAExternalProvider PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+target_compile_definitions(GPUTrackingCUDAExternalProvider PRIVATE $<TARGET_PROPERTY:${targetName},COMPILE_DEFINITIONS>)
+target_include_directories(GPUTrackingCUDAExternalProvider PRIVATE $<TARGET_PROPERTY:${targetName},INCLUDE_DIRECTORIES>)

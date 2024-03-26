@@ -121,14 +121,12 @@ void Alice3Magnet::ConstructGeometry()
   TGeoVolume* outerVacuumVol = new TGeoVolume("outerVacuum", outerVacuum, kMedVac);
   TGeoVolume* outerWrapVol = new TGeoVolume("outerWrap", outerLayer, kMedAl);
 
-  innerWrapVol->SetLineColor(kRed);
-  innerVacuumVol->SetLineColor(kGray);
-  innerVacuumVol->SetVisibility(1);
-  coilsVol->SetLineColor(kOrange);
-  restMaterialVol->SetLineColor(kRed);
-  outerVacuumVol->SetLineColor(kGray);
-  outerVacuumVol->SetVisibility(1);
-  outerWrapVol->SetLineColor(kRed);
+  innerWrapVol->SetLineColor(kRed + 2);
+  innerVacuumVol->SetLineColor(kRed + 2);
+  coilsVol->SetLineColor(kRed + 2);
+  restMaterialVol->SetLineColor(kRed + 2);
+  outerVacuumVol->SetLineColor(kRed + 2);
+  outerWrapVol->SetLineColor(kRed + 2);
 
   new TGeoVolumeAssembly("magnet");
   auto* magnet = gGeoManager->GetVolume("magnet");

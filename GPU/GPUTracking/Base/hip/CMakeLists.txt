@@ -11,22 +11,113 @@
 
 set(MODULE GPUTrackingHIP)
 
+# set(GPUCA_HIP_HIPIFY_FROM_CUDA 0) # Use local HIP source files
+
 # Setting flags as a global option for all HIP targets.
-set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -fno-gpu-rdc")
 if(DEFINED HIP_AMDGPUTARGET)
   set(TMP_TARGET "(GPU Target ${HIP_AMDGPUTARGET})")
 endif()
-
 message(STATUS "Building GPUTracking with HIP support ${TMP_TARGET}")
 
-set(SRCS GPUReconstructionHIP.hip)
-set(HDRS GPUReconstructionHIP.h GPUReconstructionHIPInternals.h GPUReconstructionHIPIncludes.h HIPThrustHelpers.h)
+if(NOT DEFINED GPUCA_HIP_HIPIFY_FROM_CUDA OR "${GPUCA_HIP_HIPIFY_FROM_CUDA}")
+  set(GPUCA_HIP_SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/hipify)
+  file(MAKE_DIRECTORY ${GPUCA_HIP_SOURCE_DIR})
+  set(GPUCA_HIP_FILE_LIST GPUReconstructionCUDA.cu GPUReconstructionCUDAExternalProvider.cu GPUReconstructionCUDA.h GPUReconstructionCUDAInternals.h GPUReconstructionCUDAkernel.template.cu CUDAThrustHelpers.h GPUReconstructionCUDADef.h GPUReconstructionCUDAGenRTC.cxx GPUReconstructionCUDAKernels.cu GPUReconstructionCUDArtc.cu)
+  set(GPUCA_HIP_LOCAL_FILE_LIST GPUReconstructionHIPIncludes.h)
+  set(HIP_SOURCES "")
+  foreach(file ${GPUCA_HIP_FILE_LIST})
+    get_filename_component(ABS_CUDA_SORUCE ../cuda/${file} ABSOLUTE)
+    get_filename_component(CUDA_SOURCE ${file} NAME)
+    string(REPLACE ".cu" ".hip" HIP_SOURCE1 ${CUDA_SOURCE})
+    string(REPLACE "CUDA" "HIP" HIP_SOURCE ${HIP_SOURCE1})
+    add_custom_command(
+      OUTPUT ${GPUCA_HIP_SOURCE_DIR}/${HIP_SOURCE}
+      COMMAND ${hip_HIPIFY_PERL_EXECUTABLE} --quiet-warnings ${ABS_CUDA_SORUCE} | sed -e 's/CUDA/HIP/g' -e 's/cuda/hip/g' > ${GPUCA_HIP_SOURCE_DIR}/${HIP_SOURCE}
+      DEPENDS ${ABS_CUDA_SORUCE}
+      COMMENT "Hippifying ${HIP_SOURCE}"
+    )
+    list(APPEND HIP_SOURCES "${GPUCA_HIP_SOURCE_DIR}/${HIP_SOURCE}")
+  endforeach()
+  foreach(file ${GPUCA_HIP_LOCAL_FILE_LIST})
+    get_filename_component(ABS_SORUCE ${file} ABSOLUTE)
+    get_filename_component(HIP_SOURCE ${file} NAME)
+    add_custom_command(
+      OUTPUT ${GPUCA_HIP_SOURCE_DIR}/${HIP_SOURCE}
+      COMMAND cp ${ABS_SORUCE} ${GPUCA_HIP_SOURCE_DIR}/${HIP_SOURCE}
+      DEPENDS ${ABS_SORUCE}
+      COMMENT "Copying ${HIP_SOURCE}"
+    )
+    list(APPEND HIP_SOURCES "${GPUCA_HIP_SOURCE_DIR}/${HIP_SOURCE}")
+  endforeach()
+else()
+  get_filename_component(GPUCA_HIP_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR} ABSOLUTE)
+endif()
+
+set(SRCS ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIP.hip ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIPKernels.hip)
+set(SRCS_CXX ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIPGenRTC.cxx)
+set(HDRS ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIP.h ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIPInternals.h ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIPDef.h ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIPIncludes.h ${GPUCA_HIP_SOURCE_DIR}/HIPThrustHelpers.h)
+
+# -------------------------------- Prepare RTC -------------------------------------------------------
+if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
+  enable_language(ASM)
+  if(ALIGPU_BUILD_TYPE STREQUAL "O2")
+    set(defineIncludeSrc "O2::${MODULE}")
+  else()
+    set(defineIncludeSrc "${MODULE}")
+  endif()
+  set(HIPRTC_DEFINES "-D$<JOIN:$<TARGET_PROPERTY:${defineIncludeSrc},COMPILE_DEFINITIONS>,$<SEMICOLON>-D>")
+  set(HIPRTC_INCLUDES "-I$<JOIN:$<FILTER:$<TARGET_PROPERTY:${defineIncludeSrc},INCLUDE_DIRECTORIES>,EXCLUDE,^/usr/include/?>,$<SEMICOLON>-I>"
+                    -I${CMAKE_SOURCE_DIR}/Detectors/Base/src
+                    -I${CMAKE_SOURCE_DIR}/Detectors/TRD/base/src
+  )
+  if(ALIGPU_BUILD_TYPE STREQUAL "O2")
+    set(HIPRTC_INCLUDES ${HIPRTC_INCLUDES} "-I$<JOIN:$<FILTER:$<TARGET_PROPERTY:O2::ITStrackingHIP,INCLUDE_DIRECTORIES>,EXCLUDE,^/usr/include/?>,$<SEMICOLON>-I>")
+  endif()
+
+  set(HIPRTC_FLAGS "${CMAKE_HIP_FLAGS} ${CMAKE_HIP_FLAGS_${CMAKE_BUILD_TYPE_UPPER}} -std=c++${CMAKE_HIP_STANDARD}")
+  separate_arguments(HIPRTC_FLAGS)
+
+  # convenience variables
+  if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
+    get_filename_component(GPUDIR ${CMAKE_SOURCE_DIR}/../ ABSOLUTE)
+  else()
+    set(GPUDIR ${CMAKE_SOURCE_DIR}/GPU/GPUTracking)
+  endif()
+
+  set(HIPRTC_SRC ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIPrtc.hip)
+  set(HIPRTC_BIN ${CMAKE_CURRENT_BINARY_DIR}/GPUReconstructionHIPrtc)
+
+  # cmake-format: off
+  add_custom_command(
+      OUTPUT ${HIPRTC_BIN}.src
+      COMMAND cat ${GPUDIR}/Base/hip/GPUReconstructionHIPIncludes.h > ${HIPRTC_BIN}.src
+      COMMAND ${CMAKE_CXX_COMPILER} ${HIPRTC_DEFINES} ${HIPRTC_INCLUDES} -std=c++${CMAKE_HIP_STANDARD} -D__HIPCC__ -D__HIP_DEVICE_COMPILE__ -x c++ -E ${HIPRTC_SRC} >> ${HIPRTC_BIN}.src
+      MAIN_DEPENDENCY ${HIPRTC_SRC}
+      IMPLICIT_DEPENDS CXX ${HIPRTC_SRC}
+      COMMAND_EXPAND_LISTS
+      COMMENT "Preparing HIP RTC source file ${HIPRTC_BIN}.src"
+  )
+  create_binary_resource(${HIPRTC_BIN}.src ${HIPRTC_BIN}.src.o)
+
+  add_custom_command(
+      OUTPUT ${HIPRTC_BIN}.command
+      COMMAND echo -n "${CMAKE_HIP_COMPILER} ${HIPRTC_FLAGS} ${HIPRTC_DEFINES}" > ${HIPRTC_BIN}.command
+      COMMAND_EXPAND_LISTS
+      VERBATIM
+      COMMENT "Preparing HIP RTC command file ${HIPRTC_BIN}.command"
+  )
+  create_binary_resource(${HIPRTC_BIN}.command ${HIPRTC_BIN}.command.o)
+
+  set(SRCS ${SRCS} ${HIPRTC_BIN}.src.o ${HIPRTC_BIN}.command.o)
+endif()
+# -------------------------------- End RTC -------------------------------------------------------
 
 if(ALIGPU_BUILD_TYPE STREQUAL "O2")
+  set(TMP_BASELIB O2::GPUTracking)
   o2_add_library(
     ${MODULE}
     SOURCES ${SRCS}
-    PUBLIC_LINK_LIBRARIES O2::GPUTracking O2::ITStrackingHIP hip::host hip::device hip::hipcub roc::rocthrust
+    PUBLIC_LINK_LIBRARIES ${TMP_BASELIB} O2::ITStrackingHIP hip::host hip::device hip::hipcub roc::rocthrust
     PUBLIC_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/Detectors/TRD/base/src
                                ${CMAKE_SOURCE_DIR}/Detectors/Base/src
                                ${CMAKE_SOURCE_DIR}/DataFormats/Reconstruction/src
@@ -65,7 +156,8 @@ if(ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
   set(ALILIBSTESTED ${ALILIBSTESTED} CACHE INTERNAL "ALILIBSTESTED")
 
   # HIP run-time and driver
-  target_link_libraries(Ali${MODULE} PUBLIC AliGPUTracking hip::host hip::device hip::hipcub roc::rocthrust)
+  set(TMP_BASELIB AliGPUTracking)
+  target_link_libraries(Ali${MODULE} PUBLIC ${TMP_BASELIB} hip::host hip::device hip::hipcub roc::rocthrust)
 
   # Additional compilation flags
   set_target_properties(Ali${MODULE} PROPERTIES COMPILE_FLAGS "")
@@ -80,9 +172,87 @@ endif()
 if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
   add_definitions(-DGPUCA_GPULIBRARY=HIP)
   add_library(${MODULE} SHARED ${SRCS})
-  target_link_libraries(${MODULE} GPUTracking hip::host hip::device hip::hipcub roc::rocthrust)
+  set(TMP_BASELIB GPUTracking)
+  target_link_libraries(${MODULE} PUBLIC ${TMP_BASELIB} hip::host hip::device hip::hipcub roc::rocthrust)
   set(targetName "${MODULE}")
   install(TARGETS GPUTrackingHIP)
 endif()
 
+add_library(${MODULE}_CXX OBJECT ${SRCS_CXX})
+target_compile_definitions(${MODULE}_CXX PRIVATE $<TARGET_PROPERTY:${TMP_BASELIB},COMPILE_DEFINITIONS>)
+target_include_directories(${MODULE}_CXX PRIVATE $<TARGET_PROPERTY:${TMP_BASELIB},INCLUDE_DIRECTORIES>)
+target_link_libraries(${targetName} PRIVATE ${MODULE}_CXX)
+
+if(NOT DEFINED GPUCA_HIP_HIPIFY_FROM_CUDA OR "${GPUCA_HIP_HIPIFY_FROM_CUDA}")
+  add_custom_target(${MODULE}_HIPIFIED DEPENDS ${HIP_SOURCES})
+  add_dependencies(${targetName} ${MODULE}_HIPIFIED)
+  add_dependencies(${MODULE}_CXX ${MODULE}_HIPIFIED)
+endif()
+
 set_target_hip_arch(${targetName})
+
+if(OpenMP_CXX_FOUND)
+  # Must be private, depending libraries might be compiled by compiler not understanding -fopenmp
+  target_compile_definitions(${MODULE}_CXX PRIVATE WITH_OPENMP)
+  target_link_libraries(${MODULE}_CXX PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+if(NOT DEFINED GPUCA_HIP_COMPILE_MODE)
+  if(ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
+    set(GPUCA_HIP_COMPILE_MODE "onefile")
+  else()
+    set(GPUCA_HIP_COMPILE_MODE "onefile")
+  endif()
+endif()
+if(GPUCA_HIP_COMPILE_MODE STREQUAL "onefile")
+  target_compile_definitions(${targetName} PRIVATE GPUCA_KERNEL_COMPILE_MODE=0)
+elseif(GPUCA_HIP_COMPILE_MODE STREQUAL "perkernel")
+  add_library(GPUTrackingHIPKernels OBJECT $<JOIN:$<LIST:TRANSFORM,$<LIST:TRANSFORM,$<LIST:TRANSFORM,$<TARGET_PROPERTY:O2_GPU_KERNELS,O2_GPU_KERNEL_NAMES>,REPLACE,[^A-Za-z0-9]+,_>,PREPEND,${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_>,APPEND,.cu>, >)
+  set_property(TARGET GPUTrackingHIPKernels PROPERTY HIP_FATBIN_COMPILATION ON)
+  target_compile_options(GPUTrackingHIPKernels PRIVATE "-fno-gpu-rdc")
+  target_link_options(GPUTrackingHIPKernels PRIVATE "-fno-gpu-rdc")
+  target_compile_definitions(${targetName} PRIVATE GPUCA_KERNEL_COMPILE_MODE=1)
+  target_compile_definitions(GPUTrackingHIPKernels PRIVATE $<TARGET_PROPERTY:${targetName},COMPILE_DEFINITIONS>)
+  target_include_directories(GPUTrackingHIPKernels PRIVATE $<TARGET_PROPERTY:${targetName},INCLUDE_DIRECTORIES>)
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/hip_kernel_module_fatbin)
+  add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/GPUTrackingHIPKernelModules.o
+    COMMAND cp -u $<TARGET_OBJECTS:GPUTrackingHIPKernels> ${CMAKE_CURRENT_BINARY_DIR}/hip_kernel_module_fatbin/
+    COMMAND ${CMAKE_LINKER} --relocatable --format binary --output ${CMAKE_CURRENT_BINARY_DIR}/GPUTrackingHIPKernelModules.o $<PATH:RELATIVE_PATH,$<LIST:TRANSFORM,$<PATH:GET_FILENAME,$<TARGET_OBJECTS:GPUTrackingHIPKernels>>,PREPEND,${CMAKE_CURRENT_BINARY_DIR}/hip_kernel_module_fatbin/>,${CMAKE_CURRENT_BINARY_DIR}>
+    DEPENDS GPUTrackingHIPKernels $<TARGET_OBJECTS:GPUTrackingHIPKernels>
+    COMMENT "Compiling fatbin kernels ${CMAKE_CURRENT_BINARY_DIR}/GPUTrackingHIPKernelModules.o"
+    VERBATIM
+    COMMAND_EXPAND_LISTS
+  )
+  target_sources(${targetName} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/GPUTrackingHIPKernelModules.o)
+  set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/GPUTrackingHIPKernelModules.o PROPERTIES EXTERNAL_OBJECT true GENERATED true)
+
+  # Disable all non-deterministic floating point to make TPC track model encoding / decoding precise
+  set_source_files_properties(${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCCompressionKernels_step0attached.hip
+                              ${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCCompressionKernels_step1unattached.hip
+                              ${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCDecompressionKernels_step0attached.hip
+                              ${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_GPUTPCDecompressionKernels_step1unattached.hip
+                              TARGET_DIRECTORY ${targetName}
+                              PROPERTIES
+                              COMPILE_FLAGS "${GPUCA_HIP_NO_FAST_MATH_FLAGS}"
+                              COMPILE_DEFINITIONS "GPUCA_NO_FAST_MATH")
+elseif(GPUCA_HIP_COMPILE_MODE STREQUAL "rdc")
+  message(FATAL_ERROR "HIP RDC compilation of GPUReconstruction ios not yet working!")
+  target_compile_definitions(${targetName} PRIVATE GPUCA_KERNEL_COMPILE_MODE=2)
+  target_compile_options(${targetName} PRIVATE "-fgpu-rdc")
+  target_link_options(${targetName} PRIVATE "-fgpu-rdc")
+  target_sources(${targetName} PRIVATE $<JOIN:$<LIST:TRANSFORM,$<LIST:TRANSFORM,$<LIST:TRANSFORM,$<TARGET_PROPERTY:O2_GPU_KERNELS,O2_GPU_KERNEL_NAMES>,REPLACE,[^A-Za-z0-9]+,_>,PREPEND,${O2_GPU_KERNEL_WRAPPER_FOLDER}/krnl_>,APPEND,.hip>, >)
+else()
+  message(FATAL_ERROR "Invalid compile mode")
+endif()
+if(NOT GPUCA_HIP_COMPILE_MODE STREQUAL "rdc")
+  target_compile_options(${targetName} PRIVATE "-fno-gpu-rdc")
+  target_link_options(${targetName} PRIVATE "-fno-gpu-rdc")
+endif()
+
+add_library(GPUTrackingHIPExternalProvider OBJECT ${GPUCA_HIP_SOURCE_DIR}/GPUReconstructionHIPExternalProvider.hip)
+add_library(O2::GPUTrackingHIPExternalProvider ALIAS GPUTrackingHIPExternalProvider)
+target_compile_options(GPUTrackingHIPExternalProvider PRIVATE "-fgpu-rdc")
+target_link_options(GPUTrackingHIPExternalProvider PRIVATE "-fgpu-rdc")
+target_compile_definitions(GPUTrackingHIPExternalProvider PRIVATE $<TARGET_PROPERTY:${targetName},COMPILE_DEFINITIONS>)
+target_include_directories(GPUTrackingHIPExternalProvider PRIVATE $<TARGET_PROPERTY:${targetName},INCLUDE_DIRECTORIES>)

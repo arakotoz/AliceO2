@@ -94,7 +94,7 @@ struct PartitionManager<Partition<T>> {
   static void doSetPartition(Partition<T>& partition, T2& table)
   {
     if constexpr (std::is_same_v<T, T2>) {
-      partition.setTable(table);
+      partition.bindTable(table);
     }
   }
 
@@ -188,7 +188,7 @@ template <typename OBJ>
 struct ConditionManager<Condition<OBJ>> {
   static bool appendCondition(std::vector<InputSpec>& inputs, Condition<OBJ>& what)
   {
-    inputs.emplace_back(InputSpec{what.path, "AODC", compile_time_hash(what.path.c_str()), Lifetime::Condition, ccdbParamSpec(what.path)});
+    inputs.emplace_back(InputSpec{what.path, "AODC", runtime_hash(what.path.c_str()), Lifetime::Condition, ccdbParamSpec(what.path)});
     return true;
   }
   static bool newDataframe(InputRecord& inputs, Condition<OBJ>& what)

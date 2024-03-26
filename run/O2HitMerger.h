@@ -75,6 +75,8 @@
 #include <ITS3Simulation/DescriptorInnerBarrelITS3.h>
 #include <IOTOFSimulation/Detector.h>
 #include <RICHSimulation/Detector.h>
+#include <ECalSimulation/Detector.h>
+#include <MI3Simulation/Detector.h>
 #endif
 
 #include <tbb/concurrent_unordered_map.h>
@@ -982,18 +984,7 @@ void O2HitMerger::initDetInstances()
     }
 #ifdef ENABLE_UPGRADES
     if (i == DetID::IT3) {
-      std::string confKey = o2::conf::SimConfig::Instance().getKeyValueString();
-      auto params = o2::utils::Str::tokenize(confKey, ';', true);
-      std::string version = "";
-      for (auto& param : params) {
-        auto keyval = o2::utils::Str::tokenize(param, '=');
-        if (keyval[0].find("DescriptorInnerBarrelITS3") != std::string::npos) {
-          version = o2::utils::Str::trim_copy(keyval[1]);
-          break;
-        }
-      }
-
-      mDetectorInstances[i] = std::move(std::make_unique<o2::its::Detector>(true, "IT3", version));
+      mDetectorInstances[i] = std::move(std::make_unique<o2::its::Detector>(true, "IT3"));
       counter++;
     }
     if (i == DetID::TRK) {
@@ -1014,6 +1005,14 @@ void O2HitMerger::initDetInstances()
     }
     if (i == DetID::RCH) {
       mDetectorInstances[i] = std::move(std::make_unique<o2::rich::Detector>(true));
+      counter++;
+    }
+    if (i == DetID::MI3) {
+      mDetectorInstances[i] = std::move(std::make_unique<o2::mi3::Detector>(true));
+      counter++;
+    }
+    if (i == DetID::ECL) {
+      mDetectorInstances[i] = std::move(std::make_unique<o2::ecal::Detector>(true));
       counter++;
     }
 #endif

@@ -34,16 +34,16 @@ class TRKServices : public FairModule
                            kCSide = -1 };
   // TRK services overview: three componenets
   //
-  // ==================================================
-  // ============||      Outer           ||============
-  // =========|| ||       Tracker        || ||=========
-  //          || ||======================|| ||
-  //          ||      Inner + Middle        ||
-  //          ||         Tracker            ||
-  //          || ||======================|| ||
-  // =========|| ||                      || ||=========  ---> createDisksServices
-  // ============||                      ||============  ---> createMiddleBarrelServices
-  // ==================================================  ---> createOuterServices
+  // ===================================================
+  // ============||       Outer           ||============
+  // =========|| ||        Tracker        || ||=========
+  //          || ||===||-------------||===|| ||
+  //          ||      || Inner + Mid ||      ||
+  //          ||      ||  Tracker    ||      ||
+  //          || ||===||-------------||===|| ||
+  // =========|| ||                       || ||=========  ---> createDisksServices
+  // ============||                       ||============  ---> createMiddleBarrelServices
+  // ===================================================  ---> createOuterServices
  public:
   TRKServices() = default;
   TRKServices(float rMin, float zLength, float thickness);
@@ -56,9 +56,9 @@ class TRKServices : public FairModule
 
  protected:
   // Coldplate
-  float mColdPlateRMin;
-  float mColdPlateZLength;
-  float mColdPlateThickness;
+  float mColdPlateRMin;      // cm
+  float mColdPlateZLength;   // cm
+  float mColdPlateThickness; // cm
   float mColdPlateX0;
 
   // Services
@@ -70,6 +70,11 @@ class TRKServices : public FairModule
   float mMiddleDiskThickness = 1.0;                      // cm
   std::vector<float> mCableFanWeights = {0.5, 0.3, 0.2}; // relative weights of the fan layers
 
+  // IRIS vacuum vessel
+  float mRInIRISVacV;       // cm
+  float mROutIRISVacV;      // cm
+  float mZLengthIRISVacV;   // cm
+  float mThicknessIRISVacV; // cm
   ClassDefOverride(TRKServices, 1);
 };
 } // namespace trk

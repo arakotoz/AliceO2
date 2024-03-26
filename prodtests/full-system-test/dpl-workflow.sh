@@ -30,6 +30,8 @@ fi
 : ${CTF_FREE_DISK_WAIT:="10"}         # if disk on EPNs is close to full, wait X seconds before retrying to write
 : ${CTF_MAX_FREE_DISK_WAIT:="600"}    # if not enough disk space after this time throw error
 
+export CALIB_RCT_UPDATER=0
+
 # entropy encoding/decoding mode, '' is equivalent to '--ans-version compat' (compatible with < 09/2023 data),
 # use '--ans-version 1.0 --ctf-dict none' for the new per-TF dictionary mode
 : ${RANS_OPT:="--ans-version 1.0 --ctf-dict none"}
@@ -52,10 +54,12 @@ if [[ $EPNSYNCMODE == 1 ]] || type numactl >/dev/null 2>&1 && [[ `numactl -H | g
   [[ $NUMAGPUIDS != 0 ]] && ARGS_ALL+=" --child-driver 'numactl --membind $NUMAID --cpunodebind $NUMAID'"
 fi
 if [[ -z ${TIMEFRAME_RATE_LIMIT:-} ]] && [[ $DIGITINPUT != 1 ]]; then
-  TIMEFRAME_RATE_LIMIT=$((12 * 230 / ($RECO_NUM_NODES_WORKFLOW < 230 ? $RECO_NUM_NODES_WORKFLOW : 230) * ($NUMAGPUIDS != 0 ? 1 : 2) * 128 / $NHBPERTF))
+  RECO_NUM_NODES_WORKFLOW_CMP=$(($RECO_NUM_NODES_WORKFLOW > 15 ? ($RECO_NUM_NODES_WORKFLOW < 230 ? $RECO_NUM_NODES_WORKFLOW : 230) : 15))
+  TIMEFRAME_RATE_LIMIT=$((12 * 230 / ${RECO_NUM_NODES_WORKFLOW_CMP} * ($NUMAGPUIDS != 0 ? 1 : 2) * 128 / $NHBPERTF))
   [[ $BEAMTYPE != "PbPb" && ${HIGH_RATE_PP:-0} == 0 ]] && TIMEFRAME_RATE_LIMIT=$(($TIMEFRAME_RATE_LIMIT * 3))
   ! has_detector TPC && TIMEFRAME_RATE_LIMIT=$(($TIMEFRAME_RATE_LIMIT * 4))
   [[ ! -z ${EPN_GLOBAL_SCALING:-} ]] && TIMEFRAME_RATE_LIMIT=$(($TIMEFRAME_RATE_LIMIT * $EPN_GLOBAL_SCALING))
+  [[ ${TIMEFRAME_RATE_LIMIT} -ge 512 ]] && TIMEFRAME_RATE_LIMIT=512
 fi
 [[ ! -z ${TIMEFRAME_RATE_LIMIT:-} ]] && [[ $TIMEFRAME_RATE_LIMIT != 0 ]] && ARGS_ALL+=" --timeframes-rate-limit $TIMEFRAME_RATE_LIMIT --timeframes-rate-limit-ipcid ${O2JOBID:-$NUMAID}"
 if [[ $EPNSYNCMODE == 1 ]]; then
@@ -122,7 +126,7 @@ if [[ $SYNCMODE == 1 ]]; then
 
   PVERTEXING_CONFIG_KEY+="pvertexer.meanVertexExtraErrConstraint=0.3;" # for calibration relax the constraint
   if [[ $SYNCRAWMODE == 1 ]]; then # add extra tolerance in sync mode to account for eventual time misalignment
-    PVERTEXING_CONFIG_KEY+="pvertexer.timeMarginVertexTime=1.3;"
+    PVERTEXING_CONFIG_KEY+="pvertexer.timeMarginVertexTime=2.5;"
     if [[ -z $ITSEXTRAERR ]]; then # in sync mode account for ITS residual misalignment
       ERRIB="100e-8"
       ERROB="100e-8"
@@ -226,6 +230,12 @@ fi
 
 if [[ ! -z ${EVE_NTH_EVENT:-} ]]; then
   EVE_CONFIG+=" --only-nth-event=$EVE_NTH_EVENT"
+fi
+
+if [[ $RUNTYPE == "SYNTHETIC" ]]; then
+  EVE_CONFIG+=" --number-of_files 20"
+elif [[ $RUNTYPE == "PHYSICS" ]]; then
+  EVE_CONFIG+=" --primary-vertex-triggers"
 fi
 
 if [[ $GPUTYPE != "CPU" && $NUMAGPUIDS != 0 ]] && [[ -z ${ROCR_VISIBLE_DEVICES:-} || ${ROCR_VISIBLE_DEVICES:-} = "0,1,2,3,4,5,6,7" || ${ROCR_VISIBLE_DEVICES:-} = "0,1,2,3" || ${ROCR_VISIBLE_DEVICES:-} = "4,5,6,7" ]]; then
@@ -334,9 +344,10 @@ if has_processing_step MUON_SYNC_RECO; then
   fi
   [[ $RUNTYPE == "COSMICS" ]] && [[ -z ${CONFIG_EXTRA_PROCESS_o2_mft_reco_workflow:-} ]] && CONFIG_EXTRA_PROCESS_o2_mft_reco_workflow="MFTTracking.FullClusterScan=true"
 fi
-[[ "${ED_VERTEX_MODE:-}" == "1" ]] && has_detectors_reco ITS && has_detector_matching PRIMVTX && [[ ! -z "$VERTEXING_SOURCES" ]] && EVE_CONFIG+=" --primary-vertex-mode"
+[[ $RUNTYPE != "COSMICS" ]] && [[ $RUNTYPE != "TECHNICAL" ]] && has_detectors_reco ITS && has_detector_matching PRIMVTX && [[ ! -z "$VERTEXING_SOURCES" ]] && EVE_CONFIG+=" --primary-vertex-mode"
 [[ $SYNCRAWMODE == 1 ]] && [[ -z ${CONFIG_EXTRA_PROCESS_o2_trd_global_tracking:-} ]] && CONFIG_EXTRA_PROCESS_o2_trd_global_tracking='GPU_rec_trd.maxChi2=25;GPU_rec_trd.penaltyChi2=20;GPU_rec_trd.extraRoadY=4;GPU_rec_trd.extraRoadZ=10;GPU_rec_trd.applyDeflectionCut=0;GPU_rec_trd.trkltResRPhiIdeal=1'
 [[ $SYNCRAWMODE == 1 ]] && [[ -z ${ARGS_EXTRA_PROCESS_o2_phos_reco_workflow:-} ]] && ARGS_EXTRA_PROCESS_o2_phos_reco_workflow='--presamples 2 --fitmethod semigaus'
+[[ $SYNCRAWMODE == 1 ]] && [[ $BEAMTYPE == "PbPb" ]] && $CONFIG_EXTRA_PROCESS_o2_calibration_emcal_channel_calib_workflow='EMCALCalibParams.selectedClassMasks=C0TVX-NONE-NOPF-EMC:c0tvxtsc-b-nopf-emc:C0TVXTCE-B-NOPF-EMC;EMCALCalibParams.fractionEvents_bc=0.3'
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Start of workflow command generation
@@ -457,9 +468,11 @@ if [[ ! -z $INPUT_DETECTOR_LIST ]]; then
   fi
 fi
 
-# if root output is requested, record info of processed TFs DataHeader for replay of root files
-ROOT_OUTPUT_ASKED=`declare -p | cut -d' ' -f3 | cut -d'=' -f1 | grep ENABLE_ROOT_OUTPUT_`
-[[ -z "$DISABLE_ROOT_OUTPUT" ]] || [[ ! -z $ROOT_OUTPUT_ASKED ]] && add_W o2-tfidinfo-writer-workflow
+if [[ -z ${WORKFLOW_DETECTORS_USE_GLOBAL_READER_TRACKS} ]] && [[ -z ${WORKFLOW_DETECTORS_USE_GLOBAL_READER_CLUSTERS} ]]; then
+  # if root output is requested, record info of processed TFs DataHeader for replay of root files
+  ROOT_OUTPUT_ASKED=`declare -p | cut -d' ' -f3 | cut -d'=' -f1 | grep ENABLE_ROOT_OUTPUT_`
+  [[ -z "$DISABLE_ROOT_OUTPUT" ]] || [[ ! -z $ROOT_OUTPUT_ASKED ]] && add_W o2-tfidinfo-writer-workflow
+fi
 
 # if TPC correction with IDC from CCDB was requested
 has_detector TPC && [[ ${NEED_TPC_SCALERS_WF:-} == 1 ]] && add_W o2-tpc-scaler-workflow " ${TPC_SCALERS_CONF:-} "
@@ -590,6 +603,7 @@ if has_processing_step ENTROPY_ENCODER && [[ ! -z "$WORKFLOW_DETECTORS_CTF" ]] &
   if [[ $CREATECTFDICT == 1 ]] && [[ $EXTINPUT == 1 ]]; then CONFIG_CTF+=" --save-dict-after $SAVE_CTFDICT_NTIMEFRAMES"; fi
   [[ $EPNSYNCMODE == 1 ]] && CONFIG_CTF+=" --require-free-disk 53687091200 --wait-for-free-disk $CTF_FREE_DISK_WAIT --max-wait-for-free-disk $CTF_MAX_FREE_DISK_WAIT"
   add_W o2-ctf-writer-workflow "$CONFIG_CTF"
+  [[ $SYNCMODE == 1 ]] && export CALIB_RCT_UPDATER=1
 fi
 
 # ---------------------------------------------------------------------------------------------------------------------

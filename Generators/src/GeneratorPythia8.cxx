@@ -21,7 +21,11 @@
 #include "SimulationDataFormat/MCEventHeader.h"
 #include "SimulationDataFormat/MCGenProperties.h"
 #include "SimulationDataFormat/ParticleStatus.h"
+#if PYTHIA_VERSION_INTEGER >= 8310
+#include "Pythia8/HIInfo.h"
+#else
 #include "Pythia8/HIUserHooks.h"
+#endif
 #include "Pythia8Plugins/PowhegHooks.h"
 #include "TSystem.h"
 #include "ZDCBase/FragmentParam.h"
@@ -505,8 +509,10 @@ void GeneratorPythia8::pruneEvent(Pythia8::Event& event, Select select)
       }
     }
   }
-  LOG(info) << "Pythia event was pruned from " << event.size()
-            << " to " << pruned.size() << " particles";
+  if (GeneratorPythia8Param::Instance().verbose) {
+    LOG(info) << "Pythia event was pruned from " << event.size()
+              << " to " << pruned.size() << " particles";
+  }
   // Assign our pruned event to the event passed in
   event = pruned;
 }
@@ -626,6 +632,10 @@ void GeneratorPythia8::updateHeader(o2::dataformats::MCEventHeader* eventHeader)
   eventHeader->putInfo<float>(Key::xSection, info.sigmaGen() * 1e9);
   eventHeader->putInfo<float>(Key::xSectionError, info.sigmaErr() * 1e9);
 
+  // Set event scale and nMPI
+  eventHeader->putInfo<float>(Key::eventScale, info.QRen());
+  eventHeader->putInfo<int>(Key::mpi, info.nMPI());
+
   // Set weights (overrides cross-section for each weight)
   size_t iw = 0;
   auto xsecErr = info.weightContainerPtr->getTotalXsecErr();
@@ -742,14 +752,21 @@ void GeneratorPythia8::getNcoll(const Pythia8::Info& info, int& nColl)
 #else
   auto hiinfo = info.hiInfo;
 #endif
+  nColl = 0;
+  if (!hiinfo) {
+    LOG(warn) << "No heavy-ion information from Pythia";
+    return;
+  }
 
   // This is how the Pythia authors define Ncoll
   nColl = (hiinfo->nAbsProj() + hiinfo->nDiffProj() +
            hiinfo->nAbsTarg() + hiinfo->nDiffTarg() -
            hiinfo->nCollND() - hiinfo->nCollDD());
-  nColl = 0;
 
-  if (!hiinfo) {
+  if (not hiinfo->subCollisionsPtr()) {
+#if PYTHIA_VERSION_INTEGER < 8310
+    LOG(fatal) << "No sub-collision pointer from Pythia";
+#endif
     return;
   }
 
@@ -775,15 +792,21 @@ void GeneratorPythia8::getNpart(const Pythia8::Info& info, int& nPart)
 
   /** compute number of participants as the sum of all participants nucleons **/
 
-  // This is how the Pythia authors calculate Npart
 #if PYTHIA_VERSION_INTEGER < 8300
   auto hiinfo = info.hiinfo;
 #else
   auto hiinfo = info.hiInfo;
 #endif
-  if (hiinfo) {
-    nPart = (hiinfo->nAbsProj() + hiinfo->nDiffProj() +
-             hiinfo->nAbsTarg() + hiinfo->nDiffTarg());
+  nPart = 0;
+  if (not hiinfo) {
+    return;
+  }
+
+  // This is how the Pythia authors calculate Npart
+  nPart = (hiinfo->nAbsProj() + hiinfo->nDiffProj() +
+           hiinfo->nAbsTarg() + hiinfo->nDiffTarg());
+  if (not hiinfo->subCollisionsPtr()) {
+    return;
   }
 
   int nProtonProj, nNeutronProj, nProtonTarg, nNeutronTarg;
@@ -806,6 +829,15 @@ void GeneratorPythia8::getNpart(const Pythia8::Info& info, int& nProtonProj, int
 
   nProtonProj = nNeutronProj = nProtonTarg = nNeutronTarg = 0;
   if (!hiinfo) {
+    return;
+  }
+
+  nProtonProj = hiinfo->nAbsProj() + hiinfo->nDiffProj();
+  nProtonTarg = hiinfo->nAbsTarg() + hiinfo->nDiffTarg();
+  if (not hiinfo->subCollisionsPtr()) {
+#if PYTHIA_VERSION_INTEGER < 8310
+    LOG(fatal) << "No sub-collision pointer from Pythia";
+#endif
     return;
   }
 

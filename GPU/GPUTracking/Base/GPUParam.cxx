@@ -41,6 +41,8 @@ void GPUParam::SetDefaults(float solenoidBz)
   memset((void*)this, 0, sizeof(*this));
   new (&tpcGeometry) GPUTPCGeometry;
   new (&rec) GPUSettingsRec;
+  occupancyMap = nullptr;
+  occupancyTotal = 0;
 
 #ifdef GPUCA_TPC_GEOMETRY_O2
   const float kErrorsY[4] = {0.06, 0.24, 0.12, 0.1};
@@ -90,8 +92,8 @@ void GPUParam::SetDefaults(float solenoidBz)
 
   par.dAlpha = 0.349066f;
   bzkG = solenoidBz;
-  constBz = bzkG * GPUCA_NAMESPACE::gpu::gpu_common_constants::kCLight;
-  qptB5Scaler = CAMath::Abs(bzkG) > 0.1 ? CAMath::Abs(bzkG) / 5.006680f : 1.f;
+  bzCLight = bzkG * GPUCA_NAMESPACE::gpu::gpu_common_constants::kCLight;
+  qptB5Scaler = CAMath::Abs(bzkG) > 0.1f ? CAMath::Abs(bzkG) / 5.006680f : 1.f;
   par.dodEdx = 0;
 
   constexpr float plusZmin = 0.0529937;
@@ -109,7 +111,7 @@ void GPUParam::SetDefaults(float solenoidBz)
     if (tmp >= GPUCA_NSLICES / 4) {
       tmp -= GPUCA_NSLICES / 2;
     }
-    SliceParam[i].Alpha = 0.174533 + par.dAlpha * tmp;
+    SliceParam[i].Alpha = 0.174533f + par.dAlpha * tmp;
     SliceParam[i].CosAlpha = CAMath::Cos(SliceParam[i].Alpha);
     SliceParam[i].SinAlpha = CAMath::Sin(SliceParam[i].Alpha);
     SliceParam[i].AngleMin = SliceParam[i].Alpha - par.dAlpha / 2.f;
@@ -131,8 +133,8 @@ void GPUParam::SetDefaults(float solenoidBz)
 void GPUParam::UpdateSettings(const GPUSettingsGRP* g, const GPUSettingsProcessing* p, const GPURecoStepConfiguration* w)
 {
   if (g) {
-    bzkG = g->solenoidBz;
-    constBz = bzkG * GPUCA_NAMESPACE::gpu::gpu_common_constants::kCLight;
+    bzkG = g->solenoidBzNominalGPU;
+    bzCLight = bzkG * GPUCA_NAMESPACE::gpu::gpu_common_constants::kCLight;
     par.assumeConstantBz = g->constBz;
     par.toyMCEventsFlag = g->homemadeEvents;
     par.continuousTracking = g->continuousMaxTimeBin != 0;
@@ -145,7 +147,7 @@ void GPUParam::UpdateSettings(const GPUSettingsGRP* g, const GPUSettingsProcessi
     }
   }
   par.earlyTpcTransform = rec.tpc.forceEarlyTransform == -1 ? (!par.continuousTracking) : rec.tpc.forceEarlyTransform;
-  qptB5Scaler = CAMath::Abs(bzkG) > 0.1 ? CAMath::Abs(bzkG) / 5.006680f : 1.f;
+  qptB5Scaler = CAMath::Abs(bzkG) > 0.1f ? CAMath::Abs(bzkG) / 5.006680f : 1.f;
   if (p) {
     par.debugLevel = p->debugLevel;
     par.resetTimers = p->resetTimers;
@@ -161,7 +163,7 @@ void GPUParam::UpdateSettings(const GPUSettingsGRP* g, const GPUSettingsProcessi
 
 void GPUParam::SetDefaults(const GPUSettingsGRP* g, const GPUSettingsRec* r, const GPUSettingsProcessing* p, const GPURecoStepConfiguration* w)
 {
-  SetDefaults(g->solenoidBz);
+  SetDefaults(g->solenoidBzNominalGPU);
   if (r) {
     rec = *r;
     if (rec.fitPropagateBzOnly == -1) {
@@ -279,23 +281,3 @@ std::string GPUParamRTC::generateRTCCode(const GPUParam& param, bool useConstexp
 }
 
 static_assert(sizeof(GPUCA_NAMESPACE::gpu::GPUParam) == sizeof(GPUCA_NAMESPACE::gpu::GPUParamRTC), "RTC param size mismatch");
-
-o2::base::Propagator* GPUParam::GetDefaultO2Propagator(bool useGPUField) const
-{
-  o2::base::Propagator* prop = nullptr;
-#ifdef GPUCA_HAVE_O2HEADERS
-#ifdef GPUCA_STANDALONE
-  if (useGPUField == false) {
-    throw std::runtime_error("o2 propagator withouzt gpu field unsupported");
-  }
-#endif
-  prop = o2::base::Propagator::Instance(useGPUField);
-  if (useGPUField) {
-    prop->setGPUField(&polynomialField);
-    prop->setBz(polynomialField.GetNominalBz());
-  }
-#else
-  throw std::runtime_error("o2 propagator unsupported");
-#endif
-  return prop;
-}
