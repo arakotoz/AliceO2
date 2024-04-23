@@ -23,6 +23,9 @@
 #ifdef GPUCA_HAVE_O2HEADERS
 #include "Framework/SHA1.h"
 #endif
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <filesystem>
 
 using namespace GPUCA_NAMESPACE::gpu;
 
@@ -44,18 +47,10 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
   filename += std::to_string(rand());
 
   std::vector<std::string> kernels;
+  getRTCKernelCalls(kernels);
   std::string kernelsall;
-#undef GPUCA_KRNL_REG
-#define GPUCA_KRNL_REG(args) __launch_bounds__(GPUCA_M_MAX2_3(GPUCA_M_STRIP(args)))
-#define GPUCA_KRNL(...) GPUCA_KRNL_WRAP(GPUCA_KRNL_LOAD_, __VA_ARGS__)
-#define GPUCA_KRNL_LOAD_single(...) kernels.emplace_back(GPUCA_M_STR(GPUCA_KRNLGPU_SINGLE(__VA_ARGS__)));
-#define GPUCA_KRNL_LOAD_multi(...) kernels.emplace_back(GPUCA_M_STR(GPUCA_KRNLGPU_MULTI(__VA_ARGS__)));
-#include "GPUReconstructionKernelList.h"
-#undef GPUCA_KRNL
-#undef GPUCA_KRNL_LOAD_single
-#undef GPUCA_KRNL_LOAD_multi
   for (unsigned int i = 0; i < kernels.size(); i++) {
-    kernelsall += kernels[i];
+    kernelsall += kernels[i] + "\n";
   }
 
 #ifdef GPUCA_HAVE_O2HEADERS
@@ -70,11 +65,27 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
 
   nCompile = mProcessingSettings.rtc.compilePerKernel ? kernels.size() : 1;
   bool cacheLoaded = false;
+  int fd = 0;
   if (mProcessingSettings.rtc.cacheOutput) {
+    if (mProcessingSettings.RTCcacheFolder != ".") {
+      std::filesystem::create_directories(mProcessingSettings.RTCcacheFolder);
+    }
 #ifndef GPUCA_HAVE_O2HEADERS
     throw std::runtime_error("Cannot use RTC cache without O2 headers");
 #else
-    FILE* fp = fopen("rtc.cuda.cache", "rb");
+    if (mProcessingSettings.rtc.cacheMutex) {
+      mode_t mask = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+      fd = open((mProcessingSettings.RTCcacheFolder + "/cache.lock").c_str(), O_RDWR | O_CREAT | O_CLOEXEC, mask);
+      if (fd == -1) {
+        throw std::runtime_error("Error opening rtc cache mutex lock file");
+      }
+      fchmod(fd, mask);
+      if (lockf(fd, F_LOCK, 0)) {
+        throw std::runtime_error("Error locking rtc cache mutex file");
+      }
+    }
+
+    FILE* fp = fopen((mProcessingSettings.RTCcacheFolder + "/rtc.cuda.cache").c_str(), "rb");
     char sharead[20];
     if (fp) {
       size_t len;
@@ -108,6 +119,7 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
           break;
         }
         GPUSettingsProcessingRTC cachedSettings;
+        static_assert(std::is_trivially_copyable_v<GPUSettingsProcessingRTC> == true, "GPUSettingsProcessingRTC must be POD");
         if (fread(&cachedSettings, sizeof(cachedSettings), 1, fp) != 1) {
           throw std::runtime_error("Cache file corrupt");
         }
@@ -124,7 +136,7 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
           if (fread(buffer.data(), 1, len, fp) != len) {
             throw std::runtime_error("Cache file corrupt");
           }
-          FILE* fp2 = fopen((filename + "_" + std::to_string(i) + ".cubin").c_str(), "w+b");
+          FILE* fp2 = fopen((filename + "_" + std::to_string(i) + mRtcBinExtension).c_str(), "w+b");
           if (fp2 == nullptr) {
             throw std::runtime_error("Cannot open tmp file");
           }
@@ -148,13 +160,13 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
     HighResTimer rtcTimer;
     rtcTimer.ResetStart();
 #ifdef WITH_OPENMP
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 1)
 #endif
     for (unsigned int i = 0; i < nCompile; i++) {
       if (mProcessingSettings.debugLevel >= 3) {
-        printf("Compiling %s\n", (filename + "_" + std::to_string(i) + ".cu").c_str());
+        printf("Compiling %s\n", (filename + "_" + std::to_string(i) + mRtcSrcExtension).c_str());
       }
-      FILE* fp = fopen((filename + "_" + std::to_string(i) + ".cu").c_str(), "w+b");
+      FILE* fp = fopen((filename + "_" + std::to_string(i) + mRtcSrcExtension).c_str(), "w+b");
       if (fp == nullptr) {
         throw std::runtime_error("Error opening file");
       }
@@ -170,7 +182,12 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
       }
       fclose(fp);
       std::string command = std::string(_binary_GPUReconstructionCUDArtc_command_start, _binary_GPUReconstructionCUDArtc_command_len);
-      command += " -cubin -c " + filename + "_" + std::to_string(i) + ".cu -o " + filename + "_" + std::to_string(i) + ".cubin";
+      command += " -c " + filename + "_" + std::to_string(i) + mRtcSrcExtension + " -o " + filename + "_" + std::to_string(i) + mRtcBinExtension;
+      if (mProcessingSettings.debugLevel < 0) {
+        command += " &> /dev/null";
+      } else if (mProcessingSettings.debugLevel < 2) {
+        command += " > /dev/null";
+      }
       if (mProcessingSettings.debugLevel >= 3) {
         printf("Running command %s\n", command.c_str());
       }
@@ -186,7 +203,7 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
     }
 #ifdef GPUCA_HAVE_O2HEADERS
     if (mProcessingSettings.rtc.cacheOutput) {
-      FILE* fp = fopen("rtc.cuda.cache", "w+b");
+      FILE* fp = fopen((mProcessingSettings.RTCcacheFolder + "/rtc.cuda.cache").c_str(), "w+b");
       if (fp == nullptr) {
         throw std::runtime_error("Cannot open cache file for writing");
       }
@@ -202,7 +219,7 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
 
       std::vector<char> buffer;
       for (unsigned int i = 0; i < nCompile; i++) {
-        FILE* fp2 = fopen((filename + "_" + std::to_string(i) + ".cubin").c_str(), "rb");
+        FILE* fp2 = fopen((filename + "_" + std::to_string(i) + mRtcBinExtension).c_str(), "rb");
         if (fp2 == nullptr) {
           throw std::runtime_error("Cannot open cuda module file");
         }
@@ -223,6 +240,12 @@ int GPUReconstructionCUDA::genRTC(std::string& filename, unsigned int& nCompile)
       fclose(fp);
     }
 #endif
+  }
+  if (mProcessingSettings.rtc.cacheOutput && mProcessingSettings.rtc.cacheMutex) {
+    if (lockf(fd, F_ULOCK, 0)) {
+      throw std::runtime_error("Error unlocking RTC cache mutex file");
+    }
+    close(fd);
   }
 
 #endif

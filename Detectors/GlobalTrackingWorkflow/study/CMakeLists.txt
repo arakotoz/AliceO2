@@ -19,6 +19,8 @@ o2_add_library(GlobalTrackingStudy
                        src/TPCDataFilter.cxx
                        src/ITSOffsStudy.cxx
                        src/DumpTracks.cxx
+                       src/V0Ext.cxx
+                       src/TrackInfoExt.cxx
                PUBLIC_LINK_LIBRARIES O2::GlobalTracking
                                      O2::GlobalTrackingWorkflowReaders
                                      O2::GlobalTrackingWorkflowHelpers
@@ -26,6 +28,12 @@ o2_add_library(GlobalTrackingStudy
                                      O2::DetectorsVertexing
                                      O2::TPCWorkflow
                                      O2::SimulationDataFormat)
+
+o2_target_root_dictionary(
+  GlobalTrackingStudy
+  HEADERS include/GlobalTrackingStudy/V0Ext.h
+          include/GlobalTrackingStudy/TrackInfoExt.h
+)
 
 o2_add_executable(study-workflow
                   COMPONENT_NAME sv

@@ -297,8 +297,8 @@ int SetupReconstruction()
   GPUSettingsGRP grp = rec->GetGRPSettings();
   GPUSettingsRec recSet;
   GPUSettingsProcessing procSet;
-  memcpy((void*)&recSet, (void*)&configStandalone.rec, sizeof(GPUSettingsRec));
-  memcpy((void*)&procSet, (void*)&configStandalone.proc, sizeof(GPUSettingsProcessing));
+  recSet = configStandalone.rec;
+  procSet = configStandalone.proc;
   GPURecoStepConfiguration steps;
 
   if (configStandalone.eventGenerator) {
@@ -863,7 +863,7 @@ int main(int argc, char** argv)
         }
         if (configStandalone.dumpEvents) {
           char fname[1024];
-          sprintf(fname, "event.%d.dump", nEventsProcessed);
+          snprintf(fname, 1024, "event.%d.dump", nEventsProcessed);
           chainTracking->DumpData(fname);
           if (nEventsProcessed == 0) {
             rec->DumpSettings();

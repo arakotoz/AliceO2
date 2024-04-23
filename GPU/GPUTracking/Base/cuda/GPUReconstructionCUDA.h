@@ -16,6 +16,7 @@
 #define GPURECONSTRUCTIONCUDA_H
 
 #include "GPUReconstructionDeviceBase.h"
+#include <vector>
 #include <string>
 
 #ifdef _WIN32
@@ -53,6 +54,8 @@ class GPUReconstructionCUDABackend : public GPUReconstructionDeviceBase
 
   template <bool multi, class T, int I = 0>
   static int getRTCkernelNum(int k = -1);
+
+  void getRTCKernelCalls(std::vector<std::string>& kernels);
 
   GPUReconstructionCUDAInternals* mInternals;
 };
@@ -97,7 +100,9 @@ class GPUReconstructionCUDA : public GPUReconstructionKernels<GPUReconstructionC
 
  private:
   int genRTC(std::string& filename, unsigned int& nCompile);
-  int loadKernelModules(bool perKernel, bool perSingleMulti = true);
+  void genAndLoadRTC();
+  void loadKernelModules(bool perKernel, bool perSingleMulti = true);
+  const char *mRtcSrcExtension = ".src", *mRtcBinExtension = ".o";
 };
 
 } // namespace gpu
