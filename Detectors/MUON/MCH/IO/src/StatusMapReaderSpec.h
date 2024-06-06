@@ -9,23 +9,14 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// \file FlagReasonFactory.h
-/// \brief A class to create FlagReasons based on the predefined CSV list.
-/// \author Piotr Konopka, piotr.jan.konopka@cern.ch
+#ifndef O2_MCH_WORKFLOW_STATUSMAP_READER_SPEC_H
+#define O2_MCH_WORKFLOW_STATUSMAP_READER_SPEC_H
 
-#ifndef O2_FLAGREASONFACTORY_H
-#define O2_FLAGREASONFACTORY_H
+#include "Framework/DataProcessorSpec.h"
 
-#include "DataFormatsQualityControl/FlagReasons.h"
-
-namespace o2::quality_control
+namespace o2::mch
 {
+framework::DataProcessorSpec getStatusMapReaderSpec(const char* specName = "mch-statusmap-reader");
+}
 
-class FlagReasonFactory {
-public:
-FlagReasonFactory() = delete;
-@CSV_FLAG_REASONS@
-};
-
-} // namespace o2::quality_control
-#endif // O2_FLAGREASONFACTORY_H
+#endif

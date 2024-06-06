@@ -36,13 +36,14 @@
 #include "Framework/Tracing.h"
 #include "Framework/Monitoring.h"
 #include "Framework/AsyncQueue.h"
-#include "Framework/Plugins.h"
+#include "Framework/PluginManager.h"
 #include "Framework/DeviceContext.h"
 #include "Framework/DataProcessingContext.h"
 #include "Framework/StreamContext.h"
 #include "Framework/DeviceState.h"
 #include "Framework/DeviceConfig.h"
 #include "Framework/DefaultsHelpers.h"
+#include "Framework/Signpost.h"
 
 #include "TextDriverClient.h"
 #include "WSDriverClient.h"
@@ -83,6 +84,7 @@ using Value = o2::monitoring::tags::Value;
 O2_DECLARE_DYNAMIC_LOG(data_processor_context);
 O2_DECLARE_DYNAMIC_LOG(stream_context);
 O2_DECLARE_DYNAMIC_LOG(async_queue);
+O2_DECLARE_DYNAMIC_LOG(policies);
 
 namespace o2::framework
 {
@@ -129,6 +131,7 @@ o2::framework::ServiceSpec CommonServices::monitoringSpec()
       } },
     .exit = [](ServiceRegistryRef registry, void* service) {
                        auto* monitoring = reinterpret_cast<Monitoring*>(service);
+                       monitoring->flushBuffer();
                        delete monitoring; },
     .kind = ServiceKind::Serial};
 }
@@ -538,8 +541,8 @@ o2::framework::ServiceSpec CommonServices::decongestionSpec()
     .init = [](ServiceRegistryRef services, DeviceState&, fair::mq::ProgOptions& options) -> ServiceHandle {
       auto* decongestion = new DecongestionService();
       for (auto& input : services.get<DeviceSpec const>().inputs) {
-        if (input.matcher.lifetime == Lifetime::Timeframe) {
-          LOGP(detail, "Found a Timeframe input, we cannot update the oldest possible timeslice");
+        if (input.matcher.lifetime == Lifetime::Timeframe || input.matcher.lifetime == Lifetime::QA || input.matcher.lifetime == Lifetime::Sporadic || input.matcher.lifetime == Lifetime::Optional) {
+          LOGP(detail, "Found a real data input, we cannot update the oldest possible timeslice when sending messages");
           decongestion->isFirstInTopology = false;
           break;
         }
@@ -557,7 +560,7 @@ o2::framework::ServiceSpec CommonServices::decongestionSpec()
       O2_SIGNPOST_EVENT_EMIT(data_processor_context, cid, "postForwardingCallbacks", "We are the first one in the topology, we need to update the oldest possible timeslice");
       auto& timesliceIndex = ctx.services().get<TimesliceIndex>();
       auto& relayer = ctx.services().get<DataRelayer>();
-      timesliceIndex.updateOldestPossibleOutput();
+      timesliceIndex.updateOldestPossibleOutput(decongestion->nextEnumerationTimesliceRewinded);
       auto& proxy = ctx.services().get<FairMQDeviceProxy>();
       auto oldestPossibleOutput = relayer.getOldestPossibleOutput();
       if (decongestion->nextEnumerationTimesliceRewinded && decongestion->nextEnumerationTimeslice < oldestPossibleOutput.timeslice.value) {
@@ -629,7 +632,7 @@ o2::framework::ServiceSpec CommonServices::decongestionSpec()
       O2_SIGNPOST_EVENT_EMIT(data_processor_context, cid, "oldest_possible_timeslice", "Received oldest possible timeframe %" PRIu64 " from channel %d",
                              (uint64_t)oldestPossibleTimeslice, channel.value);
       relayer.setOldestPossibleInput({oldestPossibleTimeslice}, channel);
-      timesliceIndex.updateOldestPossibleOutput();
+      timesliceIndex.updateOldestPossibleOutput(decongestion.nextEnumerationTimesliceRewinded);
       auto oldestPossibleOutput = relayer.getOldestPossibleOutput();
 
       if (oldestPossibleOutput.timeslice.value == decongestion.lastTimeslice) {
@@ -849,6 +852,16 @@ o2::framework::ServiceSpec CommonServices::dataProcessingStats()
       if (deploymentMode != DeploymentMode::OnlineDDS && deploymentMode != DeploymentMode::OnlineECS && deploymentMode != DeploymentMode::OnlineAUX && deploymentMode != DeploymentMode::FST) {
         arrowAndResourceLimitingMetrics = true;
       }
+      // Input proxies should not report cpu_usage_fraction,
+      // because of the rate limiting which biases the measurement.
+      auto& spec = services.get<DeviceSpec const>();
+      bool enableCPUUsageFraction = true;
+      auto isProxy = [](DataProcessorLabel const& label) -> bool { return label == DataProcessorLabel{"input-proxy"}; };
+      if (std::find_if(spec.labels.begin(), spec.labels.end(), isProxy) != spec.labels.end()) {
+        O2_SIGNPOST_ID_GENERATE(mid, policies);
+        O2_SIGNPOST_EVENT_EMIT(policies, mid, "metrics", "Disabling cpu_usage_fraction metric for proxy %{public}s", spec.name.c_str());
+        enableCPUUsageFraction = false;
+      }
 
       std::vector<DataProcessingStats::MetricSpec> metrics = {
         MetricSpec{.name = "errors",
@@ -932,6 +945,7 @@ o2::framework::ServiceSpec CommonServices::dataProcessingStats()
                    .maxRefreshLatency = onlineRefreshLatency,
                    .sendInitialValue = true},
         MetricSpec{.name = "cpu_usage_fraction",
+                   .enabled = enableCPUUsageFraction,
                    .metricId = (int)ProcessingStatsId::CPU_USAGE_FRACTION,
                    .kind = Kind::Rate,
                    .scope = Scope::Online,
@@ -1246,7 +1260,7 @@ std::vector<ServiceSpec> CommonServices::defaultServices(std::string extraPlugin
     loadableServicesStr += "O2FrameworkDataTakingSupport:InfoLoggerContext,O2FrameworkDataTakingSupport:InfoLogger";
   }
   // Load plugins depending on the environment
-  std::vector<LoadableService> loadableServices = {};
+  std::vector<LoadablePlugin> loadablePlugins = {};
   char* loadableServicesEnv = getenv("DPL_LOAD_SERVICES");
   // String to define the services to load is:
   //
@@ -1257,8 +1271,8 @@ std::vector<ServiceSpec> CommonServices::defaultServices(std::string extraPlugin
     }
     loadableServicesStr += loadableServicesEnv;
   }
-  loadableServices = ServiceHelpers::parseServiceSpecString(loadableServicesStr.c_str());
-  ServiceHelpers::loadFromPlugin(loadableServices, specs);
+  loadablePlugins = PluginManager::parsePluginSpecString(loadableServicesStr.c_str());
+  PluginManager::loadFromPlugin<ServiceSpec, ServicePlugin>(loadablePlugins, specs);
   // I should make it optional depending wether the GUI is there or not...
   specs.push_back(CommonServices::guiMetricsSpec());
   if (numThreads) {

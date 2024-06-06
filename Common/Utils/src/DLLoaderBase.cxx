@@ -9,14 +9,4 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#ifndef O2_QUALITYCONTROL_FLAGTYPEFACTORY_H
-#define O2_QUALITYCONTROL_FLAGTYPEFACTORY_H
-
-#include "DataFormatsQualityControl/FlagReasonFactory.h"
-
-namespace o2::quality_control
-{
-using FlagTypeFactory = o2::quality_control::FlagReasonFactory;
-}
-
-#endif // O2_QUALITYCONTROL_FLAGTYPEFACTORY_H
+#include "CommonUtils/DLLoaderBase.h"
