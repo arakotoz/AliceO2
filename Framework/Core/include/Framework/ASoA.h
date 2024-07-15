@@ -781,6 +781,11 @@ struct ColumnDataHolder {
   arrow::ChunkedArray* second;
 };
 
+template <typename T, typename B>
+concept CanBind = requires(T&& t) {
+  { t.B::mColumnIterator };
+};
+
 template <typename IP, typename... C>
 struct RowViewCore : public IP, C... {
  public:
@@ -964,7 +969,27 @@ struct RowViewCore : public IP, C... {
   template <typename DC, typename... B>
   auto bindDynamicColumn(framework::pack<B...>)
   {
-    DC::boundIterators = std::make_tuple(&(B::mColumnIterator)...);
+    DC::boundIterators = std::make_tuple(getDynamicBinding<B>()...);
+  }
+
+  // Sometimes dynamic columns are defined for tables in
+  // the hope that it will be joined / extended with another one which provides
+  // the full set of bindings. This is to avoid a compilation
+  // error if constructor for the table or any other thing involving a missing
+  // binding is preinstanciated.
+  template <typename B>
+    requires(CanBind<typename table_t::iterator, B>)
+  decltype(auto) getDynamicBinding()
+  {
+    static_assert(std::is_same_v<decltype(&(static_cast<B*>(this)->mColumnIterator)), std::decay_t<decltype(B::mColumnIterator)>*>, "foo");
+    return &(static_cast<B*>(this)->mColumnIterator);
+    //return static_cast<std::decay_t<decltype(B::mColumnIterator)>*>(nullptr);
+  }
+
+  template <typename B>
+  decltype(auto) getDynamicBinding()
+  {
+    return static_cast<std::decay_t<decltype(B::mColumnIterator)>*>(nullptr);
   }
 };
 
@@ -1081,25 +1106,25 @@ static constexpr std::string getLabelFromTypeForKey(std::string const& key)
 }
 
 template <typename B, typename... C>
-constexpr static bool hasIndexTo(framework::pack<C...>&&)
+consteval static bool hasIndexTo(framework::pack<C...>&&)
 {
   return (o2::soa::is_binding_compatible_v<B, typename C::binding_t>() || ...);
 }
 
 template <typename B, typename... C>
-constexpr static bool hasSortedIndexTo(framework::pack<C...>&&)
+consteval static bool hasSortedIndexTo(framework::pack<C...>&&)
 {
   return ((C::sorted && o2::soa::is_binding_compatible_v<B, typename C::binding_t>()) || ...);
 }
 
 template <typename B, typename Z>
-constexpr static bool relatedByIndex()
+consteval static bool relatedByIndex()
 {
   return hasIndexTo<B>(typename Z::table_t::external_index_columns_t{});
 }
 
 template <typename B, typename Z>
-constexpr static bool relatedBySortedIndex()
+consteval static bool relatedBySortedIndex()
 {
   return hasSortedIndexTo<B>(typename Z::table_t::external_index_columns_t{});
 }
@@ -1187,7 +1212,7 @@ template <typename T>
 inline constexpr bool is_soa_iterator_v = framework::is_base_of_template_v<RowViewCore, T> || framework::is_specialization_v<T, RowViewCore>;
 
 template <typename T>
-inline constexpr bool is_soa_filtered_iterator_v()
+inline consteval bool is_soa_filtered_iterator_v()
 {
   if constexpr (!is_soa_iterator_v<T>) {
     return false;
@@ -1216,7 +1241,7 @@ inline constexpr bool is_soa_filtered_v = framework::is_base_of_template_v<soa::
 
 /// Helper function to extract bound indices
 template <typename... Is>
-static constexpr auto extractBindings(framework::pack<Is...>)
+static consteval auto extractBindings(framework::pack<Is...>)
 {
   return framework::pack<typename Is::binding_t...>{};
 }
@@ -1466,7 +1491,7 @@ class Table
     auto getId() const
     {
       using decayed = std::decay_t<TI>;
-      if constexpr (framework::has_type_v<decayed, bindings_pack_t>) { // index to another table
+      if constexpr (framework::has_type<decayed>(bindings_pack_t{})) { // index to another table
         constexpr auto idx = framework::has_type_at_v<decayed>(bindings_pack_t{});
         return framework::pack_element_t<idx, external_index_columns_t>::getId();
       } else if constexpr (std::is_same_v<decayed, Parent>) { // self index
@@ -1567,7 +1592,7 @@ class Table
   template <typename Key>
   inline arrow::ChunkedArray* getIndexToKey()
   {
-    if constexpr (framework::has_type_conditional_v<is_binding_compatible, Key, external_index_columns_t>) {
+    if constexpr (framework::has_type_conditional<is_binding_compatible, Key>(external_index_columns_t{})) {
       using IC = framework::pack_element_t<framework::has_type_at_conditional<is_binding_compatible, Key>(external_index_columns_t{}), external_index_columns_t>;
       return mColumnChunks[framework::has_type_at<IC>(persistent_columns_t{})];
     } else if constexpr (std::is_same_v<table_t, Key>) {
@@ -2777,12 +2802,12 @@ struct Join : TableWrap<Ts...>::table_t {
   }
 
   template <typename T>
-  static constexpr bool contains()
+  static consteval bool contains()
   {
     if constexpr (is_type_with_originals_v<T>) {
       return contains(typename T::originals{});
     } else {
-      return framework::has_type_v<T, originals>;
+      return framework::has_type<T>(originals{});
     }
   }
 
