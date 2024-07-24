@@ -1710,6 +1710,12 @@ void DataProcessingDevice::doRun(ServiceRegistryRef ref)
     while (DataProcessingDevice::tryDispatchComputation(ref, context.completed) && shouldProcess) {
       relayer.processDanglingInputs(context.expirationHandlers, *context.registry, false);
     }
+
+    auto& timingInfo = ref.get<TimingInfo>();
+    // We should keep the data generated at end of stream only for those
+    // which are not sources.
+    timingInfo.keepAtEndOfStream = shouldProcess;
+
     EndOfStreamContext eosContext{*context.registry, ref.get<DataAllocator>()};
 
     context.preEOSCallbacks(eosContext);
@@ -1841,7 +1847,8 @@ void DataProcessingDevice::handleData(ServiceRegistryRef ref, InputChannelInfo& 
       // This is because in principle we should track the size of each of
       // the parts and sum it up. Not for now.
       O2_SIGNPOST_ID_FROM_POINTER(pid, parts, headerData);
-      O2_SIGNPOST_START(parts, pid, "parts", "Processing DataHeader with splitPayloadParts %d and splitPayloadIndex %d", dh->splitPayloadParts, dh->splitPayloadIndex);
+      O2_SIGNPOST_START(parts, pid, "parts", "Processing DataHeader %{public}-4s/%{public}-16s/%d with splitPayloadParts %d and splitPayloadIndex %d",
+                        dh->dataOrigin.str, dh->dataDescription.str, dh->subSpecification, dh->splitPayloadParts, dh->splitPayloadIndex);
       if (!dph) {
         insertInputInfo(pi, 2, InputType::Invalid, info.id);
         O2_SIGNPOST_EVENT_EMIT_ERROR(device, cid, "handle_data", "Header stack does not contain DataProcessingHeader");
@@ -2101,28 +2108,6 @@ bool DataProcessingDevice::tryDispatchComputation(ServiceRegistryRef ref, std::v
   // should work just fine.
   std::vector<MessageSet> currentSetOfInputs;
 
-  // For the moment we have a simple "immediately dispatch" policy for stuff
-  // in the cache. This could be controlled from the outside e.g. by waiting
-  // for a few sets of inputs to arrive before we actually dispatch the
-  // computation, however this can be defined at a later stage.
-  auto canDispatchSomeComputation = [&completed, ref]() -> bool {
-    ref.get<DataRelayer>().getReadyToProcess(completed);
-    return completed.empty() == false;
-  };
-
-  // We use this to get a list with the actual indexes in the cache which
-  // indicate a complete set of inputs. Notice how I fill the completed
-  // vector and return it, so that I can have a nice for loop iteration later
-  // on.
-  auto getReadyActions = [&completed, ref]() -> std::vector<DataRelayer::RecordAction> {
-    auto& stats = ref.get<DataProcessingStats>();
-    auto& relayer = ref.get<DataRelayer>();
-    using namespace o2::framework;
-    stats.updateStats({(int)ProcessingStatsId::PENDING_INPUTS, DataProcessingStats::Op::Set, static_cast<int64_t>(relayer.getParallelTimeslices() - completed.size())});
-    stats.updateStats({(int)ProcessingStatsId::INCOMPLETE_INPUTS, DataProcessingStats::Op::Set, completed.empty() ? 1 : 0});
-    return completed;
-  };
-
   //
   auto getInputSpan = [ref, &currentSetOfInputs](TimesliceSlot slot, bool consume = true) {
     auto& relayer = ref.get<DataRelayer>();
@@ -2257,7 +2242,8 @@ bool DataProcessingDevice::tryDispatchComputation(ServiceRegistryRef ref, std::v
     control.notifyStreamingState(state.streaming);
   };
 
-  if (canDispatchSomeComputation() == false) {
+  ref.get<DataRelayer>().getReadyToProcess(completed);
+  if (completed.empty() == true) {
     LOGP(debug, "No computations available for dispatching.");
     return false;
   }
@@ -2315,7 +2301,25 @@ bool DataProcessingDevice::tryDispatchComputation(ServiceRegistryRef ref, std::v
   auto& streamContext = ref.get<StreamContext>();
   O2_SIGNPOST_ID_GENERATE(sid, device);
   O2_SIGNPOST_START(device, sid, "device", "Start processing ready actions");
-  for (auto action : getReadyActions()) {
+
+  auto& stats = ref.get<DataProcessingStats>();
+  auto& relayer = ref.get<DataRelayer>();
+  using namespace o2::framework;
+  stats.updateStats({(int)ProcessingStatsId::PENDING_INPUTS, DataProcessingStats::Op::Set, static_cast<int64_t>(relayer.getParallelTimeslices() - completed.size())});
+  stats.updateStats({(int)ProcessingStatsId::INCOMPLETE_INPUTS, DataProcessingStats::Op::Set, completed.empty() ? 1 : 0});
+  switch (spec.completionPolicy.order) {
+    case CompletionPolicy::CompletionOrder::Timeslice:
+      std::sort(completed.begin(), completed.end(), [](auto const& a, auto const& b) { return a.timeslice.value < b.timeslice.value; });
+      break;
+    case CompletionPolicy::CompletionOrder::Slot:
+      std::sort(completed.begin(), completed.end(), [](auto const& a, auto const& b) { return a.slot.index < b.slot.index; });
+      break;
+    case CompletionPolicy::CompletionOrder::Any:
+    default:
+      break;
+  }
+
+  for (auto action : completed) {
     O2_SIGNPOST_ID_GENERATE(aid, device);
     O2_SIGNPOST_START(device, aid, "device", "Processing action on slot %lu for action %{public}s", action.slot.index, fmt::format("{}", action.op).c_str());
     if (action.op == CompletionPolicy::CompletionOp::Wait) {
