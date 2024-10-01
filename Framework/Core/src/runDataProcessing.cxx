@@ -1036,6 +1036,7 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
   // declared in the workflow definition are allowed.
   runner.AddHook<fair::mq::hooks::SetCustomCmdLineOptions>([&spec, driverConfig, defaultDriverClient](fair::mq::DeviceRunner& r) {
     std::string defaultExitTransitionTimeout = "0";
+    std::string defaultDataProcessingTimeout = "0";
     std::string defaultInfologgerMode = "";
     o2::framework::DeploymentMode deploymentMode = o2::framework::DefaultsHelpers::deploymentMode();
     if (deploymentMode == o2::framework::DeploymentMode::OnlineDDS) {
@@ -1047,15 +1048,16 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
     boost::program_options::options_description optsDesc;
     ConfigParamsHelper::populateBoostProgramOptions(optsDesc, spec.options, gHiddenDeviceOptions);
     char const* defaultSignposts = getenv("DPL_SIGNPOSTS");
-    optsDesc.add_options()("monitoring-backend", bpo::value<std::string>()->default_value("default"), "monitoring backend info")                                                           //
-      ("driver-client-backend", bpo::value<std::string>()->default_value(defaultDriverClient), "backend for device -> driver communicataon: stdout://: use stdout, ws://: use websockets") //
-      ("infologger-severity", bpo::value<std::string>()->default_value(""), "minimum FairLogger severity to send to InfoLogger")                                                           //
-      ("dpl-tracing-flags", bpo::value<std::string>()->default_value(""), "pipe `|` separate list of events to be traced")                                                                 //
-      ("signposts", bpo::value<std::string>()->default_value(defaultSignposts ? defaultSignposts : ""), "comma separated list of signposts to enable")                                     //
-      ("expected-region-callbacks", bpo::value<std::string>()->default_value("0"), "how many region callbacks we are expecting")                                                           //
-      ("exit-transition-timeout", bpo::value<std::string>()->default_value(defaultExitTransitionTimeout), "how many second to wait before switching from RUN to READY")                    //
-      ("timeframes-rate-limit", bpo::value<std::string>()->default_value("0"), "how many timeframe can be in fly at the same moment (0 disables)")                                         //
-      ("configuration,cfg", bpo::value<std::string>()->default_value("command-line"), "configuration backend")                                                                             //
+    optsDesc.add_options()("monitoring-backend", bpo::value<std::string>()->default_value("default"), "monitoring backend info")                                                                   //
+      ("driver-client-backend", bpo::value<std::string>()->default_value(defaultDriverClient), "backend for device -> driver communicataon: stdout://: use stdout, ws://: use websockets")         //
+      ("infologger-severity", bpo::value<std::string>()->default_value(""), "minimum FairLogger severity to send to InfoLogger")                                                                   //
+      ("dpl-tracing-flags", bpo::value<std::string>()->default_value(""), "pipe `|` separate list of events to be traced")                                                                         //
+      ("signposts", bpo::value<std::string>()->default_value(defaultSignposts ? defaultSignposts : ""), "comma separated list of signposts to enable")                                             //
+      ("expected-region-callbacks", bpo::value<std::string>()->default_value("0"), "how many region callbacks we are expecting")                                                                   //
+      ("exit-transition-timeout", bpo::value<std::string>()->default_value(defaultExitTransitionTimeout), "how many second to wait before switching from RUN to READY")                            //
+      ("data-processing-timeout", bpo::value<std::string>()->default_value(defaultDataProcessingTimeout), "how many second to wait before stopping data processing and allowing data calibration") //
+      ("timeframes-rate-limit", bpo::value<std::string>()->default_value("0"), "how many timeframe can be in fly at the same moment (0 disables)")                                                 //
+      ("configuration,cfg", bpo::value<std::string>()->default_value("command-line"), "configuration backend")                                                                                     //
       ("infologger-mode", bpo::value<std::string>()->default_value(defaultInfologgerMode), "O2_INFOLOGGER_MODE override");
     r.fConfig.AddToCmdLineOptions(optsDesc, true);
   });
@@ -1098,10 +1100,7 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
     serviceRef.registerService(ServiceRegistryHelpers::handleForService<DeviceContext>(deviceContext.get()));
     serviceRef.registerService(ServiceRegistryHelpers::handleForService<DriverConfig const>(&driverConfig));
 
-    // The decltype stuff is to be able to compile with both new and old
-    // FairMQ API (one which uses a shared_ptr, the other one a unique_ptr.
-    decltype(r.fDevice) device;
-    device = make_matching<decltype(device), DataProcessingDevice>(ref, serviceRegistry, processingPolicies);
+    auto device = std::make_unique<DataProcessingDevice>(ref, serviceRegistry, processingPolicies);
 
     serviceRef.get<RawDeviceService>().setDevice(device.get());
     r.fDevice = std::move(device);
@@ -2725,6 +2724,52 @@ std::string debugTopoInfo(std::vector<DataProcessorSpec> const& specs,
   return out.str();
 }
 
+void enableSignposts(std::string const& signpostsToEnable)
+{
+  static pid_t pid = getpid();
+  if (signpostsToEnable.empty() == true) {
+    auto printAllSignposts = [](char const* name, void* l, void* context) {
+      auto* log = (_o2_log_t*)l;
+      LOGP(detail, "Signpost stream {} disabled. Enable it with o2-log -p {} -a {}", name, pid, (void*)&log->stacktrace);
+      return true;
+    };
+    o2_walk_logs(printAllSignposts, nullptr);
+    return;
+  }
+  auto matchingLogEnabler = [](char const* name, void* l, void* context) {
+    auto* log = (_o2_log_t*)l;
+    auto* selectedName = (char const*)context;
+    std::string prefix = "ch.cern.aliceo2.";
+    auto* last = strchr(selectedName, ':');
+    int maxDepth = 1;
+    if (last) {
+      char* err;
+      maxDepth = strtol(last + 1, &err, 10);
+      if (*(last + 1) == '\0' || *err != '\0') {
+        maxDepth = 1;
+      }
+    }
+
+    auto fullName = prefix + std::string{selectedName, last ? last - selectedName : strlen(selectedName)};
+    if (strncmp(name, fullName.data(), fullName.size()) == 0) {
+      LOGP(info, "Enabling signposts for stream \"{}\" with depth {}.", fullName, maxDepth);
+      _o2_log_set_stacktrace(log, maxDepth);
+      return false;
+    } else {
+      LOGP(info, "Signpost stream \"{}\" disabled. Enable it with o2-log -p {} -a {}", name, pid, (void*)&log->stacktrace);
+    }
+    return true;
+  };
+  // Split signpostsToEnable by comma using strtok_r
+  char* saveptr;
+  char* src = const_cast<char*>(signpostsToEnable.data());
+  auto* token = strtok_r(src, ",", &saveptr);
+  while (token) {
+    o2_walk_logs(matchingLogEnabler, token);
+    token = strtok_r(nullptr, ",", &saveptr);
+  }
+}
+
 // This is a toy executor for the workflow spec
 // What it needs to do is:
 //
@@ -2745,6 +2790,12 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
            std::vector<ConfigParamSpec> const& detectedParams,
            o2::framework::ConfigContext& configContext)
 {
+  // Peek very early in the driver options and look for
+  // signposts, so the we can enable it without going through the whole dance
+  if (getenv("DPL_DRIVER_SIGNPOSTS")) {
+    enableSignposts(getenv("DPL_DRIVER_SIGNPOSTS"));
+  }
+
   std::vector<std::string> currentArgs;
   std::vector<PluginInfo> plugins;
   std::vector<ForwardingPolicy> forwardingPolicies = ForwardingPolicy::createDefaultPolicies();
@@ -3055,38 +3106,7 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
     }
   }
 
-  static pid_t pid = getpid();
-  if (varmap.count("signposts")) {
-    auto signpostsToEnable = varmap["signposts"].as<std::string>();
-    auto matchingLogEnabler = [](char const* name, void* l, void* context) {
-      auto* log = (_o2_log_t*)l;
-      auto* selectedName = (char const*)context;
-      std::string prefix = "ch.cern.aliceo2.";
-      if (strcmp(name, (prefix + selectedName).data()) == 0) {
-        LOGP(info, "Enabling signposts for stream \"ch.cern.aliceo2.{}\"", selectedName);
-        _o2_log_set_stacktrace(log, 1);
-        return false;
-      } else {
-        LOGP(info, "Signpost stream \"{}\" disabled. Enable it with o2-log -p {} -a {}", name, pid, (void*)&log->stacktrace);
-      }
-      return true;
-    };
-    // Split signpostsToEnable by comma using strtok_r
-    char* saveptr;
-    char* src = const_cast<char*>(signpostsToEnable.data());
-    auto* token = strtok_r(src, ",", &saveptr);
-    while (token) {
-      o2_walk_logs(matchingLogEnabler, token);
-      token = strtok_r(nullptr, ",", &saveptr);
-    }
-  } else {
-    auto printAllSignposts = [](char const* name, void* l, void* context) {
-      auto* log = (_o2_log_t*)l;
-      LOGP(detail, "Signpost stream {} disabled. Enable it with o2-log -p {} -a {}", name, pid, (void*)&log->stacktrace);
-      return true;
-    };
-    o2_walk_logs(printAllSignposts, nullptr);
-  }
+  enableSignposts(varmap["signposts"].as<std::string>());
 
   auto evaluateBatchOption = [&varmap]() -> bool {
     if (varmap.count("no-batch") > 0) {

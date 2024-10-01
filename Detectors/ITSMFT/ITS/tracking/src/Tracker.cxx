@@ -104,12 +104,17 @@ void Tracker::clustersToTracks(std::function<void(std::string s)> logger, std::f
       }
       iVertex++;
     } while (iVertex < maxNvertices);
-    logger(fmt::format("- Tracklet finding: {} tracklets found in {:.2f} ms", nTracklets, timeTracklets));
-    logger(fmt::format("- Cell finding: {} cells found in {:.2f} ms", nCells, timeCells));
-    logger(fmt::format("- Neighbours finding: {} neighbours found in {:.2f} ms", nNeighbours, timeNeighbours));
-    logger(fmt::format("- Track finding: {} tracks found in {:.2f} ms", nTracks + mTimeFrame->getNumberOfTracks(), timeRoads));
+    logger(fmt::format(" - Tracklet finding: {} tracklets found in {:.2f} ms", nTracklets, timeTracklets));
+    logger(fmt::format(" - Cell finding: {} cells found in {:.2f} ms", nCells, timeCells));
+    logger(fmt::format(" - Neighbours finding: {} neighbours found in {:.2f} ms", nNeighbours, timeNeighbours));
+    logger(fmt::format(" - Track finding: {} tracks found in {:.2f} ms", nTracks + mTimeFrame->getNumberOfTracks(), timeRoads));
     total += timeTracklets + timeCells + timeNeighbours + timeRoads;
-    total += evaluateTask(&Tracker::extendTracks, "Extending tracks", logger, iteration);
+    if (mTrkParams[iteration].UseTrackFollower) {
+      int nExtendedTracks{-mTimeFrame->mNExtendedTracks}, nExtendedClusters{-mTimeFrame->mNExtendedUsedClusters};
+      auto timeExtending = evaluateTask(&Tracker::extendTracks, "Extending tracks", [](const std::string&) {}, iteration);
+      total += timeExtending;
+      logger(fmt::format(" - Extending Tracks: {} extended tracks using {} clusters found in {:.2f} ms", nExtendedTracks + mTimeFrame->mNExtendedTracks, nExtendedClusters + mTimeFrame->mNExtendedUsedClusters, timeExtending));
+    }
   }
 
   total += evaluateTask(&Tracker::findShortPrimaries, "Short primaries finding", logger);
@@ -456,7 +461,6 @@ void Tracker::rectifyClusterIndices()
 
 void Tracker::getGlobalConfiguration()
 {
-  LOGP(info, "tracker::getGlobalConfiguration size of pars is {}", mTrkParams.size());
   auto& tc = o2::its::TrackerParamConfig::Instance();
   tc.printKeyValues(true, true);
   if (tc.useMatCorrTGeo) {
