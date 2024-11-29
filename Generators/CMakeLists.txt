@@ -24,8 +24,6 @@ o2_add_library(Generators
                        src/GeneratorTGenerator.cxx
                        src/GeneratorExternalParam.cxx
                        src/GeneratorFromFile.cxx
-                       src/GeneratorHybrid.cxx
-                       src/GeneratorHybridParam.cxx
                        src/GeneratorFromO2KineParam.cxx
                        src/GeneratorFileOrCmd.cxx
                        src/GeneratorFileOrCmdParam.cxx
@@ -50,6 +48,8 @@ o2_add_library(Generators
                        $<$<BOOL:${HepMC3_FOUND}>:src/GeneratorHepMC.cxx>
                        $<$<BOOL:${HepMC3_FOUND}>:src/GeneratorHepMCParam.cxx>
                        $<$<BOOL:${HepMC3_FOUND}>:src/AODToHepMC.cxx>
+                       $<$<AND:$<BOOL:${pythia_FOUND}>,$<BOOL:${HepMC3_FOUND}>>:src/GeneratorHybrid.cxx>
+                       $<$<AND:$<BOOL:${pythia_FOUND}>,$<BOOL:${HepMC3_FOUND}>>:src/GeneratorHybridParam.cxx>
                PUBLIC_LINK_LIBRARIES FairRoot::Base O2::SimConfig O2::CommonUtils O2::DetectorsBase O2::ZDCBase
                                      O2::SimulationDataFormat ${pythiaTarget} ${hepmcTarget}
                                      FairRoot::Gen
@@ -70,8 +70,6 @@ set(headers
     include/Generators/GeneratorTGenerator.h
     include/Generators/GeneratorExternalParam.h
     include/Generators/GeneratorFromFile.h
-    include/Generators/GeneratorHybrid.h
-    include/Generators/GeneratorHybridParam.h
     include/Generators/GeneratorFromO2KineParam.h
     include/Generators/GeneratorFileOrCmd.h
     include/Generators/GeneratorFileOrCmdParam.h
@@ -104,6 +102,11 @@ if(HepMC3_FOUND)
   list(APPEND headers include/Generators/GeneratorHepMCParam.h)
 endif()
 
+if(pythia_FOUND AND HepMC3_FOUND)
+  list(APPEND headers include/Generators/GeneratorHybrid.h)
+  list(APPEND headers include/Generators/GeneratorHybridParam.h)
+endif()
+
 o2_target_root_dictionary(Generators HEADERS ${headers})
 
 o2_add_test_root_macro(share/external/extgen.C
@@ -126,7 +129,14 @@ if(doBuildSimulation)
               COMPONENT_NAME Generator
               LABELS generator
               PUBLIC_LINK_LIBRARIES O2::Generators)
+
+  o2_add_test(GeneratorPythia8Param NAME test_Generator_test_GeneratorPythia8Param
+              SOURCES test/test_GeneratorPythia8Param.cxx
+              COMPONENT_NAME Generator
+              LABELS generator
+              PUBLIC_LINK_LIBRARIES O2::Generators)
 endif()
+
 
 o2_add_test_root_macro(share/external/tgenerator.C
                        PUBLIC_LINK_LIBRARIES O2::Generators

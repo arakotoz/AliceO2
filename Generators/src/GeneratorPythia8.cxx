@@ -45,25 +45,16 @@ namespace eventgen
 /*****************************************************************/
 /*****************************************************************/
 
-GeneratorPythia8::GeneratorPythia8() : Generator("ALICEo2", "ALICEo2 Pythia8 Generator")
+// the default construct uses the GeneratorPythia8Param singleton to extract a config and delegates
+// to the proper constructor
+GeneratorPythia8::GeneratorPythia8() : GeneratorPythia8(GeneratorPythia8Param::Instance().detach())
 {
-  /** default constructor **/
-
-  mInterface = reinterpret_cast<void*>(&mPythia);
-  mInterfaceName = "pythia8";
-
-  auto& param = GeneratorPythia8Param::Instance();
-  LOG(info) << "Instance \'Pythia8\' generator with following parameters";
-  LOG(info) << param;
-
-  setConfig(param.config);
-  setHooksFileName(param.hooksFileName);
-  setHooksFuncName(param.hooksFuncName);
+  LOG(info) << "GeneratorPythia8 constructed from GeneratorPythia8Param ConfigurableParam";
 }
 
 /*****************************************************************/
 
-GeneratorPythia8::GeneratorPythia8(Pythia8GenConfig const& pars) : Generator("ALICEo2", "ALICEo2 Pythia8 Generator")
+GeneratorPythia8::GeneratorPythia8(Pythia8GenConfig const& config) : Generator("ALICEo2", "ALICEo2 Pythia8 Generator")
 {
   /** constructor **/
 
@@ -71,15 +62,15 @@ GeneratorPythia8::GeneratorPythia8(Pythia8GenConfig const& pars) : Generator("AL
   mInterfaceName = "pythia8";
 
   LOG(info) << "Instance \'Pythia8\' generator with following parameters";
-  LOG(info) << "config: " << pars.config;
-  LOG(info) << "hooksFileName: " << pars.hooksFileName;
-  LOG(info) << "hooksFuncName: " << pars.hooksFuncName;
+  LOG(info) << "config: " << config.config;
+  LOG(info) << "hooksFileName: " << config.hooksFileName;
+  LOG(info) << "hooksFuncName: " << config.hooksFuncName;
 
-  mGenConfig = std::make_unique<Pythia8GenConfig>(pars);
+  mGenConfig = config;
 
-  setConfig(pars.config);
-  setHooksFileName(pars.hooksFileName);
-  setHooksFuncName(pars.hooksFuncName);
+  setConfig(mGenConfig.config);
+  setHooksFileName(mGenConfig.hooksFileName);
+  setHooksFuncName(mGenConfig.hooksFuncName);
 }
 
 /*****************************************************************/
@@ -578,8 +569,7 @@ void GeneratorPythia8::pruneEvent(Pythia8::Event& event, Select select)
       }
     }
   }
-  int verbose = mGenConfig->verbose;
-  if (verbose) {
+  if (mGenConfig.verbose) {
     LOG(info) << "Pythia event was pruned from " << event.size()
               << " to " << pruned.size() << " particles";
   }
@@ -592,7 +582,7 @@ void GeneratorPythia8::initUserFilterCallback()
 {
   mUserFilterFcn = [](Pythia8::Particle const&) -> bool { return true; };
 
-  std::string filter = mGenConfig->particleFilter;
+  std::string filter = mGenConfig.particleFilter;
   if (filter.size() > 0) {
     LOG(info) << "Initializing the callback for user-based particle pruning " << filter;
     auto expandedFileName = o2::utils::expandShellVarsInFileName(filter);
@@ -621,7 +611,7 @@ Bool_t
   // event record in the AOD.
 
   std::function<bool(const Pythia8::Particle&)> partonSelect = [](const Pythia8::Particle&) { return true; };
-  bool includeParton = mGenConfig->includePartonEvent;
+  bool includeParton = mGenConfig.includePartonEvent;
   if (not includeParton) {
 
     // Select pythia particles
