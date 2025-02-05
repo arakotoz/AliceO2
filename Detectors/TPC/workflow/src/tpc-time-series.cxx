@@ -28,9 +28,9 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
     ConfigParamSpec{"configKeyValues", VariantType::String, "", {"Semicolon separated key=value strings"}},
     {"disable-root-output", VariantType::Bool, false, {"disable root-files output writers"}},
     {"enable-unbinned-root-output", VariantType::Bool, false, {"writing out unbinned track data"}},
-    {"tpc-only", VariantType::Bool, false, {"use only tpc tracks as input"}},
+    {"track-sources", VariantType::String, std::string{o2::dataformats::GlobalTrackID::ALL}, {"comma-separated list of sources to use"}},
+    {"use-ft0", VariantType::Bool, false, {"enable FT0 rec-points"}},
     {"material-type", VariantType::Int, 2, {"Type for the material budget during track propagation: 0=None, 1=Geo, 2=LUT"}}};
-
   std::swap(workflowOptions, options);
 }
 
@@ -42,9 +42,10 @@ WorkflowSpec defineDataProcessing(ConfigContext const& config)
   o2::conf::ConfigurableParam::updateFromString(config.options().get<std::string>("configKeyValues"));
   const bool disableWriter = config.options().get<bool>("disable-root-output");
   const bool enableUnbinnedWriter = config.options().get<bool>("enable-unbinned-root-output");
-  const bool tpcOnly = config.options().get<bool>("tpc-only");
+  auto src = o2::dataformats::GlobalTrackID::getSourcesMask(config.options().get<std::string>("track-sources"));
   auto materialType = static_cast<o2::base::Propagator::MatCorrType>(config.options().get<int>("material-type"));
-  workflow.emplace_back(o2::tpc::getTPCTimeSeriesSpec(disableWriter, materialType, enableUnbinnedWriter, tpcOnly));
+  const bool useft0 = config.options().get<bool>("use-ft0");
+  workflow.emplace_back(o2::tpc::getTPCTimeSeriesSpec(disableWriter, materialType, enableUnbinnedWriter, src, useft0));
   if (!disableWriter) {
     workflow.emplace_back(o2::tpc::getTPCTimeSeriesWriterSpec());
   }

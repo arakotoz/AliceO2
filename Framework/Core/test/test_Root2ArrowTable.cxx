@@ -14,6 +14,7 @@
 #include "Framework/TableBuilder.h"
 #include "Framework/RootTableBuilderHelpers.h"
 #include "Framework/ASoA.h"
+#include "Framework/PluginManager.h"
 #include "../src/ArrowDebugHelpers.h"
 
 #include <ROOT/RDataFrame.hxx>
@@ -26,6 +27,13 @@
 #include <TTree.h>
 #include <TRandom.h>
 #include <TFile.h>
+#include <ROOT/RField.hxx>
+#include <ROOT/RNTuple.hxx>
+#include <ROOT/RNTupleDescriptor.hxx>
+#include <ROOT/RNTupleModel.hxx>
+#include <ROOT/RNTupleReader.hxx>
+#include <ROOT/RNTupleUtil.hxx>
+#include <ROOT/RNTupleWriter.hxx>
 #include <memory>
 
 #include <arrow/array/array_primitive.h>
@@ -232,10 +240,31 @@ TEST_CASE("RootTree2Fragment")
   file->WriteObjectAny(&t1, t1.Class());
   auto* fileRead = new TBufferFile(TBuffer::kRead, file->BufferSize(), file->Buffer(), false, nullptr);
 
-  size_t totalSizeCompressed = 0;
-  size_t totalSizeUncompressed = 0;
-  auto format = std::make_shared<TTreeFileFormat>(totalSizeCompressed, totalSizeUncompressed);
-  auto fs = std::make_shared<TBufferFileFS>(fileRead);
+  std::vector<char const*> capabilitiesSpecs = {
+    "O2Framework:RNTupleObjectReadingCapability",
+    "O2Framework:TTreeObjectReadingCapability",
+  };
+
+  std::vector<LoadablePlugin> plugins;
+  for (auto spec : capabilitiesSpecs) {
+    auto morePlugins = PluginManager::parsePluginSpecString(spec);
+    for (auto& extra : morePlugins) {
+      plugins.push_back(extra);
+    }
+  }
+  REQUIRE(plugins.size() == 2);
+
+  RootObjectReadingFactory factory;
+  std::vector<char const*> configDiscoverySpec = {};
+  PluginManager::loadFromPlugin<RootObjectReadingCapability, RootObjectReadingCapabilityPlugin>(plugins, factory.capabilities);
+  REQUIRE(factory.capabilities.size() == 2);
+  REQUIRE(factory.capabilities[0].name == "rntuple");
+  REQUIRE(factory.capabilities[1].name == "ttree");
+
+  // Plugins are hardcoded for now...
+  auto format = factory.capabilities[1].factory().format();
+
+  auto fs = std::make_shared<TBufferFileFS>(fileRead, factory);
 
   arrow::dataset::FileSource source("p", fs);
   REQUIRE(format->IsSupported(source) == true);
@@ -340,7 +369,7 @@ bool validateContents(std::shared_ptr<arrow::RecordBatch> batch)
 
 bool validateSchema(std::shared_ptr<arrow::Schema> schema)
 {
-  REQUIRE(schema->num_fields() == 10);
+  REQUIRE(schema->num_fields() == 11);
   REQUIRE(schema->field(0)->type()->id() == arrow::float32()->id());
   REQUIRE(schema->field(1)->type()->id() == arrow::float32()->id());
   REQUIRE(schema->field(2)->type()->id() == arrow::float32()->id());
@@ -351,6 +380,25 @@ bool validateSchema(std::shared_ptr<arrow::Schema> schema)
   REQUIRE(schema->field(7)->type()->id() == arrow::boolean()->id());
   REQUIRE(schema->field(8)->type()->id() == arrow::fixed_size_list(arrow::boolean(), 2)->id());
   REQUIRE(schema->field(9)->type()->id() == arrow::list(arrow::int32())->id());
+  REQUIRE(schema->field(10)->type()->id() == arrow::int8()->id());
+  return true;
+}
+
+bool validatePhysicalSchema(std::shared_ptr<arrow::Schema> schema)
+{
+  REQUIRE(schema->num_fields() == 12);
+  REQUIRE(schema->field(0)->type()->id() == arrow::float32()->id());
+  REQUIRE(schema->field(1)->type()->id() == arrow::float32()->id());
+  REQUIRE(schema->field(2)->type()->id() == arrow::float32()->id());
+  REQUIRE(schema->field(3)->type()->id() == arrow::float64()->id());
+  REQUIRE(schema->field(4)->type()->id() == arrow::int32()->id());
+  REQUIRE(schema->field(5)->type()->id() == arrow::fixed_size_list(arrow::float32(), 3)->id());
+  REQUIRE(schema->field(6)->type()->id() == arrow::fixed_size_list(arrow::int32(), 2)->id());
+  REQUIRE(schema->field(7)->type()->id() == arrow::boolean()->id());
+  REQUIRE(schema->field(8)->type()->id() == arrow::fixed_size_list(arrow::boolean(), 2)->id());
+  REQUIRE(schema->field(9)->type()->id() == arrow::int32()->id());
+  REQUIRE(schema->field(10)->type()->id() == arrow::list(arrow::int32())->id());
+  REQUIRE(schema->field(11)->type()->id() == arrow::int8()->id());
   return true;
 }
 
@@ -406,6 +454,7 @@ TEST_CASE("RootTree2Dataset")
     bool manyBool[2];
     int vla[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     int vlaSize = 0;
+    char byte;
 
     t->Branch("px", &px, "px/F");
     t->Branch("py", &py, "py/F");
@@ -418,6 +467,7 @@ TEST_CASE("RootTree2Dataset")
     t->Branch("manyBools", &manyBool, "manyBools[2]/O");
     t->Branch("vla_size", &vlaSize, "vla_size/I");
     t->Branch("vla", vla, "vla[vla_size]/I");
+    t->Branch("byte", &byte, "byte/B");
     // fill the tree
     for (Int_t i = 0; i < 100; i++) {
       xyz[0] = 1;
@@ -434,23 +484,58 @@ TEST_CASE("RootTree2Dataset")
       manyBool[0] = (i % 4 == 0);
       manyBool[1] = (i % 5 == 0);
       vlaSize = i % 10;
+      byte = i;
       t->Fill();
     }
   }
   f->Write();
 
-  size_t totalSizeCompressed = 0;
-  size_t totalSizeUncompressed = 0;
-  auto format = std::make_shared<TTreeFileFormat>(totalSizeCompressed, totalSizeUncompressed);
-  auto fs = std::make_shared<TFileFileSystem>(f, 50 * 1024 * 1024);
+  std::vector<char const*> capabilitiesSpecs = {
+    "O2Framework:RNTupleObjectReadingCapability",
+    "O2Framework:TTreeObjectReadingCapability",
+  };
+
+  RootObjectReadingFactory factory;
+
+  std::vector<LoadablePlugin> plugins;
+  for (auto spec : capabilitiesSpecs) {
+    auto morePlugins = PluginManager::parsePluginSpecString(spec);
+    for (auto& extra : morePlugins) {
+      plugins.push_back(extra);
+    }
+  }
+  REQUIRE(plugins.size() == 2);
+
+  PluginManager::loadFromPlugin<RootObjectReadingCapability, RootObjectReadingCapabilityPlugin>(plugins, factory.capabilities);
+
+  REQUIRE(factory.capabilities.size() == 2);
+  REQUIRE(factory.capabilities[0].name == "rntuple");
+  REQUIRE(factory.capabilities[1].name == "ttree");
+
+  // Plugins are hardcoded for now...
+  auto rNtupleFormat = factory.capabilities[0].factory().format();
+  auto format = factory.capabilities[1].factory().format();
+
+  auto fs = std::make_shared<TFileFileSystem>(f, 50 * 1024 * 1024, factory);
+
   arrow::dataset::FileSource source("DF_2/tracks", fs);
   REQUIRE(format->IsSupported(source) == true);
-  auto schemaOpt = format->Inspect(source);
-  REQUIRE(schemaOpt.ok());
-  auto schema = *schemaOpt;
+  auto physicalSchema = format->Inspect(source);
+  REQUIRE(physicalSchema.ok());
+  REQUIRE(validatePhysicalSchema(*physicalSchema));
+  // Create the dataset schema rather than using the physical one
+  std::vector<std::shared_ptr<arrow::Field>> fields;
+  for (auto& field : (*(physicalSchema))->fields()) {
+    if (field->name().ends_with("_size")) {
+      continue;
+    }
+    fields.push_back(field);
+  }
+  std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(fields);
+
   validateSchema(schema);
 
-  auto fragment = format->MakeFragment(source, {}, schema);
+  auto fragment = format->MakeFragment(source, {}, *physicalSchema);
   REQUIRE(fragment.ok());
   auto options = std::make_shared<arrow::dataset::ScanOptions>();
   options->dataset_schema = schema;
@@ -459,12 +544,12 @@ TEST_CASE("RootTree2Dataset")
   auto batches = (*scanner)();
   auto result = batches.result();
   REQUIRE(result.ok());
-  REQUIRE((*result)->columns().size() == 10);
+  REQUIRE((*result)->columns().size() == 11);
   REQUIRE((*result)->num_rows() == 100);
   validateContents(*result);
 
   auto* output = new TMemFile("foo", "RECREATE");
-  auto outFs = std::make_shared<TFileFileSystem>(output, 0);
+  auto outFs = std::make_shared<TFileFileSystem>(output, 0, factory);
 
   // Open a stream at toplevel
   auto destination = outFs->OpenOutputStream("/", {});
@@ -480,27 +565,81 @@ TEST_CASE("RootTree2Dataset")
   {
     REQUIRE(success.ok());
     // Let's read it back...
+    auto tfileFs = std::dynamic_pointer_cast<TFileFileSystem>(outFs);
+    REQUIRE(tfileFs.get());
+    REQUIRE(tfileFs->GetFile());
+    REQUIRE(tfileFs->GetFile()->GetObjectChecked("/DF_3", TClass::GetClass("TTree")));
     arrow::dataset::FileSource source2("/DF_3", outFs);
-    auto newTreeFS = outFs->GetSubFilesystem(source2);
 
-    REQUIRE(format->IsSupported(source) == true);
+    REQUIRE(format->IsSupported(source2) == true);
+    tfileFs = std::dynamic_pointer_cast<TFileFileSystem>(source2.filesystem());
+    REQUIRE(tfileFs.get());
+    REQUIRE(tfileFs->GetFile());
+    REQUIRE(tfileFs->GetFile()->GetObjectChecked("/DF_3", TClass::GetClass("TTree")));
 
-    auto schemaOptWritten = format->Inspect(source);
+    auto schemaOptWritten = format->Inspect(source2);
+    tfileFs = std::dynamic_pointer_cast<TFileFileSystem>(source2.filesystem());
+    REQUIRE(tfileFs.get());
+    REQUIRE(tfileFs->GetFile());
+    REQUIRE(tfileFs->GetFile()->GetObjectChecked("/DF_3", TClass::GetClass("TTree")));
     REQUIRE(schemaOptWritten.ok());
     auto schemaWritten = *schemaOptWritten;
-    REQUIRE(validateSchema(schemaWritten));
 
-    auto fragmentWritten = format->MakeFragment(source, {}, schema);
+    REQUIRE(validatePhysicalSchema(schemaWritten));
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    for (auto& field : schemaWritten->fields()) {
+      if (field->name().ends_with("_size")) {
+        continue;
+      }
+      fields.push_back(field);
+    }
+    std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(fields);
+    REQUIRE(validateSchema(schema));
+
+    auto fragmentWritten = format->MakeFragment(source2, {}, *physicalSchema);
     REQUIRE(fragmentWritten.ok());
     auto optionsWritten = std::make_shared<arrow::dataset::ScanOptions>();
-    options->dataset_schema = schemaWritten;
+    options->dataset_schema = schema;
     auto scannerWritten = format->ScanBatchesAsync(optionsWritten, *fragment);
     REQUIRE(scannerWritten.ok());
     auto batchesWritten = (*scanner)();
     auto resultWritten = batches.result();
     REQUIRE(resultWritten.ok());
-    REQUIRE((*resultWritten)->columns().size() == 10);
+    REQUIRE((*resultWritten)->columns().size() == 11);
     REQUIRE((*resultWritten)->num_rows() == 100);
     validateContents(*resultWritten);
   }
+  arrow::fs::FileLocator rnTupleLocator{outFs, "/rntuple"};
+  // We write an RNTuple in the same TMemFile, using /rntuple as a location
+  auto rntupleDestination = std::dynamic_pointer_cast<TDirectoryFileOutputStream>(*destination);
+
+  {
+    auto rNtupleWriter = rNtupleFormat->MakeWriter(*destination, schema, {}, rnTupleLocator);
+    auto rNtupleSuccess = rNtupleWriter->get()->Write(*result);
+    REQUIRE(rNtupleSuccess.ok());
+  }
+
+  // And now we can read back the RNTuple into a RecordBatch
+  arrow::dataset::FileSource writtenRntupleSource("/rntuple", outFs);
+
+  REQUIRE(rNtupleFormat->IsSupported(writtenRntupleSource) == true);
+
+  auto rntupleSchemaOpt = rNtupleFormat->Inspect(writtenRntupleSource);
+  REQUIRE(rntupleSchemaOpt.ok());
+  auto rntupleSchemaWritten = *rntupleSchemaOpt;
+  REQUIRE(validateSchema(rntupleSchemaWritten));
+
+  auto rntupleFragmentWritten = rNtupleFormat->MakeFragment(writtenRntupleSource, {}, rntupleSchemaWritten);
+  REQUIRE(rntupleFragmentWritten.ok());
+  auto rntupleOptionsWritten = std::make_shared<arrow::dataset::ScanOptions>();
+  rntupleOptionsWritten->dataset_schema = rntupleSchemaWritten;
+  auto rntupleScannerWritten = rNtupleFormat->ScanBatchesAsync(rntupleOptionsWritten, *rntupleFragmentWritten);
+  REQUIRE(rntupleScannerWritten.ok());
+  auto rntupleBatchesWritten = (*rntupleScannerWritten)();
+  auto rntupleResultWritten = rntupleBatchesWritten.result();
+  REQUIRE(rntupleResultWritten.ok());
+  REQUIRE((*rntupleResultWritten)->columns().size() == 11);
+  REQUIRE(validateSchema((*rntupleResultWritten)->schema()));
+  REQUIRE((*rntupleResultWritten)->num_rows() == 100);
+  REQUIRE(validateContents(*rntupleResultWritten));
 }

@@ -30,7 +30,7 @@
 #include "ZDCBase/Constants.h"
 #include "GlobalTracking/MatchGlobalFwd.h"
 #include "CommonUtils/TreeStreamRedirector.h"
-#include "CommonUtils/EnumBitOperators.h"
+#include "CommonUtils/EnumFlags.h"
 
 #include <cstdint>
 #include <limits>
@@ -208,17 +208,14 @@ class BunchCrossings
 }; // end internal class
 
 // Steering bits for additional output during AOD production
-enum struct AODProducerStreamerMask : uint8_t {
-  None = 0,
-  TrackQA = O2_ENUM_SET_BIT(0),
-  All = std::numeric_limits<std::underlying_type_t<AODProducerStreamerMask>>::max(),
+enum struct AODProducerStreamerFlags : uint8_t {
+  TrackQA,
 };
-O2_DEFINE_ENUM_BIT_OPERATORS(AODProducerStreamerMask)
 
 class AODProducerWorkflowDPL : public Task
 {
  public:
-  AODProducerWorkflowDPL(GID::mask_t src, std::shared_ptr<DataRequest> dataRequest, std::shared_ptr<o2::base::GRPGeomRequest> gr, bool enableSV, bool useMC = true) : mUseMC(useMC), mEnableSV(enableSV), mInputSources(src), mDataRequest(dataRequest), mGGCCDBRequest(gr) {}
+  AODProducerWorkflowDPL(GID::mask_t src, std::shared_ptr<DataRequest> dataRequest, std::shared_ptr<o2::base::GRPGeomRequest> gr, bool enableSV, bool useMC = true, bool enableFITextra = false) : mUseMC(useMC), mEnableSV(enableSV), mEnableFITextra(enableFITextra), mInputSources(src), mDataRequest(dataRequest), mGGCCDBRequest(gr) {}
   ~AODProducerWorkflowDPL() override = default;
   void init(InitContext& ic) final;
   void run(ProcessingContext& pc) final;
@@ -251,12 +248,13 @@ class AODProducerWorkflowDPL : public Task
   std::unordered_set<GIndex> mGIDUsedBySVtx;
   std::unordered_set<GIndex> mGIDUsedByStr;
 
-  AODProducerStreamerMask mStreamerMask{0};
+  o2::utils::EnumFlags<AODProducerStreamerFlags> mStreamerFlags;
   std::shared_ptr<o2::utils::TreeStreamRedirector> mStreamer;
 
   int mNThreads = 1;
   bool mUseMC = true;
   bool mEnableSV = true; // enable secondary vertices
+  bool mEnableFITextra = false;
   bool mFieldON = false;
   const float cSpeed = 0.029979246f; // speed of light in TOF units
 
@@ -373,8 +371,11 @@ class AODProducerWorkflowDPL : public Task
   uint32_t mMuonCl = 0xFFFFFF00;               // 15 bits
   uint32_t mMuonClErr = 0xFFFF0000;            // 7 bits
   uint32_t mV0Time = 0xFFFFF000;               // 11 bits
+  uint32_t mV0ChannelTime = 0xFFFFFF00;        // 15 bits
   uint32_t mFDDTime = 0xFFFFF000;              // 11 bits
+  uint32_t mFDDChannelTime = 0xFFFFFF00;       // 15 bits
   uint32_t mT0Time = 0xFFFFFF00;               // 15 bits
+  uint32_t mT0ChannelTime = 0xFFFFFFF0;        // 19 bits
   uint32_t mV0Amplitude = 0xFFFFF000;          // 11 bits
   uint32_t mFDDAmplitude = 0xFFFFF000;         // 11 bits
   uint32_t mT0Amplitude = 0xFFFFF000;          // 11 bits
@@ -433,6 +434,8 @@ class AODProducerWorkflowDPL : public Task
     int8_t dRefGloSnp{std::numeric_limits<int8_t>::min()};
     int8_t dRefGloTgl{std::numeric_limits<int8_t>::min()};
     int8_t dRefGloQ2Pt{std::numeric_limits<int8_t>::min()};
+    int8_t dTofdX{std::numeric_limits<int8_t>::min()};
+    int8_t dTofdZ{std::numeric_limits<int8_t>::min()};
   };
 
   // helper struct for addToFwdTracksTable()
@@ -483,8 +486,6 @@ class AODProducerWorkflowDPL : public Task
   // using -1 as dummies for AOD
   struct MCLabels {
     uint32_t labelID = -1;
-    uint32_t labelITS = -1;
-    uint32_t labelTPC = -1;
     uint16_t labelMask = 0;
     uint8_t fwdLabelMask = 0;
   };
@@ -521,8 +522,8 @@ class AODProducerWorkflowDPL : public Task
                            GIndex trackID, const o2::globaltracking::RecoContainer& data, int collisionID,
                            std::uint64_t collisionBC, const std::map<uint64_t, int>& bcsMap);
 
-  template <typename fwdTracksCursorType, typename fwdTracksCovCursorType, typename AmbigFwdTracksCursorType>
-  void addToFwdTracksTable(fwdTracksCursorType& fwdTracksCursor, fwdTracksCovCursorType& fwdTracksCovCursor, AmbigFwdTracksCursorType& ambigFwdTracksCursor,
+  template <typename fwdTracksCursorType, typename fwdTracksCovCursorType, typename AmbigFwdTracksCursorType, typename mftTracksCovCursorType>
+  void addToFwdTracksTable(fwdTracksCursorType& fwdTracksCursor, fwdTracksCovCursorType& fwdTracksCovCursor, AmbigFwdTracksCursorType& ambigFwdTracksCursor, mftTracksCovCursorType& mftTracksCovCursor,
                            GIndex trackID, const o2::globaltracking::RecoContainer& data, int collisionID, std::uint64_t collisionBC, const std::map<uint64_t, int>& bcsMap);
 
   TrackExtraInfo processBarrelTrack(int collisionID, std::uint64_t collisionBC, GIndex trackIndex, const o2::globaltracking::RecoContainer& data, const std::map<uint64_t, int>& bcsMap);
@@ -536,7 +537,7 @@ class AODProducerWorkflowDPL : public Task
   // * fills tables collision by collision
   // * interaction time is for TOF information
   template <typename TracksCursorType, typename TracksCovCursorType, typename TracksExtraCursorType, typename TracksQACursorType, typename AmbigTracksCursorType,
-            typename MFTTracksCursorType, typename AmbigMFTTracksCursorType,
+            typename MFTTracksCursorType, typename MFTTracksCovCursorType, typename AmbigMFTTracksCursorType,
             typename FwdTracksCursorType, typename FwdTracksCovCursorType, typename AmbigFwdTracksCursorType, typename FwdTrkClsCursorType>
   void fillTrackTablesPerCollision(int collisionID,
                                    std::uint64_t collisionBC,
@@ -549,6 +550,7 @@ class AODProducerWorkflowDPL : public Task
                                    TracksQACursorType& tracksQACursor,
                                    AmbigTracksCursorType& ambigTracksCursor,
                                    MFTTracksCursorType& mftTracksCursor,
+                                   MFTTracksCovCursorType& mftTracksCovCursor,
                                    AmbigMFTTracksCursorType& ambigMFTTracksCursor,
                                    FwdTracksCursorType& fwdTracksCursor,
                                    FwdTracksCovCursorType& fwdTracksCovCursor,
@@ -670,7 +672,7 @@ class AODProducerWorkflowDPL : public Task
 };
 
 /// create a processor spec
-framework::DataProcessorSpec getAODProducerWorkflowSpec(GID::mask_t src, bool enableSV, bool enableST, bool useMC, bool CTPConfigPerRun);
+framework::DataProcessorSpec getAODProducerWorkflowSpec(GID::mask_t src, bool enableSV, bool enableST, bool useMC, bool CTPConfigPerRun, bool enableFITextra);
 
 // helper interface for calo cells to "befriend" emcal and phos cells
 class CellHelper

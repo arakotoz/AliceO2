@@ -27,6 +27,7 @@
 #include "Framework/DataTakingContext.h"
 #include "Framework/DefaultsHelpers.h"
 #include "Framework/Signpost.h"
+#include "Framework/ServiceRegistryHelpers.h"
 
 #include "Framework/Variant.h"
 #include "Headers/DataHeader.h"
@@ -755,7 +756,10 @@ void WorkflowHelpers::constructGraph(const WorkflowSpec& workflow,
                                      std::vector<OutputSpec>& outputs,
                                      std::vector<LogicalForwardInfo>& forwardedInputsInfo)
 {
-  assert(!workflow.empty());
+  // In case the workflow is empty, we do not have anything to do.
+  if (workflow.empty()) {
+    return;
+  }
 
   // This is the state. Oif is the iterator I use for the searches.
   std::vector<LogicalOutputInfo> availableOutputsInfo;

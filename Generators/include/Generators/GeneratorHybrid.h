@@ -39,6 +39,12 @@
 #include <rapidjson/writer.h>
 #include "TBufferJSON.h"
 
+#include <tbb/concurrent_queue.h>
+#include <tbb/task_arena.h>
+#include <iostream>
+#include <thread>
+#include <atomic>
+
 namespace o2
 {
 namespace eventgen
@@ -50,24 +56,28 @@ class GeneratorHybrid : public Generator
  public:
   GeneratorHybrid() = default;
   GeneratorHybrid(const std::string& inputgens);
-  ~GeneratorHybrid() = default;
+  ~GeneratorHybrid();
 
   Bool_t Init() override;
   Bool_t generateEvent() override;
   Bool_t importParticles() override;
+  void updateHeader(o2::dataformats::MCEventHeader* eventHeader) override;
 
   Bool_t parseJSON(const std::string& path);
+  Bool_t confSetter(const auto& gen);
   template <typename T>
   std::string jsonValueToString(const T& value);
 
  private:
   o2::eventgen::Generator* currentgen = nullptr;
-  std::vector<std::unique_ptr<o2::eventgen::Generator>> gens;
+  std::vector<std::shared_ptr<o2::eventgen::Generator>> gens;
   const std::vector<std::string> generatorNames = {"extkinO2", "evtpool", "boxgen", "external", "hepmc", "pythia8", "pythia8pp", "pythia8hi", "pythia8hf", "pythia8powheg"};
   std::vector<std::string> mInputGens;
   std::vector<std::string> mGens;
   std::vector<std::string> mConfigs;
   std::vector<std::string> mConfsPythia8;
+
+  std::vector<bool> mGenIsInitialized;
 
   // Parameters configurations
   std::vector<std::unique_ptr<o2::eventgen::BoxGenConfig>> mBoxGenConfigs;
@@ -84,6 +94,37 @@ class GeneratorHybrid : public Generator
   int mseqCounter = 0;
   int mCurrentFraction = 0;
   int mIndex = 0;
+  int mEventCounter = 0;
+  int mTasksStarted = 0;
+
+  // Cocktail mode
+  bool mCocktailMode = false;
+  std::vector<std::vector<int>> mGroups;
+
+  // Trigger configuration
+  std::vector<ETriggerMode_t> mTriggerModes;            // trigger mode for each generator
+  std::vector<std::vector<std::string>> mTriggerMacros; // trigger macros for each generator (multiple triggers for each generator possible)
+  std::vector<std::vector<std::string>> mTriggerFuncs;  // trigger functions for each generator (multiple triggers for each generator possible)
+
+  // Create a task arena with a specified number of threads
+  std::thread mTBBTaskPoolRunner;
+  tbb::concurrent_bounded_queue<int> mInputTaskQueue;
+  std::vector<tbb::concurrent_bounded_queue<int>> mResultQueue;
+  tbb::task_arena mTaskArena;
+  std::atomic<bool> mStopFlag;
+  bool mIsInitialized = false;
+
+  o2::dataformats::MCEventHeader mMCEventHeader; // to capture event headers
+
+  enum class GenMode {
+    kSeq,
+    kParallel
+  };
+
+  // hybrid gen operation mode - should be either 'sequential' or 'parallel'
+  // parallel means that we have clones of the same generator collaborating on event generation
+  // sequential means that events will be produced in the order given by fractions; async processing is still happening
+  GenMode mGenerationMode = GenMode::kSeq; //!
 };
 
 } // namespace eventgen

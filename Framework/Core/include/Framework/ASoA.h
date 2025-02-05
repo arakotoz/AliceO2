@@ -30,6 +30,8 @@
 #include <array>
 #include <cassert>
 #include <fmt/format.h>
+#include <concepts>
+#include <cstring>
 #include <gsl/span>
 #include <limits>
 
@@ -44,7 +46,7 @@ std::string strToUpper(std::string&& str);
 namespace o2::soa
 {
 void accessingInvalidIndexFor(const char* getter);
-void dereferenceWithWrongType();
+void dereferenceWithWrongType(const char* getter, const char* target);
 void missingFilterDeclaration(int hash, int ai);
 void notBoundTable(const char* tableName);
 } // namespace o2::soa
@@ -784,27 +786,31 @@ struct Index : o2::soa::IndexColumn<Index<START, END>> {
   static constexpr const char* mLabel = "Index";
   using type = int64_t;
 
-  using bindings_t = typename o2::framework::pack<>;
-  std::tuple<> boundIterators;
   std::tuple<int64_t const*, int64_t const*> rowIndices;
   /// The offsets within larger tables. Currently only
   /// one level of nesting is supported.
   std::tuple<uint64_t const*> rowOffsets;
 };
 
-template <typename D>
-concept is_indexing_column = requires {
-  []<int64_t S, int64_t E>(o2::soa::Index<S, E>*) {}(std::declval<D*>());
+template <typename C>
+concept is_indexing_column = requires(C& c) {
+  c.rowIndices;
+  c.rowOffsets;
 };
 
-template <typename T>
-concept is_dynamic_column = framework::base_of_template<soa::DynamicColumn, T>;
+template <typename C>
+concept is_dynamic_column = requires(C& c) {
+  c.boundIterators;
+};
+
+template <typename C>
+concept is_marker_column = requires { &C::mark; };
 
 template <typename T>
 using is_dynamic_t = std::conditional_t<is_dynamic_column<T>, std::true_type, std::false_type>;
 
 template <typename T>
-concept is_column = framework::base_of_template<soa::Column, T> || is_dynamic_column<T> || is_indexing_column<T> || framework::base_of_template<soa::MarkerColumn, T>;
+concept is_column = is_persistent_column<T> || is_dynamic_column<T> || is_indexing_column<T> || is_marker_column<T>;
 
 template <typename T>
 using is_indexing_t = std::conditional_t<is_indexing_column<T>, std::true_type, std::false_type>;
@@ -1022,6 +1028,9 @@ concept can_bind = requires(T&& t) {
   { t.B::mColumnIterator };
 };
 
+template <typename... C>
+concept has_index = (is_indexing_column<C> || ...);
+
 template <typename D, typename O, typename IP, typename... C>
 struct TableIterator : IP, C... {
  public:
@@ -1029,8 +1038,6 @@ struct TableIterator : IP, C... {
   using policy_t = IP;
   using all_columns = framework::pack<C...>;
   using persistent_columns_t = framework::selected_pack<soa::is_persistent_column_t, C...>;
-  using indexing_columns_t = framework::selected_pack<is_indexing_t, C...>;
-  constexpr inline static bool has_index_v = framework::pack_size(indexing_columns_t{}) > 0;
   using external_index_columns_t = framework::selected_pack<soa::is_external_index_t, C...>;
   using internal_index_columns_t = framework::selected_pack<soa::is_self_index_t, C...>;
   using bindings_pack_t = decltype([]<typename... Cs>(framework::pack<Cs...>) -> framework::pack<typename Cs::binding_t...> {}(external_index_columns_t{})); // decltype(extractBindings(external_index_columns_t{}));
@@ -1040,13 +1047,19 @@ struct TableIterator : IP, C... {
       C(columnData[framework::has_type_at_v<C>(all_columns{})])...
   {
     bind();
+  }
+
+  TableIterator(arrow::ChunkedArray* columnData[sizeof...(C)], IP&& policy)
+    requires(has_index<C...>)
+    : IP{policy},
+      C(columnData[framework::has_type_at_v<C>(all_columns{})])...
+  {
+    bind();
     // In case we have an index column might need to constrain the actual
     // number of rows in the view to the range provided by the index.
     // FIXME: we should really understand what happens to an index when we
     // have a RowViewFiltered.
-    if constexpr (has_index_v) {
-      this->limitRange(this->rangeStart(), this->rangeEnd());
-    }
+    this->limitRange(this->rangeStart(), this->rangeEnd());
   }
 
   TableIterator() = default;
@@ -1190,7 +1203,7 @@ struct TableIterator : IP, C... {
       [this]<typename T>(T*) -> void {},
     };
     (f(static_cast<C*>(nullptr)), ...);
-    if constexpr (has_index_v) {
+    if constexpr (has_index<C...>) {
       this->setIndices(this->getIndices());
       this->setOffsets(this->getOffsets());
     }
@@ -1617,7 +1630,7 @@ auto select(T const& t, framework::expressions::Filter const& f)
   return Filtered<T>({t.asArrowTable()}, selectionToVector(framework::expressions::createSelection(t.asArrowTable(), f)));
 }
 
-arrow::ChunkedArray* getIndexFromLabel(arrow::Table* table, const char* label);
+arrow::ChunkedArray* getIndexFromLabel(arrow::Table* table, std::string_view label);
 
 template <typename D, typename O, typename IP, typename... C>
 consteval auto base_iter(framework::pack<C...>&&) -> TableIterator<D, O, IP, C...>
@@ -2124,6 +2137,9 @@ class Table
 template <uint32_t D, soa::is_column... C>
 using InPlaceTable = Table<o2::aod::Hash<"TEST"_h>, o2::aod::Hash<D>, o2::aod::Hash<"TEST"_h>, C...>;
 
+void getterNotFound(const char* targetColumnLabel);
+void emptyColumnLabel();
+
 namespace row_helpers
 {
 template <soa::is_persistent_column... Cs>
@@ -2171,6 +2187,85 @@ template <typename T, typename... Cs>
 std::tuple<typename Cs::type...> getRowData(arrow::Table* table, T rowIterator, uint64_t ci = std::numeric_limits<uint64_t>::max(), uint64_t ai = std::numeric_limits<uint64_t>::max(), uint64_t globalIndex = std::numeric_limits<uint64_t>::max())
 {
   return std::make_tuple(getSingleRowData<T, Cs>(table, rowIterator, ci, ai, globalIndex)...);
+}
+
+namespace
+{
+template <typename R, typename T, typename C>
+R getColumnValue(const T& rowIterator)
+{
+  return static_cast<R>(static_cast<C>(rowIterator).get());
+}
+
+template <typename R, typename T>
+using ColumnGetterFunction = R (*)(const T&);
+
+template <typename T, typename R>
+concept dynamic_with_common_getter = is_dynamic_column<T> &&
+                                     // lambda is callable without additional free args
+                                     framework::pack_size(typename T::bindings_t{}) == framework::pack_size(typename T::callable_t::args{}) &&
+                                     requires(T t) {
+                                       { t.get() } -> std::convertible_to<R>;
+                                     };
+
+template <typename T, typename R>
+concept persistent_with_common_getter = is_persistent_v<T> && requires(T t) {
+  { t.get() } -> std::convertible_to<R>;
+};
+
+template <typename R, typename T, persistent_with_common_getter<R> C>
+ColumnGetterFunction<R, T> createGetterPtr(const std::string_view& targetColumnLabel)
+{
+  return targetColumnLabel == C::columnLabel() ? &getColumnValue<R, T, C> : nullptr;
+}
+
+template <typename R, typename T, dynamic_with_common_getter<R> C>
+ColumnGetterFunction<R, T> createGetterPtr(const std::string_view& targetColumnLabel)
+{
+  std::string_view columnLabel(C::columnLabel());
+
+  // allows user to use consistent formatting (with prefix) of all column labels
+  // by default there isn't 'f' prefix for dynamic column labels
+  if (targetColumnLabel.starts_with("f") && targetColumnLabel.substr(1) == columnLabel) {
+    return &getColumnValue<R, T, C>;
+  }
+
+  // check also exact match if user is aware of prefix missing
+  if (targetColumnLabel == columnLabel) {
+    return &getColumnValue<R, T, C>;
+  }
+
+  return nullptr;
+}
+
+template <typename R, typename T, typename... Cs>
+ColumnGetterFunction<R, T> getColumnGetterByLabel(o2::framework::pack<Cs...>, const std::string_view& targetColumnLabel)
+{
+  ColumnGetterFunction<R, T> func;
+
+  (void)((func = createGetterPtr<R, T, Cs>(targetColumnLabel), func) || ...);
+
+  if (!func) {
+    getterNotFound(targetColumnLabel.data());
+  }
+
+  return func;
+}
+
+template <typename T, typename R>
+using with_common_getter_t = typename std::conditional<persistent_with_common_getter<T, R> || dynamic_with_common_getter<T, R>, std::true_type, std::false_type>::type;
+} // namespace
+
+template <typename R, typename T>
+ColumnGetterFunction<R, typename T::iterator> getColumnGetterByLabel(const std::string_view& targetColumnLabel)
+{
+  using TypesWithCommonGetter = o2::framework::selected_pack_multicondition<with_common_getter_t, framework::pack<R>, typename T::columns_t>;
+
+  if (targetColumnLabel.size() == 0) {
+    emptyColumnLabel();
+  }
+
+  return getColumnGetterByLabel<R, typename T::iterator>(TypesWithCommonGetter{}, targetColumnLabel);
 }
 } // namespace row_helpers
 } // namespace o2::soa
@@ -2378,7 +2473,7 @@ consteval auto getIndexTargets()
       }                                                                                                  \
       auto t = mBinding.get<T>();                                                                        \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                           \
-        o2::soa::dereferenceWithWrongType();                                                             \
+        o2::soa::dereferenceWithWrongType(#_Getter_, #_Table_);                                          \
       }                                                                                                  \
       if (O2_BUILTIN_UNLIKELY(!has_##_Getter_())) {                                                      \
         return t->emptySlice();                                                                          \
@@ -2463,7 +2558,7 @@ consteval auto getIndexTargets()
       }                                                                                                  \
       auto t = mBinding.get<T>();                                                                        \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                           \
-        o2::soa::dereferenceWithWrongType();                                                             \
+        o2::soa::dereferenceWithWrongType(#_Getter_, #_Table_);                                          \
       }                                                                                                  \
       return getIterators<T>();                                                                          \
     }                                                                                                    \
@@ -2476,7 +2571,7 @@ consteval auto getIndexTargets()
       }                                                                                                  \
       auto t = mBinding.get<T>();                                                                        \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                           \
-        o2::soa::dereferenceWithWrongType();                                                             \
+        o2::soa::dereferenceWithWrongType(#_Getter_, #_Table_);                                          \
       }                                                                                                  \
       return getFilteredIterators<T>();                                                                  \
     }                                                                                                    \
@@ -2522,7 +2617,7 @@ consteval auto getIndexTargets()
       }                                                                                                  \
       auto t = mBinding.get<T>();                                                                        \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                           \
-        o2::soa::dereferenceWithWrongType();                                                             \
+        o2::soa::dereferenceWithWrongType(#_Getter_, #_Table_);                                          \
       }                                                                                                  \
       return t->rawIteratorAt((*mColumnIterator)[0]);                                                    \
     }                                                                                                    \
@@ -2535,7 +2630,7 @@ consteval auto getIndexTargets()
       }                                                                                                  \
       auto t = mBinding.get<T>();                                                                        \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                           \
-        o2::soa::dereferenceWithWrongType();                                                             \
+        o2::soa::dereferenceWithWrongType(#_Getter_, #_Table_);                                          \
       }                                                                                                  \
       return t->rawIteratorAt((*mColumnIterator).back());                                                \
     }                                                                                                    \
@@ -2620,7 +2715,7 @@ consteval auto getIndexTargets()
       }                                                                                                                                                                      \
       auto t = mBinding.get<T>();                                                                                                                                            \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                                                                                               \
-        o2::soa::dereferenceWithWrongType();                                                                                                                                 \
+        o2::soa::dereferenceWithWrongType(#_Getter_, #_Table_);                                                                                                              \
       }                                                                                                                                                                      \
       return t->rawIteratorAt(*mColumnIterator);                                                                                                                             \
     }                                                                                                                                                                        \
@@ -2698,7 +2793,7 @@ consteval auto getIndexTargets()
       }                                                                                                                                                            \
       auto t = mBinding.get<T>();                                                                                                                                  \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                                                                                     \
-        o2::soa::dereferenceWithWrongType();                                                                                                                       \
+        o2::soa::dereferenceWithWrongType(#_Getter_, "self");                                                                                                      \
       }                                                                                                                                                            \
       return t->rawIteratorAt(*mColumnIterator);                                                                                                                   \
     }                                                                                                                                                              \
@@ -2756,7 +2851,7 @@ consteval auto getIndexTargets()
     {                                                                                                    \
       auto t = mBinding.get<T>();                                                                        \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                           \
-        o2::soa::dereferenceWithWrongType();                                                             \
+        o2::soa::dereferenceWithWrongType(#_Getter_, "self");                                            \
       }                                                                                                  \
       if (O2_BUILTIN_UNLIKELY(!has_##_Getter_())) {                                                      \
         return t->emptySlice();                                                                          \
@@ -2817,7 +2912,7 @@ consteval auto getIndexTargets()
     {                                                                                                    \
       auto t = mBinding.get<T>();                                                                        \
       if (O2_BUILTIN_UNLIKELY(t == nullptr)) {                                                           \
-        o2::soa::dereferenceWithWrongType();                                                             \
+        o2::soa::dereferenceWithWrongType(#_Getter_, "self");                                            \
       }                                                                                                  \
       return getIterators<T>();                                                                          \
     }                                                                                                    \
