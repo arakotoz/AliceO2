@@ -13,6 +13,7 @@
 /// \author David Rohr
 
 #include "GPUChainITS.h"
+#include "GPUConstantMem.h"
 #include "DataFormatsITS/TrackITS.h"
 #include "ITStracking/ExternalAllocator.h"
 #include "GPUReconstructionIncludesITS.h"
@@ -27,9 +28,9 @@ class GPUFrameworkExternalAllocator final : public o2::its::ExternalAllocator
  public:
   void* allocate(size_t size) override
   {
-    return mFWReco->AllocateUnmanagedMemory(size, GPUMemoryResource::MEMORY_GPU);
+    return mFWReco->AllocateDirectMemory(size, GPUMemoryResource::MEMORY_GPU);
   }
-
+  void deallocate(char* ptr, size_t) override {}
   void setReconstructionFramework(o2::gpu::GPUReconstruction* fwr) { mFWReco = fwr; }
 
  private:
@@ -43,26 +44,11 @@ GPUChainITS::~GPUChainITS()
   mITSVertexerTraits.reset();
 }
 
-GPUChainITS::GPUChainITS(GPUReconstruction* rec, uint32_t maxTracks) : GPUChain(rec), mMaxTracks(maxTracks) {}
-
-void GPUChainITS::RegisterPermanentMemoryAndProcessors() { mRec->RegisterGPUProcessor(&processors()->itsFitter, GetRecoStepsGPU() & RecoStep::ITSTracking); }
-
-void GPUChainITS::RegisterGPUProcessors()
-{
-  if (GetRecoStepsGPU() & RecoStep::ITSTracking) {
-    mRec->RegisterGPUDeviceProcessor(&processorsShadow()->itsFitter, &processors()->itsFitter);
-  }
-}
-
-void GPUChainITS::MemorySize(size_t& gpuMem, size_t& pageLockedHostMem)
-{
-  gpuMem = mMaxTracks * sizeof(GPUITSTrack) + GPUCA_MEMALIGN;
-  pageLockedHostMem = gpuMem;
-}
+GPUChainITS::GPUChainITS(GPUReconstruction* rec) : GPUChain(rec) {}
 
 int32_t GPUChainITS::Init() { return 0; }
 
-o2::its::TrackerTraits* GPUChainITS::GetITSTrackerTraits()
+o2::its::TrackerTraits<7>* GPUChainITS::GetITSTrackerTraits()
 {
   if (mITSTrackerTraits == nullptr) {
     mRec->GetITSTraits(&mITSTrackerTraits, nullptr, nullptr);
@@ -78,14 +64,14 @@ o2::its::VertexerTraits* GPUChainITS::GetITSVertexerTraits()
   return mITSVertexerTraits.get();
 }
 
-o2::its::TimeFrame* GPUChainITS::GetITSTimeframe()
+o2::its::TimeFrame<7>* GPUChainITS::GetITSTimeframe()
 {
   if (mITSTimeFrame == nullptr) {
     mRec->GetITSTraits(nullptr, nullptr, &mITSTimeFrame);
   }
 #if !defined(GPUCA_STANDALONE)
   if (mITSTimeFrame->mIsGPU) {
-    auto doFWExtAlloc = [this](size_t size) -> void* { return rec()->AllocateUnmanagedMemory(size, GPUMemoryResource::MEMORY_GPU); };
+    auto doFWExtAlloc = [this](size_t size) -> void* { return rec()->AllocateDirectMemory(size, GPUMemoryResource::MEMORY_GPU); };
 
     mFrameworkAllocator.reset(new o2::its::GPUFrameworkExternalAllocator);
     mFrameworkAllocator->setReconstructionFramework(rec());

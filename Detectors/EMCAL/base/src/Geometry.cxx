@@ -8,17 +8,40 @@
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
+#include "EMCALBase/Geometry.h"
+
+#include <RtypesCore.h>
+#include <TMath.h>
+#include <TVector3.h>
+#include <TMathBase.h>
+#include <TVector2.h>
+#include <TParticle.h>
+#include <TString.h>
+#include <TGeoNode.h>
+#include <TJAlienCredentials.h>
+#include <TObjArray.h>
+#include <fairlogger/Logger.h>
+
+#include <cstring>
+#include <cctype>
+#include <cmath>
 #include <iomanip>
+#include <ostream>
+#include <string>
+#include <algorithm>
+#include <cstdio>
+#include <string_view>
+#include <tuple>
 
 #include <TGeoBBox.h>
 #include <TGeoManager.h>
 #include <TGeoMatrix.h>
-#include <TList.h>
 
-#include <fairlogger/Logger.h>
-
-#include "EMCALBase/Geometry.h"
+#include "DataFormatsEMCAL/Constants.h"
+#include "EMCALBase/GeometryBase.h"
+#include "CCDB/CcdbApi.h"
 #include "EMCALBase/ShishKebabTrd1Module.h"
+#include "GPUROOTCartesianFwd.h"
 
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -1557,6 +1580,7 @@ const TGeoHMatrix* Geometry::GetMatrixForSuperModule(Int_t smod) const
 
   if (!SMODULEMATRIX[smod]) {
     if (gGeoManager) {
+      LOG(info) << "Loading EMCAL misalignment matrix for SM " << smod << " from GeoManager.";
       SetMisalMatrix(GetMatrixForSuperModuleFromGeoManager(smod), smod);
     } else {
       LOG(fatal) << "Cannot find EMCAL misalignment matrices! Recover them either: \n"
@@ -1762,6 +1786,25 @@ void Geometry::SetMisalMatrix(const TGeoHMatrix* m, Int_t smod) const
   }
 }
 
+void Geometry::SetMisalMatrixFromCcdb(const char* path, int timestamp) const
+{
+  LOG(info) << "Using CCDB to obtain EMCal alignment.";
+  o2::ccdb::CcdbApi api;
+  std::map<std::string, std::string> metadata; // can be empty
+  api.init("http://alice-ccdb.cern.ch");
+  TObjArray* matrices = api.retrieveFromTFileAny<TObjArray>(path, metadata, timestamp);
+
+  for (int iSM = 0; iSM < mNumberOfSuperModules; ++iSM) {
+    TGeoHMatrix* mat = reinterpret_cast<TGeoHMatrix*>(matrices->At(iSM));
+    if (mat) {
+
+      SetMisalMatrix(mat, iSM);
+    } else {
+      LOG(info) << "Could not obtain Alignment Matrix for SM " << iSM;
+    }
+  }
+}
+
 Bool_t Geometry::IsDCALSM(Int_t iSupMod) const
 {
   if (mEMCSMSystem[iSupMod] == DCAL_STANDARD || mEMCSMSystem[iSupMod] == DCAL_EXT) {
@@ -1833,4 +1876,45 @@ std::tuple<int, int, int> Geometry::getOnlineID(int towerID)
   }
 
   return std::make_tuple(supermoduleID * 2 + ddlInSupermoudel, row, col);
+}
+
+std::tuple<bool, int, int> Geometry::areAbsIDsFromSameTCard(int absId1, int absId2) const
+{
+
+  int rowDiff = -100;
+  int colDiff = -100;
+
+  if (absId1 == absId2) {
+    return {false, rowDiff, colDiff};
+  }
+
+  // Check if in same SM, if not for sure not same TCard
+  const int sm1 = GetSuperModuleNumber(absId1);
+  const int sm2 = GetSuperModuleNumber(absId2);
+  if (sm1 != sm2) {
+    return {false, rowDiff, colDiff};
+  }
+
+  // Get the column and row of each absId
+  const auto [_, iTower1, iIphi1, iIeta1] = GetCellIndex(absId1);
+  const auto [row1, col1] = GetCellPhiEtaIndexInSModule(sm1, iTower1, iIphi1, iIeta1);
+
+  const auto [__, iTower2, iIphi2, iIeta2] = GetCellIndex(absId2);
+  const auto [row2, col2] = GetCellPhiEtaIndexInSModule(sm2, iTower2, iIphi2, iIeta2);
+
+  // Define corner of TCard for absId1
+  const int tcardRow0 = row1 - row1 % 8;
+  const int tcardCol0 = col1 - col1 % 2;
+
+  // Difference of absId2 from corner of absId1's TCard
+  const int rowOffset = row2 - tcardRow0;
+  const int colOffset = col2 - tcardCol0;
+
+  // Differences between the two cells directly
+  rowDiff = row1 - row2;
+  colDiff = col1 - col2;
+
+  const bool sameTCard = (rowOffset >= 0 && rowOffset < 8 &&
+                          colOffset >= 0 && colOffset < 2);
+  return {sameTCard, rowDiff, colDiff};
 }

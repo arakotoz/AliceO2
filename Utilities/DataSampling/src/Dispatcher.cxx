@@ -29,6 +29,7 @@
 
 #include <Configuration/ConfigurationInterface.h>
 #include <Configuration/ConfigurationFactory.h>
+#include <stdexcept>
 
 using namespace o2::configuration;
 using namespace o2::monitoring;
@@ -77,6 +78,42 @@ void Dispatcher::init(InitContext& ctx)
   mDeviceID.runtimeInit(spec.id.substr(0, DataSamplingHeader::deviceIDTypeSize).c_str());
 }
 
+header::Stack extractAdditionalHeaders(const char* inputHeaderStack)
+{
+  std::array<header::BaseHeader const*, 8> headers;
+  int count = 0;
+  const auto* first = header::BaseHeader::get(reinterpret_cast<const std::byte*>(inputHeaderStack));
+  for (const auto* current = first; current != nullptr; current = current->next()) {
+    if (current->description != header::DataHeader::sHeaderType && current->description != DataProcessingHeader::sHeaderType) {
+      headers[count++] = current;
+    }
+  }
+
+  // Poor man runtime pack expansion.
+  switch (count) {
+    case 0:
+      return header::Stack{};
+    case 1:
+      return header::Stack{*headers[0]};
+    case 2:
+      return header::Stack{*headers[0], *headers[1]};
+    case 3:
+      return header::Stack{*headers[0], *headers[1], *headers[2]};
+    case 4:
+      return header::Stack{*headers[0], *headers[1], *headers[2], *headers[3]};
+    case 5:
+      return header::Stack{*headers[0], *headers[1], *headers[2], *headers[3], *headers[4]};
+    case 6:
+      return header::Stack{*headers[0], *headers[1], *headers[2], *headers[3], *headers[4], *headers[5]};
+    case 7:
+      return header::Stack{*headers[0], *headers[1], *headers[2], *headers[3], *headers[4], *headers[5], *headers[6]};
+    case 8:
+      return header::Stack{*headers[0], *headers[1], *headers[2], *headers[3], *headers[4], *headers[5], *headers[6], *headers[7]};
+    default:
+      throw std::runtime_error(fmt::format("Too many headers to copy {}", count));
+  }
+}
+
 void Dispatcher::run(ProcessingContext& ctx)
 {
   // todo: consider matching (and deciding) in completion policy to save some time
@@ -99,14 +136,14 @@ void Dispatcher::run(ProcessingContext& ctx)
       //  a "TST/RAWDATA/*" output.
       if (auto route = policy->match(inputMatcher); route != nullptr && policy->decide(firstPart)) {
         auto routeAsConcreteDataType = DataSpecUtils::asConcreteDataTypeMatcher(*route);
-        auto dsheader = prepareDataSamplingHeader(*policy);
+        auto dsheader = prepareDataSamplingHeader(*policy, *firstInputHeader);
         for (const auto& part : inputIt) {
           if (part.header != nullptr) {
             // We copy every header which is not DataHeader or DataProcessingHeader,
             // so that custom data-dependent headers are passed forward,
             // and we add a DataSamplingHeader.
             header::Stack headerStack{
-              std::move(extractAdditionalHeaders(part.header)),
+              extractAdditionalHeaders(part.header),
               dsheader};
             const auto* partInputHeader = DataRefUtils::getHeader<header::DataHeader*>(part);
 
@@ -144,7 +181,7 @@ void Dispatcher::reportStats(Monitoring& monitoring) const
   monitoring.send(Metric{dispatcherTotalAcceptedMessages, "Dispatcher_messages_passed", Verbosity::Prod}.addTag(tags::Key::Subsystem, tags::Value::DataSampling));
 }
 
-DataSamplingHeader Dispatcher::prepareDataSamplingHeader(const DataSamplingPolicy& policy)
+DataSamplingHeader Dispatcher::prepareDataSamplingHeader(const DataSamplingPolicy& policy, header::DataHeader const& original)
 {
   uint64_t sampleTime = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 
@@ -152,22 +189,8 @@ DataSamplingHeader Dispatcher::prepareDataSamplingHeader(const DataSamplingPolic
     sampleTime,
     policy.getTotalAcceptedMessages(),
     policy.getTotalEvaluatedMessages(),
-    mDeviceID};
-}
-
-header::Stack Dispatcher::extractAdditionalHeaders(const char* inputHeaderStack) const
-{
-  header::Stack headerStack;
-
-  const auto* first = header::BaseHeader::get(reinterpret_cast<const std::byte*>(inputHeaderStack));
-  for (const auto* current = first; current != nullptr; current = current->next()) {
-    if (current->description != header::DataHeader::sHeaderType &&
-        current->description != DataProcessingHeader::sHeaderType) {
-      headerStack = std::move(header::Stack{std::move(headerStack), *current});
-    }
-  }
-
-  return headerStack;
+    mDeviceID,
+    original};
 }
 
 void Dispatcher::send(DataAllocator& dataAllocator, const DataRef& inputData, const Output& output) const

@@ -70,19 +70,16 @@ typedef signed char int8_t;
 #endif
 #define assert(param)
 
+#include "GPUCommonDef.h"
+#include "GPUCommonTypeTraits.h" // TODO: Once possible in OpenCL, should use GPUStdSystemHeaders.h here
+#include "GPUCommonArray.h"      // TODO: Same
 #include "GPUConstantMem.h"
 #include "GPUReconstructionIncludesDeviceAll.h"
 
-// if (gpu_mem != pTracker.GPUParametersConst()->gpumem) return; //TODO!
-
-#define GPUCA_KRNL(...) GPUCA_KRNL_WRAP(GPUCA_KRNL_LOAD_, __VA_ARGS__)
-#define GPUCA_KRNL_LOAD_single(...) GPUCA_KRNLGPU_SINGLE(__VA_ARGS__)
-#define GPUCA_KRNL_LOAD_multi(...) GPUCA_KRNLGPU_MULTI(__VA_ARGS__)
+#define GPUCA_KRNL(...) GPUCA_KRNLGPU(__VA_ARGS__)
 #define GPUCA_CONSMEM_PTR GPUglobal() char *gpu_mem, GPUconstant() GPUConstantMem* pConstant,
 #define GPUCA_CONSMEM (*pConstant)
 #include "GPUReconstructionKernelList.h"
 #undef GPUCA_KRNL
-#undef GPUCA_KRNL_LOAD_single
-#undef GPUCA_KRNL_LOAD_multi
 
 // clang-format on

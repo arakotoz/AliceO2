@@ -388,7 +388,7 @@ class CcdbApi //: public DatabaseInterface
   static bool removeSemaphore(std::string const& name, bool remove = false);
   static void removeLeakingSemaphores(std::string const& basedir, bool remove = false);
 
-  void loadFileToMemory(o2::pmr::vector<char>& dest, const std::string& path, std::map<std::string, std::string>* localHeaders = nullptr) const;
+  void loadFileToMemory(o2::pmr::vector<char>& dest, const std::string& path, std::map<std::string, std::string>* localHeaders = nullptr, bool fetchLocalMetaData = true) const;
   void loadFileToMemory(o2::pmr::vector<char>& dest, std::string const& path,
                         std::map<std::string, std::string> const& metadata, long timestamp,
                         std::map<std::string, std::string>* headers, std::string const& etag,
@@ -556,7 +556,7 @@ class CcdbApi //: public DatabaseInterface
    * @param tcl The TClass object describing the serialized type
    * @return raw pointer to created object
    */
-  void* downloadFilesystemContent(std::string const& fullUrl, std::type_info const& tinfo, std::map<string, string>* headers) const;
+  void* downloadFilesystemContent(std::string const& fullUrl, std::type_info const& tinfo, std::map<std::string, std::string>* headers) const;
 
   // initialize the TGrid (Alien connection)
   bool initTGrid() const;

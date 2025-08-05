@@ -15,25 +15,16 @@
 
 #ifndef TRACKINGITSU_INCLUDE_CACELL_H_
 #define TRACKINGITSU_INCLUDE_CACELL_H_
-#ifndef GPUCA_GPUCODE_DEVICE
-#include <array>
-#include <vector>
-#include <iostream>
-#endif
 
+#include "ITStracking/Constants.h"
 #include "GPUCommonDef.h"
 
-namespace o2
-{
-namespace its
+namespace o2::its
 {
 
 class Cell final
 {
  public:
-  GPUhd() Cell();
-  GPUd() Cell(const int, const int, const int, const int, const int);
-
   GPUhd() int getFirstClusterIndex() const { return mFirstClusterIndex; };
   GPUhd() int getSecondClusterIndex() const { return mSecondClusterIndex; };
   GPUhd() int getThirdClusterIndex() const { return mThirdClusterIndex; };
@@ -44,44 +35,19 @@ class Cell final
   GPUhd() int* getLevelPtr() { return &mLevel; }
 
  private:
-  const int mFirstClusterIndex;
-  const int mSecondClusterIndex;
-  const int mThirdClusterIndex;
-  const int mFirstTrackletIndex;
-  const int mSecondTrackletIndex;
-  int mLevel;
+  int mFirstClusterIndex{constants::UnusedIndex};
+  int mSecondClusterIndex{constants::UnusedIndex};
+  int mThirdClusterIndex{constants::UnusedIndex};
+  int mFirstTrackletIndex{constants::UnusedIndex};
+  int mSecondTrackletIndex{constants::UnusedIndex};
+  int mLevel{constants::UnusedIndex};
 };
-
-GPUhdi() Cell::Cell()
-  : mFirstClusterIndex{0},
-    mSecondClusterIndex{0},
-    mThirdClusterIndex{0},
-    mFirstTrackletIndex{0},
-    mSecondTrackletIndex{0},
-    mLevel{0}
-{
-  // Nothing to do
-}
-
-GPUdi() Cell::Cell(const int firstClusterIndex, const int secondClusterIndex, const int thirdClusterIndex,
-                   const int firstTrackletIndex, const int secondTrackletIndex)
-  : mFirstClusterIndex{firstClusterIndex},
-    mSecondClusterIndex{secondClusterIndex},
-    mThirdClusterIndex{thirdClusterIndex},
-    mFirstTrackletIndex{firstTrackletIndex},
-    mSecondTrackletIndex{secondTrackletIndex},
-    mLevel{1}
-{
-  // Nothing to do
-}
 
 class CellSeed final : public o2::track::TrackParCovF
 {
  public:
   GPUhdDefault() CellSeed() = default;
-  GPUhdDefault() CellSeed(const CellSeed&) = default;
-  GPUhdDefault() ~CellSeed() = default;
-  GPUd() CellSeed(int innerL, int cl0, int cl1, int cl2, int trkl0, int trkl1, o2::track::TrackParCovF& tpc, float chi2) : o2::track::TrackParCovF{tpc}, mLevel{1}, mChi2{chi2}
+  GPUhd() CellSeed(int innerL, int cl0, int cl1, int cl2, int trkl0, int trkl1, o2::track::TrackParCovF& tpc, float chi2) : o2::track::TrackParCovF(tpc), mChi2(chi2), mLevel(1)
   {
     setUserField(innerL);
     mClusters[innerL + 0] = cl0;
@@ -90,6 +56,12 @@ class CellSeed final : public o2::track::TrackParCovF
     mTracklets[0] = trkl0;
     mTracklets[1] = trkl1;
   }
+  GPUhdDefault() CellSeed(const CellSeed&) = default;
+  GPUhdDefault() ~CellSeed() = default;
+  // GPUhdDefault() CellSeed(CellSeed&&) = default; TODO cannot use this yet since TrackPar only has device
+  GPUhdDefault() CellSeed& operator=(const CellSeed&) = default;
+  GPUhdDefault() CellSeed& operator=(CellSeed&&) = default;
+
   GPUhd() int getFirstClusterIndex() const { return mClusters[getUserField()]; };
   GPUhd() int getSecondClusterIndex() const { return mClusters[getUserField() + 1]; };
   GPUhd() int getThirdClusterIndex() const { return mClusters[getUserField() + 2]; };
@@ -97,27 +69,25 @@ class CellSeed final : public o2::track::TrackParCovF
   GPUhd() void setFirstTrackletIndex(int trkl) { mTracklets[0] = trkl; };
   GPUhd() int getSecondTrackletIndex() const { return mTracklets[1]; };
   GPUhd() void setSecondTrackletIndex(int trkl) { mTracklets[1] = trkl; };
-  GPUhd() int getChi2() const { return mChi2; };
+  GPUhd() float getChi2() const { return mChi2; };
   GPUhd() void setChi2(float chi2) { mChi2 = chi2; };
   GPUhd() int getLevel() const { return mLevel; };
   GPUhd() void setLevel(int level) { mLevel = level; };
   GPUhd() int* getLevelPtr() { return &mLevel; }
   GPUhd() int* getClusters() { return mClusters; }
   GPUhd() int getCluster(int i) const { return mClusters[i]; }
-  GPUhdi() void printCell() const;
+  GPUhd() void printCell() const
+  {
+    printf("trkl: %d, %d\t lvl: %d\t chi2: %f\tcls: [%d | %d | %d | %d | %d | %d | %d]\n", mTracklets[0], mTracklets[1], mLevel, mChi2, mClusters[0], mClusters[1], mClusters[2], mClusters[3], mClusters[4], mClusters[5], mClusters[6]);
+  }
 
  private:
-  int mClusters[7] = {-1, -1, -1, -1, -1, -1, -1};
-  int mTracklets[2] = {-1, -1};
-  int mLevel = 0;
-  float mChi2 = 0.f;
+  float mChi2 = -999.f;
+  int mLevel = constants::UnusedIndex;
+  int mTracklets[2] = {constants::UnusedIndex, constants::UnusedIndex};
+  int mClusters[7] = {constants::UnusedIndex, constants::UnusedIndex, constants::UnusedIndex, constants::UnusedIndex, constants::UnusedIndex, constants::UnusedIndex, constants::UnusedIndex};
 };
 
-GPUhdi() void CellSeed::printCell() const
-{
-  printf("trkl: %d, %d\t lvl: %d\t chi2: %f\n", mTracklets[0], mTracklets[1], mLevel, mChi2);
-}
+} // namespace o2::its
 
-} // namespace its
-} // namespace o2
 #endif /* TRACKINGITSU_INCLUDE_CACELL_H_ */

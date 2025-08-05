@@ -12,14 +12,16 @@
 #ifndef ALICEO2_EMCAL_GEOMETRY_H_
 #define ALICEO2_EMCAL_GEOMETRY_H_
 
-#include <exception>
+#include <array>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
 #include <RStringView.h>
+#include <RtypesCore.h>
 #include <TGeoMatrix.h>
-#include <TNamed.h>
+#include <TMath.h>
 #include <TParticle.h>
 #include <TVector3.h>
 
@@ -57,7 +59,7 @@ class Geometry
   /// | EMCAL_COMPLETE12SMV1_DCAL             | Full EMCAL, 10 DCAL Supermodules (not used in practice)  |
   /// | EMCAL_COMPLETE12SMV1_DCAL_8SM         | Full EMCAL, 8 DCAL Supermodules (run2)                   |
   /// | EMCAL_COMPLETE12SMV1_DCAL_DEV         | Full EMCAL, DCAL development geometry (not used)         |
-  Geometry(const std::string_view name, const std::string_view mcname = "", const std::string_view mctitle = "");
+  explicit Geometry(const std::string_view name, const std::string_view mcname = "", const std::string_view mctitle = "");
 
   /// \brief Copy constructor.
   Geometry(const Geometry& geom);
@@ -513,6 +515,14 @@ class Geometry
   /// \return col
   std::tuple<int, int, int> getOnlineID(int towerID);
 
+  ///  \brief Check if 2 cells belong to the same T-Card
+  ///  \param absId1: Reference absId cell
+  ///  \param absId2: Cross checked cell absId
+  ///  \return true if belong to same TCard else false
+  ///  \return rowDiff: Distance in rows
+  ///  \return colDiff: Distance in columns
+  std::tuple<bool, int, int> areAbsIDsFromSameTCard(int absId1, int absId2) const;
+
   /// \brief Temporary link assignment (till final link assignment is known -
   /// \brief eventually taken from CCDB)
   /// \brief Current mapping can be found under https://alice.its.cern.ch/jira/browse/EMCAL-660
@@ -563,6 +573,11 @@ class Geometry
   /// Move from header due to coding violations : Dec 2,2011 by PAI
   ///
   void SetMisalMatrix(const TGeoHMatrix* m, Int_t smod) const;
+
+  ///
+  /// Method to set shift-rotational matrixes from CCDB
+  ///
+  void SetMisalMatrixFromCcdb(const char* path = "Users/m/mhemmer/EMCAL/Config/GeometryAligned", int timestamp = 10000) const;
 
   ///
   /// Transform clusters cell position into global with alternative method, taking into account the depth calculation.

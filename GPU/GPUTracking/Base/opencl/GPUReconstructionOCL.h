@@ -27,20 +27,20 @@ namespace o2::gpu
 {
 struct GPUReconstructionOCLInternals;
 
-class GPUReconstructionOCLBackend : public GPUReconstructionDeviceBase
+class GPUReconstructionOCL : public GPUReconstructionProcessing::KernelInterface<GPUReconstructionOCL, GPUReconstructionDeviceBase>
 {
  public:
-  ~GPUReconstructionOCLBackend() override;
+  GPUReconstructionOCL(const GPUSettingsDeviceBackend& cfg);
+  ~GPUReconstructionOCL() override;
+
+  template <class T, int32_t I = 0, typename... Args>
+  void runKernelBackend(const krnlSetupTime& _xyz, const Args&... args);
 
  protected:
-  GPUReconstructionOCLBackend(const GPUSettingsDeviceBackend& cfg);
-
   int32_t InitDevice_Runtime() override;
   int32_t ExitDevice_Runtime() override;
-  void UpdateAutomaticProcessingSettings() override;
 
-  int32_t GPUFailedMsgAI(const int64_t error, const char* file, int32_t line);
-  void GPUFailedMsgA(const int64_t error, const char* file, int32_t line);
+  virtual int32_t GPUChkErrInternal(const int64_t error, const char* file, int32_t line) const override;
 
   void SynchronizeGPU() override;
   int32_t DoStuckProtection(int32_t stream, deviceEvent event) override;
@@ -56,20 +56,12 @@ class GPUReconstructionOCLBackend : public GPUReconstructionDeviceBase
   void RecordMarker(deviceEvent* ev, int32_t stream) override;
 
   template <class T, int32_t I = 0>
-  int32_t AddKernel(bool multi = false);
-  template <class T, int32_t I = 0>
-  uint32_t FindKernel(int32_t num);
-  template <class T, int32_t I = 0, typename... Args>
-  void runKernelBackendInternal(const krnlSetupTime& _xyz, const Args&... args);
-  template <class T, int32_t I = 0>
-  gpu_reconstruction_kernels::krnlProperties getKernelPropertiesBackend();
+  int32_t AddKernel();
 
   GPUReconstructionOCLInternals* mInternals;
   float mOclVersion;
 
-  template <class T, int32_t I = 0, typename... Args>
-  void runKernelBackend(const krnlSetupArgs<T, I, Args...>& args);
-  template <class S, class T, int32_t I, bool MULTI>
+  template <class S, class T, int32_t I>
   S& getKernelObject();
 
   int32_t GetOCLPrograms();
@@ -84,7 +76,6 @@ class GPUReconstructionOCLBackend : public GPUReconstructionDeviceBase
   int32_t AddKernels();
 };
 
-using GPUReconstructionOCL = GPUReconstructionKernels<GPUReconstructionOCLBackend>;
 } // namespace o2::gpu
 
 #endif

@@ -36,6 +36,7 @@ class ConstMCTruthContainerView;
 namespace tpc
 {
 struct ClusterNative;
+struct ClusterNativeAccess;
 class Digit;
 } // namespace tpc
 
@@ -46,9 +47,7 @@ namespace o2::gpu
 struct GPUTPCClusterMCInterimArray;
 struct TPCPadGainCalib;
 
-struct ChargePos;
-
-class GPUTPCGeometry;
+struct CfChargePos;
 
 class GPUTPCClusterFinder : public GPUProcessor
 {
@@ -100,9 +99,9 @@ class GPUTPCClusterFinder : public GPUProcessor
   MinMaxCN* mMinMaxCN = nullptr;
   uint8_t* mPpadIsNoisy = nullptr;
   tpc::Digit* mPdigits = nullptr; // input digits, only set if ZS is skipped
-  ChargePos* mPpositions = nullptr;
-  ChargePos* mPpeakPositions = nullptr;
-  ChargePos* mPfilteredPeakPositions = nullptr;
+  CfChargePos* mPpositions = nullptr;
+  CfChargePos* mPpeakPositions = nullptr;
+  CfChargePos* mPfilteredPeakPositions = nullptr;
   uint8_t* mPisPeak = nullptr;
   uint32_t* mPclusterPosInRow = nullptr; // store the index where the corresponding cluster is stored in a bucket.
                                          // Required when MC are enabled to write the mc data to the correct position.
@@ -113,10 +112,10 @@ class GPUTPCClusterFinder : public GPUProcessor
   uint32_t* mPclusterInRow = nullptr;
   tpc::ClusterNative* mPclusterByRow = nullptr;
   GPUTPCClusterMCInterimArray* mPlabelsByRow = nullptr;
-  int32_t* mPbuf = nullptr;
+  int32_t* mPscanBuf = nullptr;
   Memory* mPmemory = nullptr;
 
-  GPUdi() int32_t* GetScanBuffer(int32_t iBuf) const { return mPbuf + iBuf * mBufSize; }
+  GPUdi() int32_t* GetScanBuffer(int32_t iBuf) const { return mPscanBuf + iBuf * mBufSize; }
 
   o2::dataformats::ConstMCTruthContainerView<o2::MCCompLabel> const* mPinputLabels = nullptr;
   uint32_t* mPlabelsInRow = nullptr;
@@ -124,7 +123,6 @@ class GPUTPCClusterFinder : public GPUProcessor
   uint32_t mPlabelsDataGlobalOffset = 0;
 
   int32_t mISector = 0;
-  constexpr static int32_t mScanWorkGroupSize = GPUCA_THREAD_COUNT_SCAN;
   uint32_t mNMaxClusterPerRow = 0;
   uint32_t mNMaxClusters = 0;
   uint32_t mNMaxPages = 0;

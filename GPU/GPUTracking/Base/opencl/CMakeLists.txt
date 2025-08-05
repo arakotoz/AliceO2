@@ -23,11 +23,11 @@ endif()
 set(CL_SRC ${GPUDIR}/Base/opencl/GPUReconstructionOCL.cl)
 set(CL_BIN ${CMAKE_CURRENT_BINARY_DIR}/GPUReconstructionOCLCode)
 
-set(OCL_FLAGS -Dcl_clang_storage_class_specifiers -cl-std=CLC++2021)
-if(NOT DEFINED GPUCA_NO_FAST_MATH OR NOT ${GPUCA_NO_FAST_MATH})
-  set(OCL_FLAGS ${OCL_FLAGS} -cl-denorms-are-zero -cl-mad-enable -cl-no-signed-zeros -cl-fast-relaxed-math)
+set(OCL_FLAGS -Dcl_clang_storage_class_specifiers -x cl -cl-std=CLC++2021 ${GPUCA_OCL_DENORMALS_FLAGS})
+if(NOT GPUCA_DETERMINISTIC_MODE GREATER_EQUAL ${GPUCA_DETERMINISTIC_MODE_MAP_NO_FAST_MATH})
+  set(OCL_FLAGS ${OCL_FLAGS} -cl-mad-enable -cl-no-signed-zeros -cl-fast-relaxed-math)
 else()
-set(OCL_FLAGS ${OCL_FLAGS} -cl-fp32-correctly-rounded-divide-sqrt)
+  set(OCL_FLAGS ${OCL_FLAGS} ${GPUCA_OCL_NO_FAST_MATH_FLAGS})
 endif()
 set(OCL_DEFINECL "-D$<JOIN:$<TARGET_PROPERTY:O2::GPUTracking,COMPILE_DEFINITIONS>,$<SEMICOLON>-D>"
             "-I$<JOIN:$<FILTER:$<TARGET_PROPERTY:O2::GPUTracking,INCLUDE_DIRECTORIES>,EXCLUDE,^/usr/include/?>,$<SEMICOLON>-I>"
@@ -43,6 +43,11 @@ if (NOT DEFINED GPUCA_OCL_SPIRV_VERSION)
   set(GPUCA_OCL_SPIRV_VERSION 1.2)
 endif()
 
+# execute_process(COMMAND bash -c "${LLVM_CLANG} -stdlib=libc++ -E -H -x c++ - <<< '#include <type_traits>' 2>&1 1>/dev/null | grep type_traits | head -n 1 | sed 's/^\\.* *//'"
+#                 OUTPUT_VARIABLE CLANG_STD_INCLUDE_DIR)
+# get_filename_component(CLANG_STD_INCLUDE_DIR "${CLANG_STD_INCLUDE_DIR}" DIRECTORY)
+# get_filename_component(CLANG_STD_INCLUDE_DIR "${CLANG_STD_INCLUDE_DIR}" ABSOLUTE) # TODO: For using <type_traits> in OpenCL, we would need to add -I${CLANG_STD_INCLUDE_DIR}
+
 if(OPENCL_ENABLED_SPIRV) # BUILD OpenCL intermediate code for SPIR-V target
   # executes clang to create llvm IL code
   # Add -fintegrated-objemitter once we switch to clang >= 17
@@ -56,9 +61,10 @@ if(OPENCL_ENABLED_SPIRV) # BUILD OpenCL intermediate code for SPIR-V target
               -ferror-limit=1000 -Wno-invalid-constexpr -Wno-unused-command-line-argument
               ${OCL_FLAGS}
               ${OCL_DEFINECL}
+              -MD -MT ${CL_BIN}.spirv -MF ${CL_BIN}.spirv.d
               -o ${CL_BIN}.spirv -c ${CL_SRC}
-      MAIN_DEPENDENCY ${CL_SRC}
-      IMPLICIT_DEPENDS CXX ${CL_SRC}
+      DEPENDS ${CL_SRC}
+      DEPFILE ${CL_BIN}.spirv.d
       COMMAND_EXPAND_LISTS
       COMMENT "Compiling OpenCL CL source file ${CL_SRC} to SPIRV ${CL_BIN}.spirv")
 
@@ -71,14 +77,16 @@ if(OPENCL_ENABLED) # BUILD OpenCL source code for runtime compilation target
   add_custom_command(
       OUTPUT ${CL_BIN}.src
       COMMAND ${LLVM_CLANG}
+              -target spir64
               -Wno-unused-command-line-argument
               ${OCL_FLAGS}
               ${OCL_DEFINECL}
               -cl-no-stdinc
               -nostdinc
-              -E ${CL_SRC} > ${CL_BIN}.src
-      MAIN_DEPENDENCY ${CL_SRC}
-      IMPLICIT_DEPENDS CXX ${CL_SRC}
+              -MD -MT ${CL_BIN}.src -MF ${CL_BIN}.src.d
+              -E -P ${CL_SRC} > ${CL_BIN}.src
+      DEPENDS ${CL_SRC}
+      DEPFILE ${CL_BIN}.src.d
       COMMAND_EXPAND_LISTS
       COMMENT "Preparing OpenCL CL source file for run time compilation ${CL_BIN}.src")
 
@@ -96,8 +104,6 @@ if(ALIGPU_BUILD_TYPE STREQUAL "O2")
   # the compile_defitions are not propagated automatically on purpose (they are
   # declared PRIVATE) so we are not leaking them outside of the GPU**
   # directories
-
-  install(FILES ${HDRS} DESTINATION include/GPU)
 endif()
 
 if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
@@ -106,6 +112,8 @@ if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
   install(TARGETS ${MODULE})
   set(targetName ${MODULE})
 endif()
+
+install(FILES ${HDRS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/GPU)
 
 if(OPENCL_ENABLED_SPIRV)
   target_compile_definitions(${targetName} PRIVATE OPENCL_ENABLED_SPIRV)

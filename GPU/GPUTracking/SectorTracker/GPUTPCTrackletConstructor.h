@@ -28,14 +28,9 @@ namespace o2::gpu
  */
 class GPUTPCTracker;
 
-class GPUTPCTrackletConstructor
+class GPUTPCTrackletConstructor : public GPUKernelTemplate
 {
  public:
-  enum K {
-    singleSector = 0,
-    allSectors = 1
-  };
-
   class GPUTPCThreadMemory
   {
     friend class GPUTPCTrackletConstructor; //! friend class
@@ -68,9 +63,6 @@ class GPUTPCTrackletConstructor
 
   struct GPUSharedMemory {
     CA_SHARED_STORAGE(GPUTPCRow mRows[GPUCA_ROW_COUNT]); // rows
-    int32_t mNextStartHitFirst;                          // First start hit to be processed by CUDA block during next iteration
-    int32_t mNextStartHitCount;                          // Number of start hits to be processed by CUDA block during next iteration
-    int32_t mNextStartHitFirstRun;                       // First run for dynamic scheduler?
     int32_t mNStartHits;                                 // Total number of start hits
 
 #ifdef GPUCA_TRACKLET_CONSTRUCTOR_DO_PROFILE
@@ -89,15 +81,11 @@ class GPUTPCTrackletConstructor
 
   GPUd() static void DoTracklet(GPUconstantref() GPUTPCTracker& tracker, GPUsharedref() GPUTPCTrackletConstructor::GPUSharedMemory& sMem, GPUTPCThreadMemory& rMem);
 
-#ifdef GPUCA_GPUCODE
-  GPUd() static int32_t FetchTracklet(GPUconstantref() GPUTPCTracker& tracker, GPUsharedref() GPUSharedMemory& sMem);
-#endif // GPUCA_GPUCODE
-
   template <class T>
   GPUd() static int32_t GPUTPCTrackletConstructorExtrapolationTracking(GPUconstantref() GPUTPCTracker& tracker, GPUsharedref() T& sMem, GPUTPCTrackParam& tParam, int32_t startrow, int32_t increment, int32_t iTracklet, calink* rowHits);
 
   typedef GPUconstantref() GPUTPCTracker processorType;
-  GPUhdi() constexpr static GPUDataTypes::RecoStep GetRecoStep() { return GPUCA_RECO_STEP::TPCSectorTracking; }
+  GPUhdi() constexpr static GPUDataTypes::RecoStep GetRecoStep() { return GPUDataTypes::RecoStep::TPCSectorTracking; }
   GPUhdi() static processorType* Processor(GPUConstantMem& processors)
   {
     return processors.tpcTrackers;

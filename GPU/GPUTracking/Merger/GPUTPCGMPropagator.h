@@ -52,7 +52,10 @@ class GPUTPCGMPropagator
   enum UpdateRetVal {
     updateErrorFitFailed = -1,
     updateErrorClusterRejected = 2,
-    updateErrorEdgeCluster = 3
+    updateErrorClusterRejectedDistance = 2,
+    updateErrorClusterRejectedInInterpolation = 3,
+    updateErrorClusterRejectedInUpdate = 4,
+    updateErrorClusterRejectedEdge = 5
   };
   enum RejectChi2Mode {
     rejectDirect = 1,
@@ -86,7 +89,6 @@ class GPUTPCGMPropagator
 
   GPUd() void SetFitInProjections(bool Flag) { mFitInProjections = Flag; }
   GPUd() void SetPropagateBzOnly(bool Flag) { mPropagateBzOnly = Flag; }
-  GPUd() void SetToyMCEventsFlag(bool Flag) { mToyMCEvents = Flag; }
   GPUd() void SetSeedingErrors(bool Flag) { mSeedingErrors = Flag; }
   GPUd() void SetMatLUT(const o2::base::MatLayerCylSet* lut) { mMatLUT = lut; }
 
@@ -114,7 +116,7 @@ class GPUTPCGMPropagator
   GPUd() float PredictChi2(float posY, float posZ, float err2Y, float err2Z) const;
   GPUd() int32_t RejectCluster(float chiY, float chiZ, uint8_t clusterState)
   {
-    if (chiY > 9.f || chiZ > 9.f) {
+    if (chiY > 9.f || chiZ > 9.f) { // TODO: Check how a track can have chi2/ncl > 18
       return 2;
     }
     if ((chiY > 6.25f || chiZ > 6.25f) && (clusterState & (GPUTPCGMMergedTrackHit::flagSplit | GPUTPCGMMergedTrackHit::flagShared))) {
@@ -185,10 +187,9 @@ class GPUTPCGMPropagator
   GPUTPCGMPhysicalTrackModel mT0;
   MaterialCorrection mMaterial;
   FieldRegion mFieldRegion = TPC;
-  bool mSeedingErrors = 0;
+  bool mSeedingErrors = 0;    // TODO: Hide variable in Run3 mode
   bool mFitInProjections = 1; // fit (Y,SinPhi,QPt) and (Z,DzDs) paramteres separatelly
   bool mPropagateBzOnly = 0;  // Use Bz only in propagation
-  bool mToyMCEvents = 0;      // events are simulated with simple home-made simulation
 };
 
 GPUdi() void GPUTPCGMPropagator::GetBxByBz(float Alpha, float X, float Y, float Z, float B[3]) const

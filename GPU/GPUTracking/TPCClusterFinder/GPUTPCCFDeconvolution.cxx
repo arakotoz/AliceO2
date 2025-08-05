@@ -15,32 +15,33 @@
 #include "GPUTPCCFDeconvolution.h"
 #include "CfConsts.h"
 #include "CfUtils.h"
-#include "ChargePos.h"
+#include "CfChargePos.h"
 #include "GPUDefMacros.h"
 
 using namespace o2::gpu;
 using namespace o2::gpu::tpccf;
 
 template <>
-GPUdii() void GPUTPCCFDeconvolution::Thread<0>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem, processorType& clusterer)
+GPUdii() void GPUTPCCFDeconvolution::Thread<0>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem, processorType& clusterer, uint8_t overwriteCharge)
 {
-  Array2D<PackedCharge> chargeMap(reinterpret_cast<PackedCharge*>(clusterer.mPchargeMap));
-  Array2D<uint8_t> isPeakMap(clusterer.mPpeakMap);
-  GPUTPCCFDeconvolution::deconvolutionImpl(get_num_groups(0), get_local_size(0), get_group_id(0), get_local_id(0), smem, isPeakMap, chargeMap, clusterer.mPpositions, clusterer.mPmemory->counters.nPositions);
+  CfArray2D<PackedCharge> chargeMap(reinterpret_cast<PackedCharge*>(clusterer.mPchargeMap));
+  CfArray2D<uint8_t> isPeakMap(clusterer.mPpeakMap);
+  GPUTPCCFDeconvolution::deconvolutionImpl(get_num_groups(0), get_local_size(0), get_group_id(0), get_local_id(0), smem, isPeakMap, chargeMap, clusterer.mPpositions, clusterer.mPmemory->counters.nPositions, overwriteCharge);
 }
 
 GPUdii() void GPUTPCCFDeconvolution::deconvolutionImpl(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem,
-                                                       const Array2D<uint8_t>& peakMap,
-                                                       Array2D<PackedCharge>& chargeMap,
-                                                       const ChargePos* positions,
-                                                       const uint32_t digitnum)
+                                                       const CfArray2D<uint8_t>& peakMap,
+                                                       CfArray2D<PackedCharge>& chargeMap,
+                                                       const CfChargePos* positions,
+                                                       const uint32_t digitnum,
+                                                       uint8_t overwriteCharge)
 {
   SizeT idx = get_global_id(0);
 
   bool iamDummy = (idx >= digitnum);
   idx = iamDummy ? digitnum - 1 : idx;
 
-  ChargePos pos = positions[idx];
+  CfChargePos pos = positions[idx];
 
   bool iamPeak = CfUtils::isPeak(peakMap[pos]);
 
@@ -111,9 +112,14 @@ GPUdii() void GPUTPCCFDeconvolution::deconvolutionImpl(int32_t nBlocks, int32_t 
   peakCount = (peakCount == 0) ? 1 : peakCount;
 
   PackedCharge charge = chargeMap[pos];
-  PackedCharge p(charge.unpack() / peakCount, has3x3, split);
 
-  chargeMap[pos] = p;
+  if (overwriteCharge) {
+    PackedCharge p(charge.unpack() / peakCount, has3x3, split);
+    chargeMap[pos] = p;
+  } else {
+    PackedCharge p(charge.unpack(), has3x3, split);
+    chargeMap[pos] = p;
+  }
 }
 
 GPUdi() uint8_t GPUTPCCFDeconvolution::countPeaksInner(

@@ -16,23 +16,16 @@
 #ifndef TRACKINGITSU_INCLUDE_TRACKERTRAITS_H_
 #define TRACKINGITSU_INCLUDE_TRACKERTRAITS_H_
 
-#include <array>
-#include <chrono>
 #include <cmath>
-#include <fstream>
-#include <iomanip>
-#include <iosfwd>
-#include <memory>
-#include <utility>
-#include <functional>
 
 #include "DetectorsBase/Propagator.h"
-#include "DetectorsBase/MatLayerCylSet.h"
 #include "ITStracking/Configuration.h"
-#include "ITStracking/Definitions.h"
 #include "ITStracking/MathUtils.h"
 #include "ITStracking/TimeFrame.h"
-#include "ITStracking/Road.h"
+#include "ITStracking/BoundedAllocator.h"
+
+#include <oneapi/tbb.h>
+#include <oneapi/tbb/partitioner.h>
 
 // #define OPTIMISATION_OUTPUT
 
@@ -46,104 +39,80 @@ namespace its
 {
 class TrackITSExt;
 
+template <int nLayers = 7>
 class TrackerTraits
 {
  public:
   virtual ~TrackerTraits() = default;
-  virtual void adoptTimeFrame(TimeFrame* tf);
-  virtual void initialiseTimeFrame(const int iteration);
+  virtual void adoptTimeFrame(TimeFrame<nLayers>* tf) { mTimeFrame = tf; }
+  virtual void initialiseTimeFrame(const int iteration) { mTimeFrame->initialise(iteration, mTrkParams[iteration], mTrkParams[iteration].NLayers); }
+
   virtual void computeLayerTracklets(const int iteration, int iROFslice, int iVertex);
   virtual void computeLayerCells(const int iteration);
   virtual void findCellsNeighbours(const int iteration);
   virtual void findRoads(const int iteration);
-  virtual void initialiseTimeFrameHybrid(const int iteration) { LOGP(error, "initialiseTimeFrameHybrid: this method should never be called with CPU traits"); }
-  virtual void computeTrackletsHybrid(const int iteration, int, int) { LOGP(error, "computeTrackletsHybrid: this method should never be called with CPU traits"); }
-  virtual void computeCellsHybrid(const int iteration) { LOGP(error, "computeCellsHybrid: this method should never be called with CPU traits"); }
-  virtual void findCellsNeighboursHybrid(const int iteration) { LOGP(error, "findCellsNeighboursHybrid: this method should never be called with CPU traits"); }
-  virtual void findRoadsHybrid(const int iteration) { LOGP(error, "findRoadsHybrid: this method should never be called with CPU traits"); }
-  virtual void findTracksHybrid(const int iteration) { LOGP(error, "findTracksHybrid: this method should never be called with CPU traits"); }
-  virtual void findTracks() { LOGP(error, "findTracks: this method is deprecated."); }
+
+  virtual bool supportsExtendTracks() const noexcept { return true; }
   virtual void extendTracks(const int iteration);
+  virtual bool supportsFindShortPrimaries() const noexcept { return true; }
   virtual void findShortPrimaries();
-  virtual void setBz(float bz);
+
   virtual bool trackFollowing(TrackITSExt* track, int rof, bool outward, const int iteration);
-  virtual void processNeighbours(int iLayer, int iLevel, const std::vector<CellSeed>& currentCellSeed, const std::vector<int>& currentCellId, std::vector<CellSeed>& updatedCellSeed, std::vector<int>& updatedCellId);
+  virtual void processNeighbours(int iLayer, int iLevel, const bounded_vector<CellSeed>& currentCellSeed, const bounded_vector<int>& currentCellId, bounded_vector<CellSeed>& updatedCellSeed, bounded_vector<int>& updatedCellId);
 
-  void UpdateTrackingParameters(const std::vector<TrackingParameters>& trkPars);
-  TimeFrame* getTimeFrame() { return mTimeFrame; }
+  void updateTrackingParameters(const std::vector<TrackingParameters>& trkPars) { mTrkParams = trkPars; }
+  TimeFrame<nLayers>* getTimeFrame() { return mTimeFrame; }
 
-  void setIsGPU(const unsigned char isgpu) { mIsGPU = isgpu; };
-  float getBz() const;
-  void setCorrType(const o2::base::PropagatorImpl<float>::MatCorrType type) { mCorrType = type; }
+  virtual void setBz(float bz);
+  float getBz() const { return mBz; }
   bool isMatLUT() const;
+  virtual const char* getName() const noexcept { return "CPU"; }
+  virtual bool isGPU() const noexcept { return false; }
+  void setMemoryPool(std::shared_ptr<BoundedMemoryResource>& pool) noexcept { mMemoryPool = pool; }
+  auto getMemoryPool() const noexcept { return mMemoryPool; }
 
   // Others
   GPUhd() static consteval int4 getEmptyBinsRect() { return int4{0, 0, 0, 0}; }
-  const int4 getBinsRect(const Cluster&, int layer, float z1, float z2, float maxdeltaz, float maxdeltaphi) const noexcept;
-  const int4 getBinsRect(int layer, float phi, float maxdeltaphi, float z, float maxdeltaz) const noexcept;
+  const int4 getBinsRect(int layer, float phi, float maxdeltaphi, float z, float maxdeltaz) const noexcept { return getBinsRect(layer, phi, maxdeltaphi, z, z, maxdeltaz); }
+  const int4 getBinsRect(const Cluster& cls, int layer, float z1, float z2, float maxdeltaz, float maxdeltaphi) const noexcept { return getBinsRect(layer, cls.phi, maxdeltaphi, z1, z2, maxdeltaz); }
   const int4 getBinsRect(int layer, float phi, float maxdeltaphi, float z1, float z2, float maxdeltaz) const noexcept;
   void SetRecoChain(o2::gpu::GPUChainITS* chain) { mChain = chain; }
   void setSmoothing(bool v) { mApplySmoothing = v; }
   bool getSmoothing() const { return mApplySmoothing; }
-  void setNThreads(int n);
-  int getNThreads() const { return mNThreads; }
+  void setNThreads(int n, std::shared_ptr<tbb::task_arena>& arena);
+  int getNThreads() { return mTaskArena->max_concurrency(); }
 
   o2::gpu::GPUChainITS* getChain() const { return mChain; }
 
   // TimeFrame information forwarding
-  virtual int getTFNumberOfClusters() const;
-  virtual int getTFNumberOfTracklets() const;
-  virtual int getTFNumberOfCells() const;
-
-  float mBz = 5.f;
+  virtual int getTFNumberOfClusters() const { return mTimeFrame->getNumberOfClusters(); }
+  virtual int getTFNumberOfTracklets() const { return mTimeFrame->getNumberOfTracklets(); }
+  virtual int getTFNumberOfCells() const { return mTimeFrame->getNumberOfCells(); }
 
  private:
   track::TrackParCov buildTrackSeed(const Cluster& cluster1, const Cluster& cluster2, const TrackingFrameInfo& tf3);
   bool fitTrack(TrackITSExt& track, int start, int end, int step, float chi2clcut = o2::constants::math::VeryBig, float chi2ndfcut = o2::constants::math::VeryBig, float maxQoverPt = o2::constants::math::VeryBig, int nCl = 0);
 
-  int mNThreads = 1;
   bool mApplySmoothing = false;
+  std::shared_ptr<BoundedMemoryResource> mMemoryPool;
+  std::shared_ptr<tbb::task_arena> mTaskArena;
 
  protected:
-  o2::base::PropagatorImpl<float>::MatCorrType mCorrType = o2::base::PropagatorImpl<float>::MatCorrType::USEMatCorrNONE;
   o2::gpu::GPUChainITS* mChain = nullptr;
-  TimeFrame* mTimeFrame;
+  TimeFrame<nLayers>* mTimeFrame;
   std::vector<TrackingParameters> mTrkParams;
-  bool mIsGPU = false;
+
+  float mBz{-999.f};
+  bool mIsZeroField{false};
 };
 
-inline void TrackerTraits::initialiseTimeFrame(const int iteration)
-{
-  mTimeFrame->initialise(iteration, mTrkParams[iteration], mTrkParams[iteration].NLayers);
-  setIsGPU(false);
-}
-
-inline float TrackerTraits::getBz() const
-{
-  return mBz;
-}
-
-inline void TrackerTraits::UpdateTrackingParameters(const std::vector<TrackingParameters>& trkPars)
-{
-  mTrkParams = trkPars;
-}
-
-inline const int4 TrackerTraits::getBinsRect(const int layerIndex, float phi, float maxdeltaphi, float z, float maxdeltaz) const noexcept
-{
-  return getBinsRect(layerIndex, phi, maxdeltaphi, z, z, maxdeltaz);
-}
-
-inline const int4 TrackerTraits::getBinsRect(const Cluster& currentCluster, int layerIndex, float z1, float z2, float maxdeltaz, float maxdeltaphi) const noexcept
-{
-  return getBinsRect(layerIndex, currentCluster.phi, maxdeltaphi, z1, z2, maxdeltaz);
-}
-
-inline const int4 TrackerTraits::getBinsRect(const int layerIndex, float phi, float maxdeltaphi, float z1, float z2, float maxdeltaz) const noexcept
+template <int nLayers>
+inline const int4 TrackerTraits<nLayers>::getBinsRect(const int layerIndex, float phi, float maxdeltaphi, float z1, float z2, float maxdeltaz) const noexcept
 {
   const float zRangeMin = o2::gpu::GPUCommonMath::Min(z1, z2) - maxdeltaz;
-  const float phiRangeMin = (maxdeltaphi > constants::math::Pi) ? 0.f : phi - maxdeltaphi;
+  const float phiRangeMin = (maxdeltaphi > o2::constants::math::PI) ? 0.f : phi - maxdeltaphi;
   const float zRangeMax = o2::gpu::GPUCommonMath::Max(z1, z2) + maxdeltaz;
-  const float phiRangeMax = (maxdeltaphi > constants::math::Pi) ? constants::math::TwoPi : phi + maxdeltaphi;
+  const float phiRangeMax = (maxdeltaphi > o2::constants::math::PI) ? o2::constants::math::TwoPI : phi + maxdeltaphi;
 
   if (zRangeMax < -mTrkParams[0].LayerZ[layerIndex] ||
       zRangeMin > mTrkParams[0].LayerZ[layerIndex] || zRangeMin > zRangeMax) {
@@ -156,6 +125,7 @@ inline const int4 TrackerTraits::getBinsRect(const int layerIndex, float phi, fl
               o2::gpu::GPUCommonMath::Min(mTrkParams[0].ZBins - 1, utils.getZBinIndex(layerIndex, zRangeMax)), // /!\ trkParams can potentially change across iterations
               utils.getPhiBinIndex(math_utils::getNormalizedPhi(phiRangeMax))};
 }
+
 } // namespace its
 } // namespace o2
 

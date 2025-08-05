@@ -11,7 +11,7 @@
 #ifndef O2_FRAMEWORK_ANALYSISDATAMODEL_H_
 #define O2_FRAMEWORK_ANALYSISDATAMODEL_H_
 
-#include "Framework/ASoA.h"
+#include "Framework/ASoA.h" // IWYU pragma: export
 
 #include <cmath>
 #include <bitset>
@@ -621,6 +621,7 @@ DECLARE_SOA_TABLE_FULL_VERSIONED(StoredTracksExtra_002, "TracksExtra", "AOD", "T
                                  track::HasITS<track::v001::DetectorMap>, track::HasTPC<track::v001::DetectorMap>,
                                  track::HasTRD<track::v001::DetectorMap>, track::HasTOF<track::v001::DetectorMap>,
                                  track::TPCNClsFound<track::TPCNClsFindable, track::TPCNClsFindableMinusFound>,
+                                 track::TPCNClsPID<track::TPCNClsFindable, track::TPCNClsFindableMinusPID>,
                                  track::TPCNClsCrossedRows<track::TPCNClsFindable, track::TPCNClsFindableMinusCrossedRows>,
                                  track::v001::ITSClusterMap<track::ITSClusterSizes>, track::v001::ITSNCls<track::ITSClusterSizes>, track::v001::ITSNClsInnerBarrel<track::ITSClusterSizes>,
                                  track::v001::ITSClsSizeInLayer<track::ITSClusterSizes>,
@@ -680,10 +681,11 @@ namespace trackqa
 // TRACKQA TABLE COLUMNS
 DECLARE_SOA_INDEX_COLUMN(Track, track);                                   //! track to which this QA information belongs
 DECLARE_SOA_COLUMN(TPCTime0, tpcTime0, float);                            //! tpc only time0 (mTime0 in TPC track)
+DECLARE_SOA_COLUMN(TPCdEdxNorm, tpcdEdxNorm, float);                      //! 100/TrackTPC.mdEdxAlt used to normalize dEdX...values below
 DECLARE_SOA_COLUMN(TPCDCAR, tpcdcaR, int16_t);                            //! tpc only DCAr
 DECLARE_SOA_COLUMN(TPCDCAZ, tpcdcaZ, int16_t);                            //! tpc only DCAz
 DECLARE_SOA_COLUMN(TPCClusterByteMask, tpcClusterByteMask, uint8_t);      //! tracklet bitmask - track defining 8 tracklets (152=8*19 rows) bit set if nCluster>thr (default 5)
-DECLARE_SOA_COLUMN(TPCdEdxMax0R, tpcdEdxMax0R, uint8_t);                  //! TPC dEdxQMax -ROC0/dEdx
+DECLARE_SOA_COLUMN(TPCdEdxMax0R, tpcdEdxMax0R, uint8_t);                  //! TPC dEdxQMax -ROC0/dEdx from TrackTPC.mdEdxAlt
 DECLARE_SOA_COLUMN(TPCdEdxMax1R, tpcdEdxMax1R, uint8_t);                  //! TPC dEdxQMax -ROC1/dEdx
 DECLARE_SOA_COLUMN(TPCdEdxMax2R, tpcdEdxMax2R, uint8_t);                  //! TPC dEdxQMax -ROC2/dEdx
 DECLARE_SOA_COLUMN(TPCdEdxMax3R, tpcdEdxMax3R, uint8_t);                  //! TPC dEdxQMax -ROC3/dEdx
@@ -736,7 +738,17 @@ DECLARE_SOA_TABLE_VERSIONED(TracksQA_002, "AOD", "TRACKQA", 2, //! trackQA infor
                             trackqa::IsDummy<trackqa::DeltaRefContParamY, trackqa::DeltaRefContParamZ, trackqa::DeltaRefContParamSnp, trackqa::DeltaRefContParamTgl, trackqa::DeltaRefContParamQ2Pt,
                                              trackqa::DeltaRefGloParamY, trackqa::DeltaRefGloParamZ, trackqa::DeltaRefGloParamSnp, trackqa::DeltaRefGloParamTgl, trackqa::DeltaRefGloParamQ2Pt>);
 
-using TracksQAVersion = TracksQA_002;
+DECLARE_SOA_TABLE_VERSIONED(TracksQA_003, "AOD", "TRACKQA", 3, //! trackQA information - version 3 - including alternative dedx normalization
+                            o2::soa::Index<>, trackqa::TrackId, trackqa::TPCTime0, trackqa::TPCdEdxNorm, trackqa::TPCDCAR, trackqa::TPCDCAZ, trackqa::TPCClusterByteMask,
+                            trackqa::TPCdEdxMax0R, trackqa::TPCdEdxMax1R, trackqa::TPCdEdxMax2R, trackqa::TPCdEdxMax3R,
+                            trackqa::TPCdEdxTot0R, trackqa::TPCdEdxTot1R, trackqa::TPCdEdxTot2R, trackqa::TPCdEdxTot3R,
+                            trackqa::DeltaRefContParamY, trackqa::DeltaRefContParamZ, trackqa::DeltaRefContParamSnp, trackqa::DeltaRefContParamTgl, trackqa::DeltaRefContParamQ2Pt,
+                            trackqa::DeltaRefGloParamY, trackqa::DeltaRefGloParamZ, trackqa::DeltaRefGloParamSnp, trackqa::DeltaRefGloParamTgl, trackqa::DeltaRefGloParamQ2Pt,
+                            trackqa::DeltaTOFdX, trackqa::DeltaTOFdZ,
+                            trackqa::IsDummy<trackqa::DeltaRefContParamY, trackqa::DeltaRefContParamZ, trackqa::DeltaRefContParamSnp, trackqa::DeltaRefContParamTgl, trackqa::DeltaRefContParamQ2Pt,
+                                             trackqa::DeltaRefGloParamY, trackqa::DeltaRefGloParamZ, trackqa::DeltaRefGloParamSnp, trackqa::DeltaRefGloParamTgl, trackqa::DeltaRefGloParamQ2Pt>);
+
+using TracksQAVersion = TracksQA_003;
 using TracksQA = TracksQAVersion::iterator;
 
 namespace fwdtrack
@@ -1596,7 +1608,7 @@ DECLARE_SOA_INDEX_COLUMN(Collision, collision);                         //! Coll
 DECLARE_SOA_COLUMN(V0Type, v0Type, uint8_t);                            //! custom bitmap for various selections (see below)
 
 DECLARE_SOA_DYNAMIC_COLUMN(IsStandardV0, isStandardV0, //! is standard V0
-                           [](uint8_t V0Type) -> bool { return V0Type & (1 << 0); });
+                           [](uint8_t V0Type) -> bool { return V0Type == 1; });
 DECLARE_SOA_DYNAMIC_COLUMN(IsPhotonV0, isPhotonV0, //! is TPC-only V0 for which the photon-mass-hypothesis was good
                            [](uint8_t V0Type) -> bool { return V0Type & (1 << 1); });
 DECLARE_SOA_DYNAMIC_COLUMN(IsCollinearV0, isCollinearV0, //! is V0 for which the photon-mass-hypothesis was good and was fitted collinearly
@@ -1765,8 +1777,25 @@ DECLARE_SOA_COLUMN(Chi2NDF, chi2NDF, float);                            //! chi^
 DECLARE_SOA_COLUMN(PsiPair, psiPair, float);                            //! Psi pair
 DECLARE_SOA_COLUMN(DCAr, dcaR, float);                                  //! DCA in radial direction
 DECLARE_SOA_COLUMN(DCAz, dcaZ, float);                                  //! DCA in z direction
-DECLARE_SOA_COLUMN(Mass, mass, float);                                  //! mass of the conversion. Do NOT use for cut!
+DECLARE_SOA_COLUMN(MassInMeV, mass, float);                             //! mass of the conversion in MeV. Do NOT use for cut!
 } // namespace oftv0
+namespace pmd
+{
+DECLARE_SOA_INDEX_COLUMN(BC, bc);                       //! BC index
+DECLARE_SOA_COLUMN(X, pmdclsx, float);                  //! cluster x position
+DECLARE_SOA_COLUMN(Y, pmdclsy, float);                  //! cluster y position
+DECLARE_SOA_COLUMN(Z, pmdclsz, float);                  //! cluster z position
+DECLARE_SOA_COLUMN(CluADC, pmdclsadc, float);           //! cluster energy in ADC
+DECLARE_SOA_COLUMN(CluPID, pmdclspid, float);           //! cluster probability, 1: photon, 0:hadron
+DECLARE_SOA_COLUMN(Det, pmddet, uint8_t);               //! Detector, 0:PRE, 1:CPV
+DECLARE_SOA_COLUMN(Ncell, pmdncell, uint8_t);           //! cluster cells
+DECLARE_SOA_COLUMN(Smn, pmdmodule, int32_t);            //! module number
+DECLARE_SOA_COLUMN(TrackNo, pmdtrackno, int32_t);       //! Track number assigned to clus from simulation
+DECLARE_SOA_COLUMN(TrackPid, pmdtrackpid, int32_t);     //! Track PID assigned to clus from simulation
+DECLARE_SOA_COLUMN(SigX, pmdsigx, float);               //! Cluster x-width
+DECLARE_SOA_COLUMN(SigY, pmdsigy, float);               //! Cluster y-width
+DECLARE_SOA_COLUMN(ClMatching, pmdclmatching, int32_t); //! Cluster of PRE matching with CPV
+} // namespace pmd
 } // namespace run2
 
 DECLARE_SOA_TABLE(Run2BCInfos_000, "AOD", "RUN2BCINFO", run2::EventCuts, //! Legacy information for Run 2 event selection
@@ -1796,9 +1825,17 @@ DECLARE_SOA_TABLE(Run2OTFV0s, "AOD", "Run2OTFV0", //! Run 2 V0 on the fly table
                   run2::oftv0::X, run2::oftv0::Y, run2::oftv0::Z,
                   run2::oftv0::Chi2NDF, run2::oftv0::PsiPair,
                   run2::oftv0::DCAr, run2::oftv0::DCAz,
-                  run2::oftv0::Mass);
+                  run2::oftv0::MassInMeV);
 
 using Run2OTFV0 = Run2OTFV0s::iterator;
+
+DECLARE_SOA_TABLE(Pmds, "AOD", "PMD", //! Photon information from PMD detector
+                  o2::soa::Index<>, run2::pmd::BCId, run2::pmd::X, run2::pmd::Y,
+                  run2::pmd::Z, run2::pmd::CluADC, run2::pmd::CluPID, run2::pmd::Det,
+                  run2::pmd::Ncell, run2::pmd::Smn, run2::pmd::TrackNo, run2::pmd::TrackPid,
+                  run2::pmd::SigX, run2::pmd::SigY, run2::pmd::ClMatching);
+
+using Pmd = Pmds::iterator;
 
 // ---- MC tables ----
 namespace mccollision

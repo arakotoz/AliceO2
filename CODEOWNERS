@@ -28,13 +28,13 @@
 /DataFormats/Detectors/Common                  @shahor02
 /DataFormats/Detectors/CPV                     @peressounko @kharlov
 /DataFormats/Detectors/CTP                     @lietava
-/DataFormats/Detectors/EMCAL                   @mfasDa @jokonig
-/DataFormats/Detectors/FIT                     @jotwinow @afurs @andreasmolander @arvindkhuntia @mslupeck
-/DataFormats/Detectors/FOCAL                   @maxrauch @mfasDa @iarsene @matthiasrichter
+/DataFormats/Detectors/EMCAL                   @nstrangm @jokonig
+/DataFormats/Detectors/FIT                     @jotwinow @afurs @andreasmolander @sahilupadhyaya92
+/DataFormats/Detectors/FOCAL                   @maxrauch @iarsene @matthiasrichter
 /DataFormats/Detectors/GlobalTracking          @shahor02
 /DataFormats/Detectors/GlobalTrackingWorkflow  @shahor02
 /DataFormats/Detectors/HMPID                   @gvolpe79
-/DataFormats/Detectors/ITSMFT                  @mcoquet642 @mconcas @shahor02
+/DataFormats/Detectors/ITSMFT                  @fprino @mcoquet642 @mconcas @shahor02
 /DataFormats/Detectors/MUON                    @AliceO2Group/muon-experts @shahor02
 /DataFormats/Detectors/PHOS                    @peressounko @kharlov
 /DataFormats/Detectors/Passive                 @sawenzel
@@ -58,14 +58,14 @@
 /Detectors/Base                    @sawenzel @shahor02
 /Detectors/Calibration             @chiarazampolli @shahor02
 /Detectors/CPV                     @peressounko @kharlov
-/Detectors/EMCAL                   @mfasDa @jokonig
-/Detectors/FIT                     @jotwinow @afurs @andreasmolander @arvindkhuntia @mslupeck
-/Detectors/FOCAL                   @maxrauch @mfasDa @iarsene @matthiasrichter
+/Detectors/EMCAL                   @nstrangm @jokonig
+/Detectors/FIT                     @jotwinow @afurs @andreasmolander @sahilupadhyaya92
+/Detectors/FOCAL                   @maxrauch @iarsene @matthiasrichter
 /Detectors/Geometry                @sawenzel @shahor02
 /Detectors/GlobalTracking          @shahor02
 /Detectors/GlobalTrackingWorkflow  @shahor02
 /Detectors/HMPID                   @gvolpe79
-/Detectors/ITSMFT                  @mcoquet642 @mconcas @shahor02
+/Detectors/ITSMFT                  @fprino @mcoquet642 @mconcas @shahor02
 /Detectors/MUON                    @AliceO2Group/muon-experts @shahor02
 /Detectors/PHOS                    @peressounko @kharlov
 /Detectors/Passive                 @sawenzel
@@ -73,6 +73,7 @@
 /Detectors/TPC                     @davidrohr @wiechula @shahor02
 /Detectors/TRD                     @f3sch @bazinski @wille10
 /Detectors/Upgrades                @mconcas
+/Detectors/Upgrades/ALICE3         @mconcas @njacazio
 /Detectors/Upgrades/ITS3           @fgrosa @arossi81 @mconcas @f3sch
 /Detectors/ZDC                     @coppedis
 /Detectors/CTF                     @shahor02

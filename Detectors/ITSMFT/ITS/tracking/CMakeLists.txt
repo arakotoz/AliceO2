@@ -14,11 +14,8 @@ o2_add_library(ITStracking
                SOURCES src/ClusterLines.cxx
                        src/Cluster.cxx
                        src/Configuration.cxx
-                       src/ROframe.cxx
                        src/TimeFrame.cxx
                        src/IOUtils.cxx
-                       src/Label.cxx
-                       src/Road.cxx
                        src/Tracker.cxx
                        src/TrackerTraits.cxx
                        src/TrackingConfigParam.cxx
@@ -35,12 +32,11 @@ o2_add_library(ITStracking
                        O2::ITSBase
                        O2::ITSReconstruction
                        O2::ITSMFTReconstruction
-                       O2::DataFormatsITS)
-
-if (OpenMP_CXX_FOUND)
-        target_compile_definitions(${targetName} PRIVATE WITH_OPENMP)
-        target_link_libraries(${targetName} PRIVATE OpenMP::OpenMP_CXX)
-endif()
+                       O2::DataFormatsITS
+               PRIVATE_LINK_LIBRARIES
+                       O2::Steer
+                       TBB::tbb)
+# target_compile_options(${targetName} PRIVATE -O0 -g -fPIC -fno-omit-frame-pointer)
 
 o2_add_library(ITSTrackingInterface
                TARGETVARNAME targetName
@@ -49,11 +45,6 @@ o2_add_library(ITSTrackingInterface
                        O2::ITStracking
                        O2::Framework
                        O2::GPUTracking)
-
-if (OpenMP_CXX_FOUND)
-        target_compile_definitions(${targetName} PRIVATE WITH_OPENMP)
-        target_link_libraries(${targetName} PRIVATE OpenMP::OpenMP_CXX)
-endif()
 
 o2_target_root_dictionary(ITStracking
                           HEADERS include/ITStracking/ClusterLines.h

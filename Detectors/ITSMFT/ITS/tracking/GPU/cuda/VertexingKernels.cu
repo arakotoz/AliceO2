@@ -14,16 +14,13 @@
 #include <cub/cub.cuh>
 
 #include "ITStrackingGPU/VertexingKernels.h"
+#include "GPUCommonHelpers.h"
 
 namespace o2
 {
 namespace its
 {
-using constants::its::VertexerHistogramVolume;
-using constants::math::TwoPi;
-using gpu::utils::checkGPUError;
 using math_utils::getNormalizedPhi;
-using namespace constants::its2;
 
 namespace gpu
 {
@@ -58,11 +55,6 @@ void trackletFinderHandler(const Cluster* clustersNextLayer,    // 0 2
     maxTrackletsPerCluster); // const unsigned int maxTrackletsPerCluster = 1e2
 }
 /*
-GPUd() float smallestAngleDifference(float a, float b)
-{
-  float diff = fmod(b - a + constants::math::Pi, constants::math::TwoPi) - constants::math::Pi;
-  return (diff < -constants::math::Pi) ? diff + constants::math::TwoPi : ((diff > constants::math::Pi) ? diff - constants::math::TwoPi : diff);
-}
 
 GPUd() const int4 getBinsRect(const Cluster& currentCluster, const int layerIndex,
                               const float z1, float maxdeltaz, float maxdeltaphi)
@@ -82,17 +74,6 @@ GPUd() const int4 getBinsRect(const Cluster& currentCluster, const int layerInde
               getPhiBinIndex(phiRangeMin),
               o2::gpu::GPUCommonMath::Min(ZBins - 1, getZBinIndex(layerIndex + 1, zRangeMax)),
               getPhiBinIndex(phiRangeMax)};
-}
-
-GPUh() void gpuThrowOnError()
-{
-  cudaError_t error = cudaGetLastError();
-
-  if (error != cudaSuccess) {
-    std::ostringstream errorString{};
-    errorString << GPU_ARCH << " API returned error  [" << cudaGetErrorString(error) << "] (code " << error << ")" << std::endl;
-    throw std::runtime_error{errorString.str()};
-  }
 }
 
 template <typename... Args>
@@ -575,7 +556,7 @@ GPUg() void computeVertexKernel(
           histZ[iBin] = 0;
         }
         if (sumWZ > minContributors || vertIndex == 0) {
-          new (vertices + vertIndex) Vertex{o2::math_utils::Point3D<float>(beamPosition[0], beamPosition[1], wZ / sumWZ), o2::gpu::gpustd::array<float, 6>{ex, 0, ey, 0, 0, ez}, static_cast<ushort>(sumWZ), 0};
+          new (vertices + vertIndex) Vertex{o2::math_utils::Point3D<float>(beamPosition[0], beamPosition[1], wZ / sumWZ), std::array<float, 6>{ex, 0, ey, 0, 0, ez}, static_cast<ushort>(sumWZ), 0};
         } else {
           new (vertices + vertIndex) Vertex{};
         }

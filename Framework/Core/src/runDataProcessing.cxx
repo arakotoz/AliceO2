@@ -9,6 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 #include <memory>
+#include "Framework/TopologyPolicyHelpers.h"
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <stdexcept>
 #include "Framework/BoostOptionsRetriever.h"
@@ -1033,10 +1034,12 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
     std::string defaultInfologgerMode = "";
     o2::framework::DeploymentMode deploymentMode = o2::framework::DefaultsHelpers::deploymentMode();
     if (deploymentMode == o2::framework::DeploymentMode::OnlineDDS) {
-      defaultExitTransitionTimeout = "20";
+      defaultExitTransitionTimeout = "40";
+      defaultDataProcessingTimeout = "20";
       defaultInfologgerMode = "infoLoggerD";
     } else if (deploymentMode == o2::framework::DeploymentMode::OnlineECS) {
-      defaultExitTransitionTimeout = "20";
+      defaultExitTransitionTimeout = "25";
+      defaultDataProcessingTimeout = "20";
     }
     boost::program_options::options_description optsDesc;
     ConfigParamsHelper::populateBoostProgramOptions(optsDesc, spec.options, gHiddenDeviceOptions);
@@ -1684,7 +1687,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
               for (auto& input : device.inputs) {
                 for (auto& param : input.metadata) {
                   if (param.type == VariantType::Bool && param.name.find("control:") != std::string::npos) {
-                    if (param.name != "control:default" && param.name != "control:spawn" && param.name != "control:build") {
+                    if (param.name != "control:default" && param.name != "control:spawn" && param.name != "control:build" && param.name != "control:define") {
                       auto confName = confNameFromParam(param.name).second;
                       param.defaultValue = reg->get<bool>(confName.c_str());
                     }
@@ -2141,6 +2144,8 @@ int runStateMachine(DataProcessorSpecs const& workflow,
                   info.logLevel = LogParsingHelpers::LogLevel::Info;
                 } else if ((*logLevelIt).compare("alarm") == 0) {
                   info.logLevel = LogParsingHelpers::LogLevel::Alarm;
+                } else if ((*logLevelIt).compare("critical") == 0) {
+                  info.logLevel = LogParsingHelpers::LogLevel::Critical;
                 } else if ((*logLevelIt).compare("fatal") == 0) {
                   info.logLevel = LogParsingHelpers::LogLevel::Fatal;
                 }
@@ -3016,61 +3021,12 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
                      [](OutputSpec const& a, OutputSpec const& b) { return DataSpecUtils::describe(a) < DataSpecUtils::describe(b); });
   }
 
-  std::vector<TopologyPolicy> topologyPolicies = TopologyPolicy::createDefaultPolicies();
-  std::vector<TopologyPolicy::DependencyChecker> dependencyCheckers;
-  dependencyCheckers.reserve(physicalWorkflow.size());
-
-  for (auto& spec : physicalWorkflow) {
-    for (auto& policy : topologyPolicies) {
-      if (policy.matcher(spec)) {
-        dependencyCheckers.push_back(policy.checkDependency);
-        break;
-      }
-    }
-  }
-  assert(dependencyCheckers.size() == physicalWorkflow.size());
-  // check if DataProcessorSpec at i depends on j
-  auto checkDependencies = [&workflow = physicalWorkflow,
-                            &dependencyCheckers](int i, int j) {
-    TopologyPolicy::DependencyChecker& checker = dependencyCheckers[i];
-    return checker(workflow[i], workflow[j]);
-  };
-
   // Create a list of all the edges, so that we can do a topological sort
   // before we create the graph.
   std::vector<std::pair<int, int>> edges;
 
   if (physicalWorkflow.size() > 1) {
-    for (size_t i = 0; i < physicalWorkflow.size() - 1; ++i) {
-      for (size_t j = i; j < physicalWorkflow.size(); ++j) {
-        if (i == j && checkDependencies(i, j)) {
-          throw std::runtime_error(physicalWorkflow[i].name + " depends on itself");
-        }
-        bool both = false;
-        if (checkDependencies(i, j)) {
-          edges.emplace_back(j, i);
-          both = true;
-        }
-        if (checkDependencies(j, i)) {
-          edges.emplace_back(i, j);
-          if (both) {
-            std::ostringstream str;
-            for (auto x : {i, j}) {
-              str << physicalWorkflow[x].name << ":\n";
-              str << "inputs:\n";
-              for (auto& input : physicalWorkflow[x].inputs) {
-                str << "- " << input << "\n";
-              }
-              str << "outputs:\n";
-              for (auto& output : physicalWorkflow[x].outputs) {
-                str << "- " << output << "\n";
-              }
-            }
-            throw std::runtime_error(physicalWorkflow[i].name + " has circular dependency with " + physicalWorkflow[j].name + ":\n" + str.str());
-          }
-        }
-      }
-    }
+    edges = TopologyPolicyHelpers::buildEdges(physicalWorkflow);
 
     auto topoInfos = WorkflowHelpers::topologicalSort(physicalWorkflow.size(), &edges[0].first, &edges[0].second, sizeof(std::pair<int, int>), edges.size());
     if (topoInfos.size() != physicalWorkflow.size()) {
@@ -3159,6 +3115,8 @@ int doMain(int argc, char** argv, o2::framework::WorkflowSpec const& workflow,
       fair::Logger::SetConsoleSeverity(fair::Severity::important);
     } else if (logLevel == "alarm") {
       fair::Logger::SetConsoleSeverity(fair::Severity::alarm);
+    } else if (logLevel == "critical") {
+      fair::Logger::SetConsoleSeverity(fair::Severity::critical);
     } else if (logLevel == "fatal") {
       fair::Logger::SetConsoleSeverity(fair::Severity::fatal);
     } else {

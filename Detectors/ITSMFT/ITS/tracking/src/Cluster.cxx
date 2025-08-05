@@ -12,26 +12,25 @@
 /// \file Cluster.cxx
 /// \brief
 ///
+#include "GPUCommonMath.h"
+#include "GPUCommonArray.h"
 
 #include "ITStracking/Cluster.h"
+#include "ITStracking/Definitions.h"
 #include "ITStracking/MathUtils.h"
 #include "ITStracking/IndexTableUtils.h"
 
-namespace o2
-{
-namespace its
-{
+using namespace o2::its;
 
 using math_utils::computePhi;
 using math_utils::getNormalizedPhi;
-using math_utils::hypot;
 
 Cluster::Cluster(const float x, const float y, const float z, const int index)
   : xCoordinate{x},
     yCoordinate{y},
     zCoordinate{z},
     phi{getNormalizedPhi(computePhi(x, y))},
-    radius{hypot(x, y)},
+    radius{o2::gpu::GPUCommonMath::Hypot(x, y)},
     clusterId{index},
     indexTableBinIndex{0}
 {
@@ -43,7 +42,7 @@ Cluster::Cluster(const int layerIndex, const IndexTableUtils& utils, const Clust
     yCoordinate{other.yCoordinate},
     zCoordinate{other.zCoordinate},
     phi{getNormalizedPhi(computePhi(other.xCoordinate, other.yCoordinate))},
-    radius{hypot(other.xCoordinate, other.yCoordinate)},
+    radius{o2::gpu::GPUCommonMath::Hypot(other.xCoordinate, other.yCoordinate)},
     clusterId{other.clusterId},
     indexTableBinIndex{utils.getBinIndex(utils.getZBinIndex(layerIndex, zCoordinate),
                                          utils.getPhiBinIndex(phi))}
@@ -58,7 +57,7 @@ Cluster::Cluster(const int layerIndex, const float3& primaryVertex, const IndexT
     zCoordinate{other.zCoordinate},
     phi{getNormalizedPhi(
       computePhi(xCoordinate - primaryVertex.x, yCoordinate - primaryVertex.y))},
-    radius{hypot(xCoordinate - primaryVertex.x, yCoordinate - primaryVertex.y)},
+    radius{o2::gpu::GPUCommonMath::Hypot(xCoordinate - primaryVertex.x, yCoordinate - primaryVertex.y)},
     clusterId{other.clusterId},
     indexTableBinIndex{utils.getBinIndex(utils.getZBinIndex(layerIndex, zCoordinate),
                                          utils.getPhiBinIndex(phi))}
@@ -66,36 +65,26 @@ Cluster::Cluster(const int layerIndex, const float3& primaryVertex, const IndexT
   // Nothing to do
 }
 
-void Cluster::Init(const int layerIndex, const float3& primaryVertex, const IndexTableUtils& utils, const Cluster& other)
+GPUhd() void Cluster::print() const
 {
-  xCoordinate = other.xCoordinate;
-  yCoordinate = other.yCoordinate;
-  zCoordinate = other.zCoordinate;
-  phi = getNormalizedPhi(
-    computePhi(xCoordinate - primaryVertex.x, yCoordinate - primaryVertex.y));
-  radius = hypot(xCoordinate - primaryVertex.x, yCoordinate - primaryVertex.y);
-  clusterId = other.clusterId;
-  indexTableBinIndex = utils.getBinIndex(utils.getZBinIndex(layerIndex, zCoordinate),
-                                         utils.getPhiBinIndex(phi));
+#if !defined(GPUCA_GPUCODE_DEVICE) || (!defined(__OPENCL__) && defined(GPUCA_GPU_DEBUG_PRINT))
+  printf("Cluster: %f %f %f %f %f %d %d\n", xCoordinate, yCoordinate, zCoordinate, phi, radius, clusterId, indexTableBinIndex);
+#endif
 }
 
-bool Cluster::operator==(const Cluster& rhs) const
-{
-  return this->xCoordinate == rhs.xCoordinate &&
-         this->yCoordinate == rhs.yCoordinate &&
-         this->zCoordinate == rhs.zCoordinate &&
-         this->phi == rhs.phi &&
-         this->radius == rhs.radius &&
-         this->clusterId == rhs.clusterId &&
-         this->indexTableBinIndex == rhs.indexTableBinIndex;
-}
-
-TrackingFrameInfo::TrackingFrameInfo(float x, float y, float z, float xTF, float alpha, GPUArray<float, 2>&& posTF,
-                                     GPUArray<float, 3>&& covTF)
+TrackingFrameInfo::TrackingFrameInfo(float x, float y, float z, float xTF, float alpha, std::array<float, 2>&& posTF,
+                                     std::array<float, 3>&& covTF)
   : xCoordinate{x}, yCoordinate{y}, zCoordinate{z}, xTrackingFrame{xTF}, alphaTrackingFrame{alpha}, positionTrackingFrame{posTF}, covarianceTrackingFrame{covTF}
 {
   // Nothing to do
 }
 
-} // namespace its
-} // namespace o2
+GPUhd() void TrackingFrameInfo::print() const
+{
+#if !defined(GPUCA_GPUCODE_DEVICE) || (!defined(__OPENCL__) && defined(GPUCA_GPU_DEBUG_PRINT))
+  printf("x: %f y: %f z: %f xTF: %f alphaTF: %f posTF: %f %f covTF: %f %f %f\n",
+         xCoordinate, yCoordinate, zCoordinate, xTrackingFrame, alphaTrackingFrame,
+         positionTrackingFrame[0], positionTrackingFrame[1],
+         covarianceTrackingFrame[0], covarianceTrackingFrame[1], covarianceTrackingFrame[2]);
+#endif
+}

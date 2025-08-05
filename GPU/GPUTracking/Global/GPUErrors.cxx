@@ -48,18 +48,28 @@ void GPUErrors::clear()
   memset(mErrors, 0, GPUCA_MAX_ERRORS * sizeof(*mErrors));
 }
 
-static std::unordered_map<uint32_t, const char*> errorNames = {
+const std::unordered_map<uint32_t, const char*>& GPUErrors::getErrorNames()
+{
+  static std::unordered_map<uint32_t, const char*> errorNames = {
 #define GPUCA_ERROR_CODE(num, name, ...) {num, GPUCA_M_STR(name)},
 #include "GPUErrorCodes.h"
 #undef GPUCA_ERROR_CODE
-};
+  };
+  return errorNames;
+}
 
-void GPUErrors::printErrors(bool silent)
+bool GPUErrors::printErrors(bool silent, uint64_t mask)
 {
+  bool retVal = 0;
+  const auto& errorNames = getErrorNames();
   for (uint32_t i = 0; i < std::min(*mErrors, GPUCA_MAX_ERRORS); i++) {
     uint32_t errorCode = mErrors[4 * i + 1];
     const auto& it = errorNames.find(errorCode);
     const char* errorName = it == errorNames.end() ? "INVALID ERROR CODE" : it->second;
+    static_assert(MAX_GPUCA_ERROR_NUMBER <= sizeof(mask) * 8);
+    if (mask & (1 << errorCode)) {
+      retVal = 1;
+    }
     if (silent && i) {
       GPUWarning("GPU Error Code (%u:%u) %s : %u / %u / %u", i, errorCode, errorName, mErrors[4 * i + 2], mErrors[4 * i + 3], mErrors[4 * i + 4]);
     } else if (silent) {
@@ -75,6 +85,7 @@ void GPUErrors::printErrors(bool silent)
       GPUError("Additional errors occured (codes not stored)");
     }
   }
+  return retVal;
 }
 
 uint32_t GPUErrors::getNErrors() const

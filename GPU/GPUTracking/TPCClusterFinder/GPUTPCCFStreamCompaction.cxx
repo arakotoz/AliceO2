@@ -15,7 +15,7 @@
 #include "GPUTPCCFStreamCompaction.h"
 #include "GPUCommonAlgorithm.h"
 
-#include "ChargePos.h"
+#include "CfChargePos.h"
 #include "CfUtils.h"
 
 using namespace o2::gpu;
@@ -24,6 +24,7 @@ using namespace o2::gpu::tpccf;
 template <>
 GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::scanStart>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem, processorType& clusterer, int32_t iBuf, int32_t stage)
 {
+#ifdef GPUCA_GPUCODE
   int32_t nElems = CompactionElems(clusterer, stage);
 
   const auto* predicate = clusterer.mPisPeak;
@@ -35,35 +36,40 @@ GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::scanSta
     pred = predicate[iThreadGlobal];
   }
 
-  int32_t nElemsInBlock = CfUtils::blockPredicateSum<GPUCA_THREAD_COUNT_SCAN>(smem, pred);
+  int32_t nElemsInBlock = CfUtils::blockPredicateSum<GPUCA_PAR_CF_SCAN_WORKGROUP_SIZE>(smem, pred);
 
   int32_t lastThread = nThreads - 1;
   if (iThread == lastThread) {
     scanOffset[iBlock] = nElemsInBlock;
   }
+#endif
 }
 
 template <>
 GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::scanUp>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem, processorType& clusterer, int32_t iBuf, int32_t nElems)
 {
+#ifdef GPUCA_GPUCODE
   auto* scanOffset = clusterer.GetScanBuffer(iBuf - 1);
   auto* scanOffsetNext = clusterer.GetScanBuffer(iBuf);
 
   int32_t iThreadGlobal = get_global_id(0);
   int32_t offsetInBlock = work_group_scan_inclusive_add((iThreadGlobal < nElems) ? scanOffset[iThreadGlobal] : 0);
 
-  // TODO: This write isn't needed??
-  scanOffset[iThreadGlobal] = offsetInBlock;
+  if (iThreadGlobal < nElems) {
+    scanOffset[iThreadGlobal] = offsetInBlock;
+  }
 
   int32_t lastThread = nThreads - 1;
   if (iThread == lastThread) {
     scanOffsetNext[iBlock] = offsetInBlock;
   }
+#endif
 }
 
 template <>
 GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::scanTop>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem, processorType& clusterer, int32_t iBuf, int32_t nElems)
 {
+#ifdef GPUCA_GPUCODE
   int32_t iThreadGlobal = get_global_id(0);
   int32_t* scanOffset = clusterer.GetScanBuffer(iBuf - 1);
 
@@ -74,11 +80,13 @@ GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::scanTop
   if (inBounds) {
     scanOffset[iThreadGlobal] = offsetInBlock;
   }
+#endif
 }
 
 template <>
 GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::scanDown>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& /*smem*/, processorType& clusterer, int32_t iBuf, uint32_t offset, int32_t nElems)
 {
+#ifdef GPUCA_GPUCODE
   int32_t iThreadGlobal = get_global_id(0) + offset;
 
   int32_t* scanOffsetPrev = clusterer.GetScanBuffer(iBuf - 1);
@@ -89,11 +97,13 @@ GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::scanDow
   if (iThreadGlobal < nElems) {
     scanOffsetPrev[iThreadGlobal] += shift;
   }
+#endif
 }
 
 template <>
-GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::compactDigits>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem, processorType& clusterer, int32_t iBuf, int32_t stage, ChargePos* in, ChargePos* out)
+GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::compactDigits>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUSharedMemory& smem, processorType& clusterer, int32_t iBuf, int32_t stage, CfChargePos* in, CfChargePos* out)
 {
+#ifdef GPUCA_GPUCODE
   uint32_t nElems = CompactionElems(clusterer, stage);
   SizeT bufferSize = (stage) ? clusterer.mNMaxClusters : clusterer.mNMaxPeaks;
 
@@ -105,7 +115,7 @@ GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::compact
   bool iAmDummy = (iThreadGlobal >= nElems);
 
   int32_t pred = (iAmDummy) ? 0 : predicate[iThreadGlobal];
-  int32_t offsetInBlock = CfUtils::blockPredicateScan<GPUCA_THREAD_COUNT_SCAN>(smem, pred);
+  int32_t offsetInBlock = CfUtils::blockPredicateScan<GPUCA_PAR_CF_SCAN_WORKGROUP_SIZE>(smem, pred);
 
   SizeT globalOffsetOut = offsetInBlock;
   if (iBlock > 0) {
@@ -129,6 +139,7 @@ GPUdii() void GPUTPCCFStreamCompaction::Thread<GPUTPCCFStreamCompaction::compact
       clusterer.mPmemory->counters.nPeaks = nFinal;
     }
   }
+#endif
 }
 
 GPUdii() int32_t GPUTPCCFStreamCompaction::CompactionElems(processorType& clusterer, int32_t stage)

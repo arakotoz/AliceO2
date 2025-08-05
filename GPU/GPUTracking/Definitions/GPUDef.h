@@ -18,7 +18,7 @@
 
 #include "GPUCommonDef.h"
 #include "GPUDefConstantsAndSettings.h"
-#include "GPUDefGPUParameters.h"
+#include "GPUDefParametersWrapper.h"
 #include "GPUCommonRtypes.h"
 
 // Macros for masking ptrs in OpenCL kernel calls as uint64_t (The API only allows us to pass buffer objects)
@@ -34,11 +34,7 @@
   #define GPUPtr2(a, b) b
 #endif
 
-#ifdef GPUCA_FULL_CLUSTERDATA
-  #define GPUCA_EVDUMP_FILE "event_full"
-#else
-  #define GPUCA_EVDUMP_FILE "event"
-#endif
+#define GPUCA_EVDUMP_FILE "event"
 
 #ifdef GPUCA_GPUCODE
   #define CA_MAKE_SHARED_REF(vartype, varname, varglobal, varshared) const GPUsharedref() vartype& __restrict__ varname = varshared;
@@ -56,12 +52,6 @@
   #define CA_SHARED_STORAGE(storage)
   #define CA_SHARED_CACHE(target, src, size)
   #define CA_SHARED_CACHE_REF(target, src, size, reftype, ref) GPUglobalref() const reftype* __restrict__ ref = src
-#endif
-
-#ifdef GPUCA_TEXTURE_FETCH_CONSTRUCTOR
-  #define CA_TEXTURE_FETCH(type, texture, address, entry) tex1Dfetch(texture, ((char*) address - tracker.Data().GPUTextureBase()) / sizeof(type) + entry);
-#else
-  #define CA_TEXTURE_FETCH(type, texture, address, entry) address[entry];
 #endif
 
 #endif //GPUTPCDEF_H

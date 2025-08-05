@@ -239,11 +239,14 @@ class AODProducerWorkflowDPL : public Task
   bool mPropMuons{false};
   float mTrackQCFraction{0.00};
   int64_t mTrackQCNTrCut{4};
+  float mTrackQCDCAxy{3.};
+  float mTrackQCPt{0.2};
+  int mTrackQCNCls{80};
   float mSqrtS{13860.};
   std::mt19937 mGenerator{}; ///< random generator for trackQA sampling
   o2::base::Propagator::MatCorrType mMatCorr{o2::base::Propagator::MatCorrType::USEMatCorrLUT};
   o2::dataformats::MeanVertexObject mVtx;
-  float mMinPropR{o2::constants::geom::XTPCInnerRef + 0.1f};
+  float mMaxPropXiu{5.0f}; // max X_IU for which track is to be propagated if mPropTracks is true. (other option: o2::constants::geom::XTPCInnerRef + 0.1f)
 
   std::unordered_set<GIndex> mGIDUsedBySVtx;
   std::unordered_set<GIndex> mGIDUsedByStr;
@@ -268,6 +271,7 @@ class AODProducerWorkflowDPL : public Task
   TString mAnchorPass{""};
   TString mAnchorProd{""};
   TString mRecoPass{""};
+  TString mUser{"aliprod"}; // who created this AOD (aliprod, alidaq, individual users)
   TStopwatch mTimer;
   bool mEMCselectLeading{false};
   uint64_t mEMCALTrgClassMask = 0;
@@ -413,6 +417,7 @@ class AODProducerWorkflowDPL : public Task
   struct TrackQA {
     GID trackID;
     float tpcTime0{};
+    float tpcdEdxNorm{};
     int16_t tpcdcaR{};
     int16_t tpcdcaZ{};
     uint8_t tpcClusterByteMask{};

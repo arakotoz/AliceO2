@@ -40,16 +40,15 @@ class GPUTPCNeighboursFinder : public GPUKernelTemplate
     int32_t mIRow;   // row number
     int32_t mIRowUp; // next row number
     int32_t mIRowDn; // previous row number
-#if GPUCA_NEIGHBOURS_FINDER_MAX_NNEIGHUP > 0
-    float mA1[GPUCA_NEIGHBOURS_FINDER_MAX_NNEIGHUP][GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCNeighboursFinder)];
-    float mA2[GPUCA_NEIGHBOURS_FINDER_MAX_NNEIGHUP][GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCNeighboursFinder)];
-    calink mB[GPUCA_NEIGHBOURS_FINDER_MAX_NNEIGHUP][GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCNeighboursFinder)];
-#endif
+    static_assert(GPUCA_MAXN >= GPUCA_PAR_NEIGHBOURS_FINDER_MAX_NNEIGHUP);
+    float mA1[GPUCA_PAR_NEIGHBOURS_FINDER_MAX_NNEIGHUP][GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCNeighboursFinder)];
+    float mA2[GPUCA_PAR_NEIGHBOURS_FINDER_MAX_NNEIGHUP][GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCNeighboursFinder)];
+    calink mB[GPUCA_PAR_NEIGHBOURS_FINDER_MAX_NNEIGHUP][GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCNeighboursFinder)];
     GPUTPCRow mRow, mRowUp, mRowDown;
   };
 
   typedef GPUconstantref() GPUTPCTracker processorType;
-  GPUhdi() constexpr static GPUDataTypes::RecoStep GetRecoStep() { return GPUCA_RECO_STEP::TPCSectorTracking; }
+  GPUhdi() constexpr static GPUDataTypes::RecoStep GetRecoStep() { return GPUDataTypes::RecoStep::TPCSectorTracking; }
   GPUhdi() static processorType* Processor(GPUConstantMem& processors)
   {
     return processors.tpcTrackers;

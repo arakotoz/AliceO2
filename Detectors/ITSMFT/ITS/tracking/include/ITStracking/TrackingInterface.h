@@ -19,6 +19,7 @@
 #include "ITStracking/TrackerTraits.h"
 #include "ITStracking/Vertexer.h"
 #include "ITStracking/VertexerTraits.h"
+#include "ITStracking/BoundedAllocator.h"
 #include "DataFormatsParameters/GRPObject.h"
 #include "DataFormatsITSMFT/TopologyDictionary.h"
 #include "DataFormatsCalibration/MeanVertexObject.h"
@@ -27,19 +28,23 @@
 #include "GPUO2Interface.h"
 #include "GPUChainITS.h"
 
+#include <oneapi/tbb/task_arena.h>
+
 namespace o2::its
 {
 class ITSTrackingInterface
 {
+  static constexpr int NLayers{7};
+  using TrackerTraits7 = TrackerTraits<NLayers>;
+  using TimeFrame7 = TimeFrame<NLayers>;
+
  public:
   ITSTrackingInterface(bool isMC,
                        int trgType,
                        const bool overrBeamEst)
     : mIsMC{isMC},
       mUseTriggers{trgType},
-      mOverrideBeamEstimation{overrBeamEst}
-  {
-  }
+      mOverrideBeamEstimation{overrBeamEst} {}
 
   void setClusterDictionary(const o2::itsmft::TopologyDictionary* d) { mDict = d; }
   void setMeanVertex(const o2::dataformats::MeanVertexObject* v)
@@ -54,45 +59,40 @@ class ITSTrackingInterface
   }
   // Task callbacks
   void initialise();
-  template <bool isGPU = false>
   void run(framework::ProcessingContext& pc);
+  void printSummary() const;
 
   virtual void updateTimeDependentParams(framework::ProcessingContext& pc);
   virtual void finaliseCCDB(framework::ConcreteDataMatcher& matcher, void* obj);
 
   // Custom
-  void setTraitsFromProvider(VertexerTraits*, TrackerTraits*, TimeFrame*);
-  void setTrackingMode(TrackingMode mode = TrackingMode::Unset)
-  {
-    if (mode == TrackingMode::Unset) {
-      LOGP(fatal, "ITS Tracking mode Unset is meant to be a default. Specify the mode");
-    }
-    mMode = mode;
-  }
+  void setTraitsFromProvider(VertexerTraits*, TrackerTraits7*, TimeFrame7*);
+  void setTrackingMode(TrackingMode::Type mode = TrackingMode::Unset) { mMode = mode; }
 
   auto getTracker() const { return mTracker.get(); }
   auto getVertexer() const { return mVertexer.get(); }
 
-  TimeFrame* mTimeFrame = nullptr;
+  TimeFrame7* mTimeFrame = nullptr;
 
  protected:
   virtual void loadROF(gsl::span<itsmft::ROFRecord>& trackROFspan,
                        gsl::span<const itsmft::CompClusterExt> clusters,
                        gsl::span<const unsigned char>::iterator& pattIt,
                        const dataformats::MCTruthContainer<MCCompLabel>* mcLabels);
-  void getConfiguration(framework::ProcessingContext& pc);
 
  private:
   bool mIsMC = false;
   bool mRunVertexer = true;
   bool mCosmicsProcessing = false;
   int mUseTriggers = 0;
-  TrackingMode mMode = TrackingMode::Unset;
+  TrackingMode::Type mMode = TrackingMode::Unset;
   bool mOverrideBeamEstimation = false;
   const o2::itsmft::TopologyDictionary* mDict = nullptr;
   std::unique_ptr<Tracker> mTracker = nullptr;
   std::unique_ptr<Vertexer> mVertexer = nullptr;
   const o2::dataformats::MeanVertexObject* mMeanVertex;
+  std::shared_ptr<BoundedMemoryResource> mMemoryPool;
+  std::shared_ptr<tbb::task_arena> mTaskArena;
 };
 
 } // namespace o2::its

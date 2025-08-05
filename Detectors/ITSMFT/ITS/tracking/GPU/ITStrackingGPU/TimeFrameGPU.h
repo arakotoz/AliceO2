@@ -13,34 +13,19 @@
 #ifndef TRACKINGITSGPU_INCLUDE_TIMEFRAMEGPU_H
 #define TRACKINGITSGPU_INCLUDE_TIMEFRAMEGPU_H
 
+#include "ITStracking/BoundedAllocator.h"
 #include "ITStracking/TimeFrame.h"
 #include "ITStracking/Configuration.h"
-
-#include "ITStrackingGPU/ClusterLinesGPU.h"
-#include "ITStrackingGPU/Array.h"
-#include "ITStrackingGPU/Vector.h"
-#include "ITStrackingGPU/Stream.h"
-#include "ITStrackingGPU/TimeFrameChunk.h"
+#include "ITStrackingGPU/Utils.h"
 
 #include <gsl/gsl>
 
-namespace o2
+namespace o2::its::gpu
 {
-namespace its
-{
-namespace gpu
-{
-
-class DefaultGPUAllocator : public ExternalAllocator
-{
-  void* allocate(size_t size) override;
-};
 
 template <int nLayers = 7>
-class TimeFrameGPU : public TimeFrame
+class TimeFrameGPU : public TimeFrame<nLayers>
 {
-  friend class GpuTimeFrameChunk<nLayers>;
-
  public:
   TimeFrameGPU();
   ~TimeFrameGPU();
@@ -71,7 +56,7 @@ class TimeFrameGPU : public TimeFrame
   void loadTrackSeedsDevice();
   void loadTrackSeedsChi2Device();
   void loadRoadsDevice();
-  void loadTrackSeedsDevice(std::vector<CellSeed>&);
+  void loadTrackSeedsDevice(bounded_vector<CellSeed>&);
   void createTrackletsBuffers();
   void createCellsBuffers(const int);
   void createCellsDevice();
@@ -81,31 +66,26 @@ class TimeFrameGPU : public TimeFrame
   void createNeighboursDevice(const unsigned int layer, std::vector<std::pair<int, int>>& neighbours);
   void createNeighboursLUTDevice(const int, const unsigned int);
   void createNeighboursDeviceArray();
-  void createTrackITSExtDevice(std::vector<CellSeed>&);
-  void downloadTrackITSExtDevice(std::vector<CellSeed>&);
-  void downloadCellsNeighboursDevice(std::vector<std::vector<std::pair<int, int>>>&, const int);
-  void downloadNeighboursLUTDevice(std::vector<int>&, const int);
+  void createTrackITSExtDevice(bounded_vector<CellSeed>&);
+  void downloadTrackITSExtDevice(bounded_vector<CellSeed>&);
+  void downloadCellsNeighboursDevice(std::vector<bounded_vector<std::pair<int, int>>>&, const int);
+  void downloadNeighboursLUTDevice(bounded_vector<int>&, const int);
   void downloadCellsDevice();
   void downloadCellsLUTDevice();
   void unregisterRest();
-  void initDeviceChunks(const int, const int);
   template <Task task>
-  size_t loadChunkData(const size_t, const size_t, const size_t);
-  size_t getNChunks() const { return mMemChunks.size(); }
-  GpuTimeFrameChunk<nLayers>& getChunk(const int chunk) { return mMemChunks[chunk]; }
-  Stream& getStream(const size_t stream) { return mGpuStreams[stream]; }
-  void wipe(const int);
+  auto& getStream(const size_t stream)
+  {
+    return mGpuStreams[stream];
+  }
+  auto& getStreams() { return mGpuStreams; }
+  virtual void wipe() final;
 
   /// interface
   int getNClustersInRofSpan(const int, const int, const int) const;
   IndexTableUtils* getDeviceIndexTableUtils() { return mIndexTableUtilsDevice; }
   int* getDeviceROFramesClusters(const int layer) { return mROFramesClustersDevice[layer]; }
-  std::vector<std::vector<Vertex>>& getVerticesInChunks() { return mVerticesInChunks; }
-  std::vector<std::vector<int>>& getNVerticesInChunks() { return mNVerticesInChunks; }
-  std::vector<o2::its::TrackITSExt>& getTrackITSExt() { return mTrackITSExt; }
-  std::vector<std::vector<o2::MCCompLabel>>& getLabelsInChunks() { return mLabelsInChunks; }
-  int getNAllocatedROFs() const { return mNrof; } // Allocated means maximum nROF for each chunk while populated is the number of loaded ones.
-  StaticTrackingParameters<nLayers>* getDeviceTrackingParameters() { return mTrackingParamsDevice; }
+  auto& getTrackITSExt() { return mTrackITSExt; }
   Vertex* getDeviceVertices() { return mPrimaryVerticesDevice; }
   int* getDeviceROFramesPV() { return mROFramesPVDevice; }
   unsigned char* getDeviceUsedClusters(const int);
@@ -144,7 +124,9 @@ class TimeFrameGPU : public TimeFrame
   // Host-specific getters
   gsl::span<int, nLayers - 1> getNTracklets() { return mNTracklets; }
   gsl::span<int, nLayers - 2> getNCells() { return mNCells; }
-  std::array<int, nLayers - 2>& getArrayNCells() { return mNCells; }
+  auto& getArrayNCells() { return mNCells; }
+  gsl::span<int, nLayers - 3> getNNeighbours() { return mNNeighbours; }
+  auto& getArrayNNeighbours() { return mNNeighbours; }
 
   // Host-available device getters
   gsl::span<int*> getDeviceTrackletsLUTs() { return mTrackletsLUTDevice; }
@@ -153,21 +135,21 @@ class TimeFrameGPU : public TimeFrame
   gsl::span<CellSeed*> getDeviceCells() { return mCellsDevice; }
 
   // Overridden getters
-  int getNumberOfCells() const;
+  int getNumberOfTracklets() const final;
+  int getNumberOfCells() const final;
+  int getNumberOfNeighbours() const final;
 
  private:
-  void allocMemAsync(void**, size_t, Stream*, bool); // Abstract owned and unowned memory allocations
+  void allocMemAsync(void**, size_t, Stream&, bool); // Abstract owned and unowned memory allocations
   bool mHostRegistered = false;
-  std::vector<GpuTimeFrameChunk<nLayers>> mMemChunks;
   TimeFrameGPUParameters mGpuParams;
-  StaticTrackingParameters<nLayers> mStaticTrackingParams;
 
   // Host-available device buffer sizes
   std::array<int, nLayers - 1> mNTracklets;
   std::array<int, nLayers - 2> mNCells;
+  std::array<int, nLayers - 3> mNNeighbours;
 
   // Device pointers
-  StaticTrackingParameters<nLayers>* mTrackingParamsDevice;
   IndexTableUtils* mIndexTableUtilsDevice;
 
   // Hybrid pref
@@ -212,48 +194,33 @@ class TimeFrameGPU : public TimeFrame
   const TrackingFrameInfo** mTrackingFrameInfoDeviceArray;
 
   // State
-  std::vector<Stream> mGpuStreams;
+  Streams mGpuStreams;
   size_t mAvailMemGB;
   bool mFirstInit = true;
 
-  // Output
-  std::vector<std::vector<Vertex>> mVerticesInChunks;
-  std::vector<std::vector<int>> mNVerticesInChunks;
-  std::vector<std::vector<o2::MCCompLabel>> mLabelsInChunks;
-
   // Temporary buffer for storing output tracks from GPU tracking
-  std::vector<TrackITSExt> mTrackITSExt;
+  bounded_vector<TrackITSExt> mTrackITSExt;
 };
-
-template <int nLayers>
-template <Task task>
-size_t TimeFrameGPU<nLayers>::loadChunkData(const size_t chunk, const size_t offset, const size_t maxRofs) // offset: readout frame to start from, maxRofs: to manage boundaries
-{
-  size_t nRof{0};
-
-  mMemChunks[chunk].reset(task, mGpuStreams[chunk]); // Reset chunks memory
-  if constexpr ((bool)task) {
-    nRof = mMemChunks[chunk].loadDataOnDevice(offset, maxRofs, 3, mGpuStreams[chunk]);
-  } else {
-    nRof = mMemChunks[chunk].loadDataOnDevice(offset, maxRofs, nLayers, mGpuStreams[chunk]);
-  }
-  LOGP(debug, "In chunk {}: loaded {} readout frames starting from {}", chunk, nRof, offset);
-  return nRof;
-}
 
 template <int nLayers>
 inline int TimeFrameGPU<nLayers>::getNClustersInRofSpan(const int rofIdstart, const int rofSpanSize, const int layerId) const
 {
-  return static_cast<int>(mROFramesClusters[layerId][(rofIdstart + rofSpanSize) < mROFramesClusters.size() ? rofIdstart + rofSpanSize : mROFramesClusters.size() - 1] - mROFramesClusters[layerId][rofIdstart]);
+  return static_cast<int>(this->mROFramesClusters[layerId][(rofIdstart + rofSpanSize) < this->mROFramesClusters.size() ? rofIdstart + rofSpanSize : this->mROFramesClusters.size() - 1] - this->mROFramesClusters[layerId][rofIdstart]);
 }
 
 template <int nLayers>
 inline std::vector<unsigned int> TimeFrameGPU<nLayers>::getClusterSizes()
 {
-  std::vector<unsigned int> sizes(mUnsortedClusters.size());
-  std::transform(mUnsortedClusters.begin(), mUnsortedClusters.end(), sizes.begin(),
+  std::vector<unsigned int> sizes(this->mUnsortedClusters.size());
+  std::transform(this->mUnsortedClusters.begin(), this->mUnsortedClusters.end(), sizes.begin(),
                  [](const auto& v) { return static_cast<unsigned int>(v.size()); });
   return sizes;
+}
+
+template <int nLayers>
+inline int TimeFrameGPU<nLayers>::getNumberOfTracklets() const
+{
+  return std::accumulate(mNTracklets.begin(), mNTracklets.end(), 0);
 }
 
 template <int nLayers>
@@ -262,7 +229,12 @@ inline int TimeFrameGPU<nLayers>::getNumberOfCells() const
   return std::accumulate(mNCells.begin(), mNCells.end(), 0);
 }
 
-} // namespace gpu
-} // namespace its
-} // namespace o2
+template <int nLayers>
+inline int TimeFrameGPU<nLayers>::getNumberOfNeighbours() const
+{
+  return std::accumulate(mNNeighbours.begin(), mNNeighbours.end(), 0);
+}
+
+} // namespace o2::its::gpu
+
 #endif

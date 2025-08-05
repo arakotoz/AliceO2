@@ -24,6 +24,12 @@
 #include <vector>
 #include <utility>
 
+namespace o2::dataformats
+{
+template <typename TruthElement>
+class ConstMCTruthContainer;
+} // namespace o2::dataformats
+
 namespace o2::trd
 {
 class GeometryFlat;
@@ -39,11 +45,14 @@ class CalibdEdxContainer;
 namespace o2::base
 {
 class MatLayerCylSet;
+template <typename>
+class PropagatorImpl;
+using Propagator = PropagatorImpl<float>;
 } // namespace o2::base
 
 namespace o2::gpu
 {
-//class GPUTRDTrackerGPU;
+// class GPUTRDTrackerGPU;
 class GPUTPCGPUTracker;
 class GPUDisplayInterface;
 class GPUQA;
@@ -55,6 +64,8 @@ struct GPUChainTrackingFinalContext;
 struct GPUTPCCFChainContext;
 struct GPUNewCalibValues;
 struct GPUTriggerOutputs;
+struct CfFragment;
+class GPUTPCClusterFinder;
 
 class GPUChainTracking : public GPUChain
 {
@@ -123,7 +134,7 @@ class GPUChainTracking : public GPUChain
   void ClearIOPointers();
   void AllocateIOMemory();
   using GPUChain::DumpData;
-  void DumpData(const char* filename);
+  void DumpData(const char* filename, const GPUTrackingInOutPointers* ioPtrs = nullptr);
   using GPUChain::ReadData;
   int32_t ReadData(const char* filename);
   void DumpSettings(const char* dir = "") override;
@@ -137,11 +148,6 @@ class GPUChainTracking : public GPUChain
   void ConvertZSFilter(bool zs12bit);
 
   // Getters for external usage of tracker classes
-  GPUTRDTrackerGPU* GetTRDTrackerGPU() { return &processors()->trdTrackerGPU; }
-  GPUTPCTracker* GetTPCSectorTrackers() { return processors()->tpcTrackers; }
-  const GPUTPCTracker* GetTPCSectorTrackers() const { return processors()->tpcTrackers; }
-  const GPUTPCGMMerger& GetTPCMerger() const { return processors()->tpcMerger; }
-  GPUTPCGMMerger& GetTPCMerger() { return processors()->tpcMerger; }
   GPUDisplayInterface* GetEventDisplay() { return mEventDisplay.get(); }
   const GPUQA* GetQA() const { return mQAFromForeignChain ? mQAFromForeignChain->mQA.get() : mQA.get(); }
   GPUQA* GetQA() { return mQAFromForeignChain ? mQAFromForeignChain->mQA.get() : mQA.get(); }
@@ -155,7 +161,6 @@ class GPUChainTracking : public GPUChain
   int32_t ForwardTPCDigits();
   int32_t RunTPCTrackingSectors();
   int32_t RunTPCTrackingMerger(bool synchronizeOutput = true);
-  template <int32_t I>
   int32_t RunTRDTracking();
   template <int32_t I, class T = GPUTRDTracker>
   int32_t DoTRDGPUTracking(T* externalInstance = nullptr);
@@ -164,22 +169,22 @@ class GPUChainTracking : public GPUChain
   int32_t RunRefit();
 
   // Getters / setters for parameters
-  const CorrectionMapsHelper* GetTPCTransformHelper() const { return processors()->calibObjects.fastTransformHelper; }
-  const TPCPadGainCalib* GetTPCPadGainCalib() const { return processors()->calibObjects.tpcPadGain; }
-  const TPCZSLinkMapping* GetTPCZSLinkMapping() const { return processors()->calibObjects.tpcZSLinkMapping; }
-  const o2::tpc::CalibdEdxContainer* GetdEdxCalibContainer() const { return processors()->calibObjects.dEdxCalibContainer; }
-  const o2::base::MatLayerCylSet* GetMatLUT() const { return processors()->calibObjects.matLUT; }
-  const GPUTRDGeometry* GetTRDGeometry() const { return (GPUTRDGeometry*)processors()->calibObjects.trdGeometry; }
-  const o2::base::Propagator* GetO2Propagator() const { return processors()->calibObjects.o2Propagator; }
+  const CorrectionMapsHelper* GetTPCTransformHelper() const;
+  const TPCPadGainCalib* GetTPCPadGainCalib() const;
+  const TPCZSLinkMapping* GetTPCZSLinkMapping() const;
+  const o2::tpc::CalibdEdxContainer* GetdEdxCalibContainer() const;
+  const o2::base::MatLayerCylSet* GetMatLUT() const;
+  const GPUTRDGeometry* GetTRDGeometry() const;
+  const o2::base::Propagator* GetO2Propagator() const;
   const o2::base::Propagator* GetDeviceO2Propagator();
   void SetTPCFastTransform(std::unique_ptr<TPCFastTransform>&& tpcFastTransform, std::unique_ptr<CorrectionMapsHelper>&& tpcTransformHelper);
   void SetMatLUT(std::unique_ptr<o2::base::MatLayerCylSet>&& lut);
   void SetTRDGeometry(std::unique_ptr<o2::trd::GeometryFlat>&& geo);
-  void SetMatLUT(const o2::base::MatLayerCylSet* lut) { processors()->calibObjects.matLUT = lut; }
-  void SetTRDGeometry(const o2::trd::GeometryFlat* geo) { processors()->calibObjects.trdGeometry = geo; }
+  void SetMatLUT(const o2::base::MatLayerCylSet* lut);
+  void SetTRDGeometry(const o2::trd::GeometryFlat* geo);
   void SetO2Propagator(const o2::base::Propagator* prop);
-  void SetCalibObjects(const GPUCalibObjectsConst& obj) { processors()->calibObjects = obj; }
-  void SetCalibObjects(const GPUCalibObjects& obj) { memcpy((void*)&processors()->calibObjects, (const void*)&obj, sizeof(obj)); }
+  void SetCalibObjects(const GPUCalibObjectsConst& obj);
+  void SetCalibObjects(const GPUCalibObjects& obj);
   void SetUpdateCalibObjects(const GPUCalibObjectsConst& obj, const GPUNewCalibValues& vals);
   void SetSubOutputControl(int32_t i, GPUOutputControl* v) { mSubOutputControls[i] = v; }
   void SetFinalInputCallback(std::function<void()> v) { mWaitForFinalInputs = v; }
@@ -220,17 +225,18 @@ class GPUChainTracking : public GPUChain
 
   GPUChainTracking(GPUReconstruction* rec, uint32_t maxTPCHits = GPUCA_MAX_CLUSTERS, uint32_t maxTRDTracklets = GPUCA_MAX_TRD_TRACKLETS);
 
-  int32_t ReadEvent(uint32_t iSector, int32_t threadId);
-  void WriteOutput(int32_t iSector, int32_t threadId);
-  int32_t ExtrapolationTracking(uint32_t iSector, int32_t threadId, bool synchronizeOutput = true);
+  int32_t ExtrapolationTracking(uint32_t iSector, bool blocking);
 
   int32_t PrepareProfile();
   int32_t DoProfile();
   void PrintMemoryRelations();
   void PrintMemoryStatistics() override;
-  void PrepareDebugOutput();
-  void PrintDebugOutput();
+  void PrepareKernelDebugOutput();
+  void PrintKernelDebugOutput();
   void PrintOutputStat();
+  static void DumpClusters(std::ostream& out, const o2::tpc::ClusterNativeAccess* clusters);
+  static void DebugSortCompressedClusters(o2::tpc::CompressedClustersFlat* cls);
+  void DoDebugRawDump();
 
   bool ValidateSteps();
   bool ValidateSettings();
@@ -280,8 +286,7 @@ class GPUChainTracking : public GPUChain
 
   // Synchronization and Locks
   eventStruct* mEvents = nullptr;
-  volatile int32_t mSectorSelectorReady = 0;
-  std::array<int8_t, NSECTORS> mWriteOutputDone;
+  std::array<int8_t, NSECTORS> mExtrapolationTrackingDone;
 
   std::vector<outputQueueEntry> mOutputQueue;
 
@@ -301,6 +306,9 @@ class GPUChainTracking : public GPUChain
   void RunTPCTrackingMerger_Resolve(int8_t useOrigTrackParam, int8_t mergeAll, GPUReconstruction::krnlDeviceType deviceType);
   void RunTPCClusterFilter(o2::tpc::ClusterNativeAccess* clusters, std::function<o2::tpc::ClusterNative*(size_t)> allocator, bool applyClusterCuts);
   bool NeedTPCClustersOnGPU();
+  template <int32_t I>
+  int32_t RunTRDTrackingInternal();
+  uint32_t StreamForSector(uint32_t sector) const;
 
   std::mutex mMutexUpdateCalib;
   std::unique_ptr<GPUChainTrackingFinalContext> mPipelineFinalizationCtx;

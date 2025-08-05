@@ -69,6 +69,9 @@ if (NOT TARGET Gandiva::gandiva_shared)
   add_library(Gandiva::gandiva_shared ALIAS gandiva_shared)
 endif()
 
+find_package(onnxruntime CONFIG)
+set_package_properties(onnxruntime PROPERTIES TYPE REQUIRED)
+
 find_package(Vc)
 set_package_properties(Vc PROPERTIES TYPE REQUIRED)
 
@@ -79,6 +82,9 @@ find_package(VMC MODULE)
 
 find_package(fmt)
 set_package_properties(fmt PROPERTIES TYPE REQUIRED)
+
+find_package(nlohmann_json)
+set_package_properties(nlohmann_json PROPERTIES TYPE REQUIRED)
 
 find_package(Boost 1.70
              COMPONENTS container

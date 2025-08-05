@@ -24,10 +24,16 @@
   #define GPUWarning(...)
   #define GPUAlarm(...)
   #define GPUError(...)
+  #define GPUCritical(...)
   #define GPUFatal(...)
 #elif defined(GPUCA_STANDALONE) && !defined(GPUCA_GPUCODE_DEVICE) && !defined(GPUCA_NO_FMT)
   #include <cstdio>
+  #pragma GCC diagnostic push
+  #if defined(__FAST_MATH__) && defined(__clang__)
+  #pragma GCC diagnostic ignored "-Wnan-infinity-disabled"
+  #endif
   #include <fmt/printf.h>
+  #pragma GCC diagnostic pop
   #define GPUInfo(string, ...)                 \
     {                                          \
       fmt::printf(string "\n", ##__VA_ARGS__); \
@@ -38,6 +44,7 @@
       fmt::fprintf(stderr, string "\n", ##__VA_ARGS__); \
     }
   #define GPUError(...) GPUWarning(__VA_ARGS__)
+  #define GPUCritical(...) GPUWarning(__VA_ARGS__)
   #define GPUAlarm(...) GPUWarning(__VA_ARGS__)
   #define GPUFatal(string, ...)                         \
     {                                                   \
@@ -64,9 +71,10 @@
       }
     #define GPUAlarm(...) GPUWarning(__VA_ARGS__)
     #define GPUError(...) GPUWarning(__VA_ARGS__)
+    #define GPUCritical(...) GPUWarning(__VA_ARGS__)
     #define GPUFatal(string, ...)                  \
       {                                            \
-        fprintf(stderr, string "\n", __VA_ARGS__); \
+        fprintf(stderr, string "\n", ##__VA_ARGS__); \
         exit(1);                                   \
       }
   #endif
@@ -78,6 +86,7 @@
   #define GPUWarning(...) LOGF(warning, __VA_ARGS__)
   #define GPUAlarm(...) LOGF(alarm, __VA_ARGS__)
   #define GPUError(...) LOGF(error, __VA_ARGS__)
+  #define GPUCritical(...) LOGF(critical, __VA_ARGS__)
   #define GPUFatal(...) LOGF(fatal, __VA_ARGS__)
 #endif
 

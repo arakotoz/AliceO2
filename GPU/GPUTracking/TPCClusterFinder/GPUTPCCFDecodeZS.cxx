@@ -15,13 +15,14 @@
 #include "GPUTPCCFDecodeZS.h"
 #include "GPUCommonMath.h"
 #include "GPUTPCClusterFinder.h"
-#include "Array2D.h"
+#include "CfArray2D.h"
 #include "PackedCharge.h"
 #include "CfUtils.h"
 #include "CommonConstants/LHCConstants.h"
 #include "GPUCommonAlgorithm.h"
 #include "TPCPadGainCalib.h"
 #include "TPCZSLinkMapping.h"
+#include "GPUTPCGeometry.h"
 
 using namespace o2::gpu;
 using namespace o2::gpu::tpccf;
@@ -52,13 +53,13 @@ GPUdii() void GPUTPCCFDecodeZS::decode(GPUTPCClusterFinder& clusterer, GPUShared
   if (zs.count[endpoint] == 0) {
     return;
   }
-  ChargePos* positions = clusterer.mPpositions;
-  Array2D<PackedCharge> chargeMap(reinterpret_cast<PackedCharge*>(clusterer.mPchargeMap));
+  CfChargePos* positions = clusterer.mPpositions;
+  CfArray2D<PackedCharge> chargeMap(reinterpret_cast<PackedCharge*>(clusterer.mPchargeMap));
   const size_t nDigits = clusterer.mPzsOffsets[iBlock].offset;
   if (iThread == 0) {
     const int32_t region = endpoint / 2;
-    s.nRowsRegion = clusterer.Param().tpcGeometry.GetRegionRows(region);
-    s.regionStartRow = clusterer.Param().tpcGeometry.GetRegionStart(region);
+    s.nRowsRegion = GPUTPCGeometry::GetRegionRows(region);
+    s.regionStartRow = GPUTPCGeometry::GetRegionStart(region);
     s.nThreadsPerRow = CAMath::Max(1u, nThreads / ((s.nRowsRegion + (endpoint & 1)) / 2));
     s.rowStride = nThreads / s.nThreadsPerRow;
     s.rowOffsetCounter = 0;
@@ -101,7 +102,7 @@ GPUdii() void GPUTPCCFDecodeZS::decode(GPUTPCClusterFinder& clusterer, GPUShared
       const int32_t nRows = (endpoint & 1) ? (s.nRowsRegion - s.nRowsRegion / 2) : (s.nRowsRegion / 2);
 
       for (int32_t l = 0; l < hdr->nTimeBinSpan; l++) { // TODO: Parallelize over time bins
-        pagePtr += (pagePtr - page) & 1;            // Ensure 16 bit alignment
+        pagePtr += (pagePtr - page) & 1;                // Ensure 16 bit alignment
         const TPCZSTBHDR* tbHdr = reinterpret_cast<const TPCZSTBHDR*>(pagePtr);
         if ((tbHdr->rowMask & 0x7FFF) == 0) {
           pagePtr += 2;
@@ -174,7 +175,7 @@ GPUdii() void GPUTPCCFDecodeZS::decode(GPUTPCClusterFinder& clusterer, GPUShared
                   TPCTime globalTime = timeBin + l;
                   bool inFragment = fragment.contains(globalTime);
                   Row row = rowOffset + m;
-                  ChargePos pos(row, Pad(pad), inFragment ? fragment.toLocal(globalTime) : INVALID_TIME_BIN);
+                  CfChargePos pos(row, Pad(pad), inFragment ? fragment.toLocal(globalTime) : INVALID_TIME_BIN);
                   positions[nDigitsTmp++] = pos;
 
                   if (inFragment) {
@@ -223,7 +224,7 @@ GPUd() size_t GPUTPCCFDecodeZSLink::DecodePage(GPUSharedMemory& smem, processorT
     return pageDigitOffset;
   }
 
-  int32_t nDecoded = 0;
+  [[maybe_unused]] int32_t nDecoded = 0;
   const auto* decHdr = ConsumeHeader<TPCZSHDRV2>(page);
   ConsumeBytes(page, decHdr->firstZSDataOffset * 16);
 
@@ -274,7 +275,7 @@ GPUd() size_t GPUTPCCFDecodeZSLink::DecodePage(GPUSharedMemory& smem, processorT
 #endif
     pageDigitOffset += nAdc;
   } // for (uint32_t t = 0; t < decHdr->nTimebinHeaders; t++)
-  (void)nDecoded;
+
 #ifdef GPUCA_CHECK_TPCZS_CORRUPTION
   if (iThread == 0 && nDecoded != decHdr->nADCsamples) {
     clusterer.raiseError(GPUErrors::ERROR_TPCZS_INVALID_NADC, clusterer.mISector * 1000 + decHdr->cruID, decHdr->nADCsamples, nDecoded);
@@ -324,8 +325,8 @@ GPUd() void GPUTPCCFDecodeZSLink::DecodeTBSingleThread(
         bits -= DECODE_BITS;
         nSamplesWritten++;
         rawFECChannel++; // Ensure we don't decode same channel twice
-      }                  // while (bits >= DECODE_BITS)
-    }                    // while (nSamplesWritten < nAdc)
+      } // while (bits >= DECODE_BITS)
+    } // while (nSamplesWritten < nAdc)
 
   } else { // ! TPCZSHDRV2::TIGHTLY_PACKED_V3
     uint32_t rawFECChannel = 0;
@@ -524,7 +525,7 @@ GPUd() o2::tpc::PadPos GPUTPCCFDecodeZSLinkBase::GetPadAndRowFromFEC(processorTy
 {
 #ifdef GPUCA_TPC_GEOMETRY_O2
   // Ported from tpc::Mapper (Not available on GPU...)
-  const GPUTPCGeometry& geo = clusterer.Param().tpcGeometry;
+  constexpr GPUTPCGeometry geo;
 
   const int32_t regionIter = cru % 2;
   const int32_t istreamm = ((rawFECChannel % 10) / 2);
@@ -551,7 +552,7 @@ GPUd() o2::tpc::PadPos GPUTPCCFDecodeZSLinkBase::GetPadAndRowFromFEC(processorTy
 GPUd() void GPUTPCCFDecodeZSLinkBase::WriteCharge(processorType& clusterer, float charge, PadPos padAndRow, TPCFragmentTime localTime, size_t positionOffset)
 {
   const uint32_t sector = clusterer.mISector;
-  ChargePos* positions = clusterer.mPpositions;
+  CfChargePos* positions = clusterer.mPpositions;
 #ifdef GPUCA_CHECK_TPCZS_CORRUPTION
   if (padAndRow.getRow() >= GPUCA_ROW_COUNT) {
     positions[positionOffset] = INVALID_CHARGE_POS;
@@ -559,12 +560,13 @@ GPUd() void GPUTPCCFDecodeZSLinkBase::WriteCharge(processorType& clusterer, floa
     return;
   }
 #endif
-  Array2D<PackedCharge> chargeMap(reinterpret_cast<PackedCharge*>(clusterer.mPchargeMap));
+  CfArray2D<PackedCharge> chargeMap(reinterpret_cast<PackedCharge*>(clusterer.mPchargeMap));
 
-  ChargePos pos(padAndRow.getRow(), padAndRow.getPad(), localTime);
+  CfChargePos pos(padAndRow.getRow(), padAndRow.getPad(), localTime);
   positions[positionOffset] = pos;
 
   charge *= clusterer.GetConstantMem()->calibObjects.tpcPadGain->getGainCorrection(sector, padAndRow.getRow(), padAndRow.getPad());
+
   chargeMap[pos] = PackedCharge(charge);
 }
 
@@ -614,6 +616,7 @@ GPUd() uint32_t GPUTPCCFDecodeZSDenseLink::DecodePage(GPUSharedMemory& smem, pro
   ConsumeBytes(page, decHeader->firstZSDataOffset - sizeof(o2::header::RAWDataHeader));
 
   for (uint16_t i = 0; i < decHeader->nTimebinHeaders; i++) {
+
     [[maybe_unused]] ptrdiff_t sizeLeftInPage = payloadEnd - page;
     assert(sizeLeftInPage > 0);
 
@@ -705,7 +708,7 @@ GPUd() uint16_t GPUTPCCFDecodeZSDenseLink::DecodeTBMultiThread(
 
 #define PEEK_OVERFLOW(pagePtr, offset)                                                      \
   (*(PayloadExtendsToNextPage && (pagePtr) < nextPage && (pagePtr) + (offset) >= payloadEnd \
-       ? nextPage + sizeof(header::RAWDataHeader) + ((pagePtr) + (offset)-payloadEnd)       \
+       ? nextPage + sizeof(header::RAWDataHeader) + ((pagePtr) + (offset) - payloadEnd)     \
        : (pagePtr) + (offset)))
 
 #define TEST_BIT(x, bit) static_cast<bool>((x) & (1 << (bit)))
@@ -726,8 +729,6 @@ GPUd() uint16_t GPUTPCCFDecodeZSDenseLink::DecodeTBMultiThread(
   int32_t timeBin = (linkBC + (uint64_t)(raw::RDHUtils::getHeartBeatOrbit(*rawDataHeader) - firstHBF) * constants::lhc::LHCMaxBunches) / LHCBCPERTIMEBIN;
 
   uint16_t nSamplesInTB = 0;
-
-  GPUbarrier();
 
   // Read timebin link headers
   for (uint8_t iLink = 0; iLink < nLinksInTimebin; iLink++) {
@@ -776,14 +777,14 @@ GPUd() uint16_t GPUTPCCFDecodeZSDenseLink::DecodeTBMultiThread(
 
   } // for (uint8_t iLink = 0; iLink < nLinksInTimebin; iLink++)
 
+  GPUbarrierWarp(); // Ensure all writes to shared memory are finished, before reading it
+
   const uint8_t* adcData = ConsumeBytes(page, (nSamplesInTB * DECODE_BITS + 7) / 8);
   MAYBE_PAGE_OVERFLOW(page); // TODO: We don't need this check?
 
   if (not fragment.contains(timeBin)) {
     return FillWithInvalid(clusterer, iThread, NTHREADS, pageDigitOffset, nSamplesInTB);
   }
-
-  GPUbarrier();
 
   // Unpack ADC
   int32_t iLink = 0;
@@ -817,6 +818,8 @@ GPUd() uint16_t GPUTPCCFDecodeZSDenseLink::DecodeTBMultiThread(
     WriteCharge(clusterer, charge, padAndRow, fragment.toLocal(timeBin), pageDigitOffset + sample);
 
   } // for (uint16_t sample = iThread; sample < nSamplesInTB; sample += NTHREADS)
+
+  GPUbarrierWarp(); // Ensure all reads to shared memory are finished, before decoding next header into shmem
 
   assert(PayloadExtendsToNextPage || adcData <= page);
   assert(PayloadExtendsToNextPage || page <= payloadEnd);
@@ -931,8 +934,8 @@ GPUd() uint16_t GPUTPCCFDecodeZSDenseLink::DecodeTBSingleThread(
       bits -= DECODE_BITS;
       nSamplesWritten++;
       rawFECChannel++; // Ensure we don't decode same channel twice
-    }                  // while (bits >= DECODE_BITS)
-  }                    // while (nSamplesWritten < nAdc)
+    } // while (bits >= DECODE_BITS)
+  } // while (nSamplesWritten < nAdc)
 
   assert(PayloadExtendsToNextPage || adcData <= page);
   assert(PayloadExtendsToNextPage || page <= payloadEnd);

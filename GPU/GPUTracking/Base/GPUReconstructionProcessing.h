@@ -16,19 +16,26 @@
 #define GPURECONSTRUCTIONPROCESSING_H
 
 #include "GPUReconstruction.h"
-#include "GPUReconstructionKernelIncludes.h"
 
 #include "utils/timer.h"
 #include <functional>
+#include <atomic>
+
+namespace Ort
+{
+struct SessionOptions;
+}
 
 namespace o2::gpu
 {
 
-namespace gpu_reconstruction_kernels
+struct GPUDefParameters;
+
+namespace gpu_reconstruction_kernels // TODO: Get rid of this namespace
 {
 struct deviceEvent {
   constexpr deviceEvent() = default;
-  constexpr deviceEvent(std::nullptr_t p) : v(nullptr){};
+  constexpr deviceEvent(std::nullptr_t p) : v(nullptr) {};
   template <class T>
   void set(T val)
   {
@@ -62,28 +69,10 @@ class threadContext
 class GPUReconstructionProcessing : public GPUReconstruction
 {
  public:
-  ~GPUReconstructionProcessing() override = default;
+  ~GPUReconstructionProcessing() override;
 
-  // Threading
-  int32_t getNKernelHostThreads(bool splitCores);
-  uint32_t getNActiveThreadsOuterLoop() const { return mNActiveThreadsOuterLoop; }
-  void SetNActiveThreadsOuterLoop(uint32_t f) { mNActiveThreadsOuterLoop = f; }
-  uint32_t SetAndGetNActiveThreadsOuterLoop(bool condition, uint32_t max);
-  void runParallelOuterLoop(bool doGPU, uint32_t nThreads, std::function<void(uint32_t)> lambda);
-  void SetNActiveThreads(int32_t n);
-
-  // Interface to query name of a kernel
-  template <class T, int32_t I>
-  constexpr static const char* GetKernelName();
-
-  // Public queries for timers
-  auto& getRecoStepTimer(RecoStep step) { return mTimersRecoSteps[getRecoStepNum(step)]; }
-  HighResTimer& getGeneralStepTimer(GeneralStep step) { return mTimersGeneralSteps[getGeneralStepNum(step)]; }
-
-  template <class T>
-  void AddGPUEvents(T*& events);
-
-  virtual std::unique_ptr<gpu_reconstruction_kernels::threadContext> GetThreadContext() override;
+  using deviceEvent = gpu_reconstruction_kernels::deviceEvent;
+  using threadContext = gpu_reconstruction_kernels::threadContext;
 
   struct RecoStepTimerMeta {
     HighResTimer timerToGPU;
@@ -96,9 +85,102 @@ class GPUReconstructionProcessing : public GPUReconstruction
     uint32_t countToHost = 0;
   };
 
+  template <class T, int32_t I = 0>
+  struct kernelInterfaceArguments {
+    using t = T;
+    static constexpr int32_t i = I;
+  };
+
+  struct krnlExec {
+    constexpr krnlExec(uint32_t b, uint32_t t, int32_t s, GPUReconstruction::krnlDeviceType d = GPUReconstruction::krnlDeviceType::Auto) : nBlocks(b), nThreads(t), stream(s), device(d), step(GPUDataTypes::RecoStep::NoRecoStep) {}
+    constexpr krnlExec(uint32_t b, uint32_t t, int32_t s, GPUDataTypes::RecoStep st) : nBlocks(b), nThreads(t), stream(s), device(GPUReconstruction::krnlDeviceType::Auto), step(st) {}
+    constexpr krnlExec(uint32_t b, uint32_t t, int32_t s, GPUReconstruction::krnlDeviceType d, GPUDataTypes::RecoStep st) : nBlocks(b), nThreads(t), stream(s), device(d), step(st) {}
+    uint32_t nBlocks;
+    uint32_t nThreads;
+    int32_t stream;
+    GPUReconstruction::krnlDeviceType device;
+    GPUDataTypes::RecoStep step;
+  };
+  struct krnlRunRange {
+    constexpr krnlRunRange() = default;
+    constexpr krnlRunRange(uint32_t v) : index(v) {}
+    uint32_t index = 0;
+  };
+  struct krnlEvent {
+    constexpr krnlEvent(deviceEvent* e = nullptr, deviceEvent* el = nullptr, int32_t n = 1) : ev(e), evList(el), nEvents(n) {}
+    deviceEvent* ev;
+    deviceEvent* evList;
+    int32_t nEvents;
+  };
+
+  struct krnlProperties {
+    krnlProperties(int32_t t = 0, int32_t b = 1, int32_t b2 = 0) : nThreads(t), minBlocks(b), forceBlocks(b2) {}
+    uint32_t nThreads;
+    uint32_t minBlocks;
+    uint32_t forceBlocks;
+    uint32_t total() { return forceBlocks ? forceBlocks : (nThreads * minBlocks); }
+  };
+
+  struct krnlSetup {
+    krnlSetup(const krnlExec& xx, const krnlRunRange& yy = {0}, const krnlEvent& zz = {nullptr, nullptr, 0}) : x(xx), y(yy), z(zz) {}
+    krnlExec x;
+    krnlRunRange y;
+    krnlEvent z;
+  };
+
+  struct krnlSetupTime : public krnlSetup {
+    double& t;
+  };
+
+  template <class T, int32_t I = 0, typename... Args>
+  struct krnlSetupArgs : public kernelInterfaceArguments<T, I> {
+    const krnlSetupTime s;
+    std::tuple<typename std::conditional<(sizeof(Args) > sizeof(void*)), const Args&, const Args>::type...> v;
+  };
+
+  template <class T, class S>
+  class KernelInterface : public S
+  {
+   public:
+    template <typename... Args>
+    KernelInterface(const Args&... args) : S(args...)
+    {
+    }
+
+   protected:
+    virtual void runKernelVirtual(const int num, const void* args);
+  };
+
+  // Threading
+  int32_t getNKernelHostThreads(bool splitCores);
+  uint32_t getNActiveThreadsOuterLoop() const { return mNActiveThreadsOuterLoop; }
+  void SetNActiveThreadsOuterLoop(uint32_t f) { mNActiveThreadsOuterLoop = f; }
+  uint32_t SetAndGetNActiveThreadsOuterLoop(bool condition, uint32_t max);
+  void runParallelOuterLoop(bool doGPU, uint32_t nThreads, std::function<void(uint32_t)> lambda);
+  void SetNActiveThreads(int32_t n);
+
+  // Interface to query name of a kernel
+  template <class T, int32_t I>
+  static const char* GetKernelName();
+  const std::string& GetKernelName(int32_t i) const { return mKernelNames[i]; }
+  template <class T, int32_t I = 0>
+  static uint32_t GetKernelNum();
+
+  // Public queries for timers
+  auto& getRecoStepTimer(RecoStep step) { return mTimersRecoSteps[getRecoStepNum(step)]; }
+  HighResTimer& getGeneralStepTimer(GeneralStep step) { return mTimersGeneralSteps[getGeneralStepNum(step)]; }
+
+  template <class T>
+  void AddGPUEvents(T*& events);
+
+  virtual std::unique_ptr<threadContext> GetThreadContext() override;
+
+  const GPUDefParameters& getGPUParameters(bool doGPU) const override { return *(doGPU ? mParDevice : mParCPU); }
+
  protected:
-  GPUReconstructionProcessing(const GPUSettingsDeviceBackend& cfg) : GPUReconstruction(cfg) {}
-  using deviceEvent = gpu_reconstruction_kernels::deviceEvent;
+  GPUReconstructionProcessing(const GPUSettingsDeviceBackend& cfg);
+
+  static const std::vector<std::string> mKernelNames;
 
   int32_t mActiveHostKernelThreads = 0;  // Number of currently active threads on the host for kernels
   uint32_t mNActiveThreadsOuterLoop = 1; // Number of threads currently running an outer loop
@@ -126,10 +208,15 @@ class GPUReconstructionProcessing : public GPUReconstruction
   template <class T, int32_t J = -1>
   HighResTimer& getTimer(const char* name, int32_t num = -1);
 
+  GPUDefParameters* mParCPU = nullptr;
+  GPUDefParameters* mParDevice = nullptr;
+
  private:
   uint32_t getNextTimerId();
   timerMeta* getTimerById(uint32_t id, bool increment = true);
   timerMeta* insertTimer(uint32_t id, std::string&& name, int32_t J, int32_t num, int32_t type, RecoStep step);
+
+  static std::atomic_flag mTimerFlag;
 };
 
 template <class T>
@@ -162,7 +249,7 @@ HighResTimer& GPUReconstructionProcessing::getTimer(const char* name, int32_t nu
   static int32_t id = getNextTimerId();
   timerMeta* timer = getTimerById(id);
   if (timer == nullptr) {
-    int32_t max = std::max<int32_t>({mMaxHostThreads, mProcessingSettings.nStreams});
+    int32_t max = std::max<int32_t>({mMaxHostThreads, GPUCA_MAX_STREAMS});
     timer = insertTimer(id, name, J, max, 1, RecoStep::NoRecoStep);
   }
   if (num == -1) {
@@ -173,15 +260,6 @@ HighResTimer& GPUReconstructionProcessing::getTimer(const char* name, int32_t nu
   }
   return timer->timer[num];
 }
-
-#define GPUCA_KRNL(x_class, ...)                                                                     \
-  template <>                                                                                        \
-  constexpr const char* GPUReconstructionProcessing::GetKernelName<GPUCA_M_KRNL_TEMPLATE(x_class)>() \
-  {                                                                                                  \
-    return GPUCA_M_STR(GPUCA_M_KRNL_NAME(x_class));                                                  \
-  }
-#include "GPUReconstructionKernelList.h"
-#undef GPUCA_KRNL
 
 } // namespace o2::gpu
 

@@ -671,7 +671,8 @@ bool MatchTPCITS::prepareITSData()
     auto pattID = clus.getPatternID();
     unsigned int npix;
 #ifdef ENABLE_UPGRADES
-    if ((pattID == o2::itsmft::CompCluster::InvalidPatternID) || ((withITS3) ? mIT3Dict->isGroup(pattID) : mITSDict->isGroup(pattID))) { // braces guarantee evaluation order
+    auto ib = o2::its3::constants::detID::isDetITS3(clus.getChipID());
+    if ((pattID == o2::itsmft::CompCluster::InvalidPatternID) || ((withITS3) ? mIT3Dict->isGroup(pattID, ib) : mITSDict->isGroup(pattID))) { // braces guarantee evaluation order
 #else
     if (pattID == o2::itsmft::CompCluster::InvalidPatternID || mITSDict->isGroup(pattID)) {
 #endif
@@ -681,7 +682,7 @@ bool MatchTPCITS::prepareITSData()
     } else {
 #ifdef ENABLE_UPGRADES
       if (withITS3) {
-        npix = mIT3Dict->getNpixels(pattID);
+        npix = mIT3Dict->getNpixels(pattID, ib);
       } else {
         npix = mITSDict->getNpixels(pattID);
       }
@@ -1444,8 +1445,7 @@ void MatchTPCITS::refitWinners(pmr::vector<o2::dataformats::TrackTPCITS>& matche
 
 #ifdef WITH_OPENMP
 #pragma omp parallel for schedule(dynamic) num_threads(mNThreads) \
-  reduction(+                                                     \
-            : nFailedRefit)
+  reduction(+ : nFailedRefit)
 #endif
   for (int ifit = 0; ifit < nToFit; ifit++) {
     int iTPC = tpcToFit[ifit], iITS;
@@ -1714,7 +1714,7 @@ bool MatchTPCITS::refitTrackTPCITS(int slot, int iTPC, int& iITS, pmr::vector<o2
     }
     auto posEnd = tracOut.getXYZGlo();
     auto lInt = propagator->estimateLTIncrement(tracOut, posStart, posEnd);
-    tofL.addStep(lInt, tracOut.getP2Inv());
+    tofL.addStep(lInt, tracOut.getQ2P2());
     tofL.addX2X0(lInt * mTPCmeanX0Inv);
     propagator->PropagateToXBxByBz(tracOut, o2::constants::geom::XTPCOuterRef, MaxSnp, 10., mUseMatCorrFlag, &tofL);
 
@@ -1804,7 +1804,7 @@ bool MatchTPCITS::refitABTrack(int iITSAB, const TPCABSeed& seed, pmr::vector<o2
     }
     auto posEnd = tracOut.getXYZGlo();
     auto lInt = propagator->estimateLTIncrement(tracOut, posStart, posEnd);
-    tofL.addStep(lInt, tracOut.getP2Inv());
+    tofL.addStep(lInt, tracOut.getQ2P2());
     tofL.addX2X0(lInt * mTPCmeanX0Inv);
     propagator->PropagateToXBxByBz(tracOut, o2::constants::geom::XTPCOuterRef, MaxSnp, 10., mUseMatCorrFlag, &tofL);
     const auto& trackTune = TrackTuneParams::Instance();

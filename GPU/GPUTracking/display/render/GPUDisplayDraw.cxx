@@ -28,6 +28,7 @@
 #include "GPUTPCMCInfo.h"
 #include "GPUParam.inc"
 #include "GPUCommonMath.h"
+#include "GPUChainTracking.h"
 
 #include <type_traits>
 
@@ -43,7 +44,7 @@ using namespace o2::gpu;
 #define GET_CID(sector, i) (mParam->par.earlyTpcTransform ? mIOPtrs->clusterData[sector][i].id : (mIOPtrs->clustersNative->clusterOffset[sector][0] + i))
 
 const GPUTRDGeometry* GPUDisplay::trdGeometry() { return (GPUTRDGeometry*)mCalib->trdGeometry; }
-const GPUTPCTracker& GPUDisplay::sectorTracker(int32_t iSector) { return mChain->GetTPCSectorTrackers()[iSector]; }
+const GPUTPCTracker& GPUDisplay::sectorTracker(int32_t iSector) { return mChain->GetProcessors()->tpcTrackers[iSector]; }
 
 inline void GPUDisplay::insertVertexList(std::pair<vecpod<int32_t>*, vecpod<uint32_t>*>& vBuf, size_t first, size_t last)
 {
@@ -64,7 +65,7 @@ inline void GPUDisplay::drawPointLinestrip(int32_t iSector, int32_t cid, int32_t
   mVertexBuffer[iSector].emplace_back(mGlobalPos[cid].x, mGlobalPos[cid].y * mYFactor, mCfgH.projectXY ? 0 : mGlobalPos[cid].z);
   float curVal;
   while ((curVal = mGlobalPos[cid].w) < id_limit) {
-    if (GPUCommonMath::AtomicCAS(&mGlobalPos[cid].w, curVal, (float)id)) {
+    if (CAMath::AtomicCAS(&mGlobalPos[cid].w, curVal, (float)id)) {
       break;
     }
     curVal = mGlobalPos[cid].w;
@@ -394,7 +395,7 @@ void GPUDisplay::DrawFinal(int32_t iSector, int32_t /*iCol*/, const GPUTPCGMProp
         }
       };
       if (std::is_same_v<T, GPUTPCGMMergedTrack> || (!mIOPtrs->tpcLinkTRD && mIOPtrs->trdTracksO2)) {
-        if (mChain && ((int32_t)mConfig.showTPCTracksFromO2Format == (int32_t)mChain->GetProcessingSettings().trdTrackModelO2) && mTRDTrackIds[i] != -1 && mIOPtrs->nTRDTracklets) {
+        if (mChain && ((int32_t)mConfig.showTPCTracksFromO2Format == (int32_t)GetProcessingSettings().trdTrackModelO2) && mTRDTrackIds[i] != -1 && mIOPtrs->nTRDTracklets) {
           if (mIOPtrs->trdTracksO2) {
             tmpDoTRDTracklets(mIOPtrs->trdTracksO2[mTRDTrackIds[i]]);
           } else {

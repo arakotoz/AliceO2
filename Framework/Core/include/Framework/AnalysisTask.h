@@ -33,6 +33,8 @@
 #include <type_traits>
 #include <utility>
 #include <memory>
+#include <tuple> // IWYU pragma: export
+
 namespace o2::framework
 {
 /// A more familiar task API for the DPL analysis framework.
@@ -65,61 +67,18 @@ concept is_enumeration = is_enumeration_v<std::decay_t<T>>;
 // the contents of an AnalysisTask...
 namespace {
 struct AnalysisDataProcessorBuilder {
-  template <typename T>
-  static ConfigParamSpec getSpec()
+  template <soa::is_iterator G, typename... Args>
+  static void addGroupingCandidates(Cache& bk, Cache& bku, bool enabled)
   {
-    if constexpr (soa::has_metadata<aod::MetadataTrait<T>>) {
-      return ConfigParamSpec{std::string{"input:"} + aod::MetadataTrait<T>::metadata::tableLabel(), VariantType::String, aod::MetadataTrait<T>::metadata::sourceSpec(), {"\"\""}};
-    } else {
-      using O1 = framework::pack_element_t<0, typename T::originals>;
-      return ConfigParamSpec{std::string{"input:"} + aod::MetadataTrait<T>::metadata::tableLabel(), VariantType::String, aod::MetadataTrait<O1>::metadata::sourceSpec(), {"\"\""}};
-    }
-  }
-
-  template <soa::TableRef R>
-  static ConfigParamSpec getSpec()
-  {
-    return soa::tableRef2ConfigParamSpec<R>();
-  }
-
-  template <soa::with_sources T>
-  static inline auto getSources()
-  {
-    return []<size_t N, std::array<soa::TableRef, N> refs>() {
-      return []<size_t... Is>(std::index_sequence<Is...>) {
-        return std::vector{soa::tableRef2ConfigParamSpec<refs[Is]>()...};
-      }(std::make_index_sequence<N>());
-    }.template operator()<T::sources.size(), T::sources>();
-  }
-
-  template <soa::with_sources T>
-
-  static auto getInputMetadata()
-  {
-    std::vector<ConfigParamSpec> inputMetadata;
-    auto inputSources = getSources<T>();
-    std::sort(inputSources.begin(), inputSources.end(), [](ConfigParamSpec const& a, ConfigParamSpec const& b) { return a.name < b.name; });
-    auto last = std::unique(inputSources.begin(), inputSources.end(), [](ConfigParamSpec const& a, ConfigParamSpec const& b) { return a.name == b.name; });
-    inputSources.erase(last, inputSources.end());
-    inputMetadata.insert(inputMetadata.end(), inputSources.begin(), inputSources.end());
-    return inputMetadata;
-  }
-
-  template <typename G, typename... Args>
-  static void addGroupingCandidates(std::vector<StringPair>& bk, std::vector<StringPair>& bku)
-  {
-    [&bk, &bku]<typename... As>(framework::pack<As...>) mutable {
-      std::string key;
-      if constexpr (soa::is_iterator<std::decay_t<G>>) {
-        key = std::string{"fIndex"} + o2::framework::cutString(soa::getLabelFromType<std::decay_t<G>>());
-      }
-      ([&bk, &bku, &key]() mutable {
+    [&bk, &bku, enabled]<typename... As>(framework::pack<As...>) mutable {
+      auto key = std::string{"fIndex"} + o2::framework::cutString(soa::getLabelFromType<std::decay_t<G>>());
+      ([&bk, &bku, &key, enabled]() mutable {
         if constexpr (soa::relatedByIndex<std::decay_t<G>, std::decay_t<As>>()) {
           auto binding = soa::getLabelFromTypeForKey<std::decay_t<As>>(key);
           if constexpr (o2::soa::is_smallgroups<std::decay_t<As>>) {
-            framework::updatePairList(bku, binding, key);
+            framework::updatePairList(bku, binding, key, enabled);
           } else {
-            framework::updatePairList(bk, binding, key);
+            framework::updatePairList(bk, binding, key, enabled);
           }
         }
       }(),
@@ -130,14 +89,9 @@ struct AnalysisDataProcessorBuilder {
   template <soa::TableRef R>
   static void addOriginalRef(const char* name, bool value, std::vector<InputSpec>& inputs)
   {
-    using metadata = typename aod::MetadataTrait<o2::aod::Hash<R.desc_hash>>::metadata;
-    std::vector<ConfigParamSpec> inputMetadata;
-    inputMetadata.emplace_back(ConfigParamSpec{std::string{"control:"} + name, VariantType::Bool, value, {"\"\""}});
-    if constexpr (soa::with_sources<metadata>) {
-      auto inputSources = getInputMetadata<metadata>();
-      inputMetadata.insert(inputMetadata.end(), inputSources.begin(), inputSources.end());
-    }
-    DataSpecUtils::updateInputList(inputs, InputSpec{o2::aod::label<R>(), o2::aod::origin<R>(), aod::description(o2::aod::signature<R>()), R.version, Lifetime::Timeframe, inputMetadata});
+    auto spec = soa::tableRef2InputSpec<R>();
+    spec.metadata.emplace_back(ConfigParamSpec{std::string{"control:"} + name, VariantType::Bool, value, {"\"\""}});
+    DataSpecUtils::updateInputList(inputs, std::move(spec));
   }
 
   /// helpers to append expression information for a single argument
@@ -190,32 +144,70 @@ struct AnalysisDataProcessorBuilder {
   }
 
   /// helper to parse the process arguments
+  template <typename T>
+  inline static bool requestInputsFromArgs(T&, std::string const&, std::vector<InputSpec>&, std::vector<ExpressionInfo>&)
+  {
+    return false;
+  }
+  template <is_process_configurable T>
+  inline static bool requestInputsFromArgs(T& pc, std::string const& name, std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>& eis)
+  {
+    AnalysisDataProcessorBuilder::inputsFromArgs(pc.process, (name + "/" + pc.name).c_str(), pc.value, inputs, eis);
+    return true;
+  }
+  template <typename T>
+  inline static bool requestCacheFromArgs(T&, Cache&, Cache&)
+  {
+    return false;
+  }
+  template <is_process_configurable T>
+  inline static bool requestCacheFromArgs(T& pc, Cache& bk, Cache& bku)
+  {
+    AnalysisDataProcessorBuilder::cacheFromArgs(pc.process, pc.value, bk, bku);
+    return true;
+  }
   /// 1. enumeration (must be the only argument)
   template <typename R, typename C, is_enumeration A>
-  static void inputsFromArgs(R (C::*)(A), const char* /*name*/, bool /*value*/, std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>&, std::vector<StringPair>&, std::vector<StringPair>&)
+  static void inputsFromArgs(R (C::*)(A), const char* /*name*/, bool /*value*/, std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>&) //, Cache&, Cache&)
   {
     std::vector<ConfigParamSpec> inputMetadata;
     // FIXME: for the moment we do not support begin, end and step.
     DataSpecUtils::updateInputList(inputs, InputSpec{"enumeration", "DPL", "ENUM", 0, Lifetime::Enumeration, inputMetadata});
   }
 
-  /// 2. grouping case - 1st argument is an iterator
+  /// 2. 1st argument is an iterator
   template <typename R, typename C, soa::is_iterator A, soa::is_table... Args>
-  static void inputsFromArgs(R (C::*)(A, Args...), const char* name, bool value, std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>& eInfos, std::vector<StringPair>& bk, std::vector<StringPair>& bku)
+  static void inputsFromArgs(R (C::*)(A, Args...), const char* name, bool value, std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>& eInfos) //, Cache& bk, Cache& bku)
     requires(std::is_lvalue_reference_v<A> && (std::is_lvalue_reference_v<Args> && ...))
   {
-    addGroupingCandidates<A, Args...>(bk, bku);
     constexpr auto hash = o2::framework::TypeIdHelpers::uniqueId<R (C::*)(A, Args...)>();
     addInputsAndExpressions<typename std::decay_t<A>::parent_t, Args...>(hash, name, value, inputs, eInfos);
   }
 
   /// 3. generic case
   template <typename R, typename C, soa::is_table... Args>
-  static void inputsFromArgs(R (C::*)(Args...), const char* name, bool value, std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>& eInfos, std::vector<StringPair>&, std::vector<StringPair>&)
+  static void inputsFromArgs(R (C::*)(Args...), const char* name, bool value, std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>& eInfos) //, Cache&, Cache&)
     requires(std::is_lvalue_reference_v<Args> && ...)
   {
     constexpr auto hash = o2::framework::TypeIdHelpers::uniqueId<R (C::*)(Args...)>();
     addInputsAndExpressions<Args...>(hash, name, value, inputs, eInfos);
+  }
+
+  /// 1. enumeration (no grouping)
+  template <typename R, typename C, is_enumeration A>
+  static void cacheFromArgs(R (C::*)(A), bool, Cache&, Cache&)
+  {
+  }
+  /// 2. iterator (the only grouping case)
+  template <typename R, typename C, soa::is_iterator A, soa::is_table... Args>
+  static void cacheFromArgs(R (C::*)(A, Args...), bool value, Cache& bk, Cache& bku)
+  {
+    addGroupingCandidates<A, Args...>(bk, bku, value);
+  }
+  /// 3. generic case (no grouping)
+  template <typename R, typename C, soa::is_table A, soa::is_table... Args>
+  static void cacheFromArgs(R (C::*)(A, Args...), bool, Cache&, Cache&)
+  {
   }
 
   template <soa::TableRef R>
@@ -246,9 +238,9 @@ struct AnalysisDataProcessorBuilder {
     std::shared_ptr<arrow::Table> table = nullptr;
     auto joiner = [&record]<size_t N, std::array<soa::TableRef, N> refs, size_t... Is>(std::index_sequence<Is...>) { return std::vector{extractTableFromRecord<refs[Is]>(record)...}; };
     if constexpr (soa::is_iterator<T>) {
-      table = o2::soa::ArrowHelpers::joinTables(joiner.template operator()<T::parent_t::originals.size(), T::parent_t::originals>(std::make_index_sequence<T::parent_t::originals.size()>()));
+      table = o2::soa::ArrowHelpers::joinTables(joiner.template operator()<T::parent_t::originals.size(), T::parent_t::originals>(std::make_index_sequence<T::parent_t::originals.size()>()), std::span{T::parent_t::originalLabels});
     } else {
-      table = o2::soa::ArrowHelpers::joinTables(joiner.template operator()<T::originals.size(), T::originals>(std::make_index_sequence<T::originals.size()>()));
+      table = o2::soa::ArrowHelpers::joinTables(joiner.template operator()<T::originals.size(), T::originals>(std::make_index_sequence<T::originals.size()>()), std::span{T::originalLabels});
     }
     expressions::updateFilterInfo(info, table);
     if constexpr (!o2::soa::is_smallgroups<std::decay_t<T>>) {
@@ -525,8 +517,6 @@ DataProcessorSpec adaptAnalysisTask(ConfigContext const& ctx, Args&&... args)
   std::vector<InputSpec> inputs;
   std::vector<ConfigParamSpec> options;
   std::vector<ExpressionInfo> expressionInfos;
-  std::vector<StringPair> bindingsKeys;
-  std::vector<StringPair> bindingsKeysUnsorted;
 
   /// make sure options and configurables are set before expression infos are created
   homogeneous_apply_refs([&options, &hash](auto& element) { return analysis_task_parsers::appendOption(options, element); }, *task.get());
@@ -535,22 +525,14 @@ DataProcessorSpec adaptAnalysisTask(ConfigContext const& ctx, Args&&... args)
 
   /// parse process functions defined by corresponding configurables
   if constexpr (requires { &T::process; }) {
-    AnalysisDataProcessorBuilder::inputsFromArgs(&T::process, "default", true, inputs, expressionInfos, bindingsKeys, bindingsKeysUnsorted);
+    AnalysisDataProcessorBuilder::inputsFromArgs(&T::process, "default", true, inputs, expressionInfos);
   }
   homogeneous_apply_refs(
-    overloaded{
-      [name = name_str, &expressionInfos, &inputs, &bindingsKeys, &bindingsKeysUnsorted](framework::is_process_configurable auto& x) mutable {
-        // this pushes (argumentIndex,processHash,schemaPtr,nullptr) into expressionInfos for arguments that are Filtered/filtered_iterators
-        AnalysisDataProcessorBuilder::inputsFromArgs(x.process, (name + "/" + x.name).c_str(), x.value, inputs, expressionInfos, bindingsKeys, bindingsKeysUnsorted);
-        return true;
-      },
-      [](auto&) {
-        return false;
-      }},
+    [name = name_str, &expressionInfos, &inputs](auto& x) mutable {
+      // this pushes (argumentIndex, processHash, schemaPtr, nullptr) into expressionInfos for arguments that are Filtered/filtered_iterators
+      return AnalysisDataProcessorBuilder::requestInputsFromArgs(x, name, inputs, expressionInfos);
+    },
     *task.get());
-
-  // add preslice declarations to slicing cache definition
-  homogeneous_apply_refs([&bindingsKeys, &bindingsKeysUnsorted](auto& element) { return analysis_task_parsers::registerCache(element, bindingsKeys, bindingsKeysUnsorted); }, *task.get());
 
   // request base tables for spawnable extended tables and indices to be built
   // this checks for duplications
@@ -571,12 +553,17 @@ DataProcessorSpec adaptAnalysisTask(ConfigContext const& ctx, Args&&... args)
   requiredServices.insert(requiredServices.end(), arrowServices.begin(), arrowServices.end());
   homogeneous_apply_refs([&requiredServices](auto& element) { return analysis_task_parsers::addService(requiredServices, element); }, *task.get());
 
-  auto algo = AlgorithmSpec::InitCallback{[task = task, expressionInfos, bindingsKeys, bindingsKeysUnsorted](InitContext& ic) mutable {
+  auto algo = AlgorithmSpec::InitCallback{[task = task, expressionInfos](InitContext& ic) mutable {
+    Cache bindingsKeys;
+    Cache bindingsKeysUnsorted;
+    // add preslice declarations to slicing cache definition
+    homogeneous_apply_refs([&bindingsKeys, &bindingsKeysUnsorted](auto& element) { return analysis_task_parsers::registerCache(element, bindingsKeys, bindingsKeysUnsorted); }, *task.get());
+
     homogeneous_apply_refs([&ic](auto&& element) { return analysis_task_parsers::prepareOption(ic, element); }, *task.get());
     homogeneous_apply_refs([&ic](auto&& element) { return analysis_task_parsers::prepareService(ic, element); }, *task.get());
 
     auto& callbacks = ic.services().get<CallbackService>();
-    auto endofdatacb = [task](EndOfStreamContext& eosContext) {
+    auto eoscb = [task](EndOfStreamContext& eosContext) {
       homogeneous_apply_refs([&eosContext](auto& element) {
           analysis_task_parsers::postRunService(eosContext, element);
           analysis_task_parsers::postRunOutput(eosContext, element);
@@ -585,13 +572,13 @@ DataProcessorSpec adaptAnalysisTask(ConfigContext const& ctx, Args&&... args)
       eosContext.services().get<ControlService>().readyToQuit(QuitRequest::Me);
     };
 
-    callbacks.set<CallbackService::Id::EndOfStream>(endofdatacb);
+    callbacks.set<CallbackService::Id::EndOfStream>(eoscb);
 
     /// update configurables in filters and partitions
     homogeneous_apply_refs(
       [&ic](auto& element) -> bool { return analysis_task_parsers::updatePlaceholders(ic, element); },
       *task.get());
-    /// create for filters gandiva trees matched to schemas and store the pointers into expressionInfos
+    /// create expression trees for filters gandiva trees matched to schemas and store the pointers into expressionInfos
     homogeneous_apply_refs([&expressionInfos](auto& element) {
       return analysis_task_parsers::createExpressionTrees(expressionInfos, element);
     },
@@ -600,6 +587,16 @@ DataProcessorSpec adaptAnalysisTask(ConfigContext const& ctx, Args&&... args)
     if constexpr (requires { task->init(ic); }) {
       task->init(ic);
     }
+
+    /// parse process functions to enable requested grouping caches - note that at this state process configurables have their final values
+    if constexpr (requires { &T::process; }) {
+      AnalysisDataProcessorBuilder::cacheFromArgs(&T::process, true, bindingsKeys, bindingsKeysUnsorted);
+    }
+    homogeneous_apply_refs(
+      [&bindingsKeys, &bindingsKeysUnsorted](auto& x) mutable {
+        return AnalysisDataProcessorBuilder::requestCacheFromArgs(x, bindingsKeys, bindingsKeysUnsorted);
+      },
+      *task.get());
 
     ic.services().get<ArrowTableSlicingCacheDef>().setCaches(std::move(bindingsKeys));
     ic.services().get<ArrowTableSlicingCacheDef>().setCachesUnsorted(std::move(bindingsKeysUnsorted));
@@ -648,6 +645,8 @@ DataProcessorSpec adaptAnalysisTask(ConfigContext const& ctx, Args&&... args)
           return false;
         },
         *task.get());
+      // prepare delayed outputs
+      homogeneous_apply_refs([&pc](auto& element) { return analysis_task_parsers::prepareDelayedOutput(pc, element); }, *task.get());
       // finalize outputs
       homogeneous_apply_refs([&pc](auto& element) { return analysis_task_parsers::finalizeOutput(pc, element); }, *task.get());
     };

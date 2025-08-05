@@ -21,6 +21,7 @@
 #include "GPUDataTypes.h"
 #include "GPUConstantMem.h"
 #include "DetectorsBase/Propagator.h"
+#include "GPUTPCGeometry.h"
 
 using namespace o2::gpu;
 
@@ -29,10 +30,9 @@ using namespace o2::gpu;
 
 #include "utils/qconfigrtc.h"
 
-void GPUParam::SetDefaults(float solenoidBz)
+void GPUParam::SetDefaults(float solenoidBz, bool assumeConstantBz)
 {
   memset((void*)this, 0, sizeof(*this));
-  new (&tpcGeometry) GPUTPCGeometry;
   new (&rec) GPUSettingsRec;
   occupancyMap = nullptr;
   occupancyTotal = 0;
@@ -83,8 +83,7 @@ void GPUParam::SetDefaults(float solenoidBz)
   }
 #endif
 
-  par.dAlpha = 0.349066f;
-  UpdateBzOnly(solenoidBz);
+  UpdateBzOnly(solenoidBz, assumeConstantBz);
   par.dodEdx = 0;
 
   constexpr float plusZmin = 0.0529937;
@@ -102,28 +101,23 @@ void GPUParam::SetDefaults(float solenoidBz)
     if (tmp >= GPUCA_NSECTORS / 4) {
       tmp -= GPUCA_NSECTORS / 2;
     }
-    SectorParam[i].Alpha = 0.174533f + par.dAlpha * tmp;
+    SectorParam[i].Alpha = 0.174533f + dAlpha * tmp;
     SectorParam[i].CosAlpha = CAMath::Cos(SectorParam[i].Alpha);
     SectorParam[i].SinAlpha = CAMath::Sin(SectorParam[i].Alpha);
-    SectorParam[i].AngleMin = SectorParam[i].Alpha - par.dAlpha / 2.f;
-    SectorParam[i].AngleMax = SectorParam[i].Alpha + par.dAlpha / 2.f;
+    SectorParam[i].AngleMin = SectorParam[i].Alpha - dAlpha / 2.f;
+    SectorParam[i].AngleMax = SectorParam[i].Alpha + dAlpha / 2.f;
   }
 
-  par.assumeConstantBz = false;
-  par.toyMCEventsFlag = false;
   par.continuousTracking = false;
   continuousMaxTimeBin = 0;
   tpcCutTimeBin = 0;
-  par.debugLevel = 0;
   par.earlyTpcTransform = false;
 }
 
 void GPUParam::UpdateSettings(const GPUSettingsGRP* g, const GPUSettingsProcessing* p, const GPURecoStepConfiguration* w, const GPUSettingsRecDynamic* d)
 {
   if (g) {
-    UpdateBzOnly(g->solenoidBzNominalGPU);
-    par.assumeConstantBz = g->constBz;
-    par.toyMCEventsFlag = g->homemadeEvents;
+    UpdateBzOnly(g->solenoidBzNominalGPU, g->constBz);
     par.continuousTracking = g->grpContinuousMaxTimeBin != 0;
     continuousMaxTimeBin = g->grpContinuousMaxTimeBin == -1 ? GPUSettings::TPC_MAX_TF_TIME_BIN : g->grpContinuousMaxTimeBin;
     tpcCutTimeBin = g->tpcCutTimeBin;
@@ -131,13 +125,12 @@ void GPUParam::UpdateSettings(const GPUSettingsGRP* g, const GPUSettingsProcessi
   par.earlyTpcTransform = rec.tpc.forceEarlyTransform == -1 ? (!par.continuousTracking) : rec.tpc.forceEarlyTransform;
   qptB5Scaler = CAMath::Abs(bzkG) > 0.1f ? CAMath::Abs(bzkG) / 5.006680f : 1.f; // Repeat here, since passing in g is optional
   if (p) {
-    par.debugLevel = p->debugLevel;
     UpdateRun3ClusterErrors(p->param.tpcErrorParamY, p->param.tpcErrorParamZ);
   }
   if (w) {
-    par.dodEdx = dodEdxDownscaled = w->steps.isSet(GPUDataTypes::RecoStep::TPCdEdx);
-    if (par.dodEdx && p && p->tpcDownscaledEdx != 0) {
-      dodEdxDownscaled = (rand() % 100) < p->tpcDownscaledEdx;
+    par.dodEdx = dodEdxEnabled = w->steps.isSet(GPUDataTypes::RecoStep::TPCdEdx);
+    if (dodEdxEnabled && p && p->tpcDownscaledEdx != 0) {
+      dodEdxEnabled = (rand() % 100) < p->tpcDownscaledEdx;
     }
   }
   if (d) {
@@ -145,12 +138,12 @@ void GPUParam::UpdateSettings(const GPUSettingsGRP* g, const GPUSettingsProcessi
   }
 }
 
-void GPUParam::UpdateBzOnly(float newSolenoidBz)
+void GPUParam::UpdateBzOnly(float newSolenoidBz, bool assumeConstantBz)
 {
   bzkG = newSolenoidBz;
   bzCLight = bzkG * o2::gpu::gpu_common_constants::kCLight;
   polynomialField.Reset();
-  if (par.assumeConstantBz) {
+  if (assumeConstantBz) {
     GPUTPCGMPolynomialFieldManager::GetPolynomialField(GPUTPCGMPolynomialFieldManager::kUniform, bzkG, polynomialField);
   } else {
     GPUTPCGMPolynomialFieldManager::GetPolynomialField(bzkG, polynomialField);
@@ -160,7 +153,7 @@ void GPUParam::UpdateBzOnly(float newSolenoidBz)
 
 void GPUParam::SetDefaults(const GPUSettingsGRP* g, const GPUSettingsRec* r, const GPUSettingsProcessing* p, const GPURecoStepConfiguration* w)
 {
-  SetDefaults(g->solenoidBzNominalGPU);
+  SetDefaults(g->solenoidBzNominalGPU, g->constBz);
   if (r) {
     rec = *r;
     if (rec.fitPropagateBzOnly == -1) {
@@ -178,8 +171,8 @@ void GPUParam::UpdateRun3ClusterErrors(const float* yErrorParam, const float* zE
     for (int32_t rowType = 0; rowType < 4; rowType++) {
       constexpr int32_t regionMap[4] = {0, 4, 6, 8};
       ParamErrors[yz][rowType][0] = param[0] * param[0];
-      ParamErrors[yz][rowType][1] = param[1] * param[1] * tpcGeometry.PadHeightByRegion(regionMap[rowType]);
-      ParamErrors[yz][rowType][2] = param[2] * param[2] / tpcGeometry.TPCLength() / tpcGeometry.PadHeightByRegion(regionMap[rowType]);
+      ParamErrors[yz][rowType][1] = param[1] * param[1] * GPUTPCGeometry::PadHeightByRegion(regionMap[rowType]);
+      ParamErrors[yz][rowType][2] = param[2] * param[2] / GPUTPCGeometry::TPCLength() / GPUTPCGeometry::PadHeightByRegion(regionMap[rowType]);
       ParamErrors[yz][rowType][3] = param[3] * param[3] * rec.tpc.clusterErrorOccupancyScaler * rec.tpc.clusterErrorOccupancyScaler;
     }
   }
@@ -193,12 +186,10 @@ void GPUParamRTC::setFrom(const GPUParam& param)
 
 std::string GPUParamRTC::generateRTCCode(const GPUParam& param, bool useConstexpr)
 {
-  return "#ifndef GPUCA_GPUCODE_DEVICE\n"
-         "#include <string>\n"
+  return "#include <string>\n"
          "#include <vector>\n"
          "#include <cstdint>\n"
          "#include <cstddef>\n"
-         "#endif\n"
          "namespace o2::gpu { class GPUDisplayFrontendInterface; }\n" +
          qConfigPrintRtc(std::make_tuple(&param.rec.tpc, &param.rec.trd, &param.rec, &param.par), useConstexpr);
 }

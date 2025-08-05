@@ -15,12 +15,11 @@
 #ifndef GPUDISPLAY_H
 #define GPUDISPLAY_H
 
-#include "GPUSettings.h"
 #include "frontend/GPUDisplayFrontend.h"
 #include "backend/GPUDisplayBackend.h"
 #include "GPUDisplayInterface.h"
+#include "GPUSettings.h"
 
-#include "GPUChainTracking.h"
 #include "../utils/vecpod.h"
 #include "../utils/qsem.h"
 
@@ -34,11 +33,12 @@ namespace o2::gpu
 class GPUTPCTracker;
 struct GPUParam;
 class GPUQA;
+class GPUTRDGeometry;
 
 class GPUDisplay : public GPUDisplayInterface
 {
  public:
-  GPUDisplay(GPUDisplayFrontend* frontend, GPUChainTracking* chain, GPUQA* qa, const GPUParam* param = nullptr, const GPUCalibObjectsConst* calib = nullptr, const GPUSettingsDisplay* config = nullptr);
+  GPUDisplay(GPUDisplayFrontend* frontend, GPUChainTracking* chain, GPUQA* qa, const GPUParam* param = nullptr, const GPUCalibObjectsConst* calib = nullptr, const GPUSettingsDisplay* config = nullptr, const GPUSettingsProcessing* proc = nullptr);
   GPUDisplay(const GPUDisplay&) = delete;
   ~GPUDisplay() override = default;
 
@@ -72,12 +72,13 @@ class GPUDisplay : public GPUDisplayInterface
   };
   vecpod<vtx>* vertexBuffer() { return mVertexBuffer; }
   const GPUParam* param() { return mParam; }
+  const GPUSettingsProcessing& GetProcessingSettings() const { return mProcessingSettings; }
   GPUDisplayFrontend* frontend() { return mFrontend; }
   bool drawTextInCompatMode() const { return mDrawTextInCompatMode; }
   int32_t& drawTextFontSize() { return mDrawTextFontSize; }
 
  private:
-  static constexpr int32_t NSECTORS = GPUChainTracking::NSECTORS;
+  static constexpr int32_t NSECTORS = GPUCA_NSECTORS;
   static constexpr float GL_SCALE_FACTOR = (1.f / 100.f);
 
   static constexpr const int32_t N_POINTS_TYPE = 15;
@@ -141,6 +142,9 @@ class GPUDisplay : public GPUDisplayInterface
     bool mVerbose = false;
   };
 
+  static const GPUSettingsDisplay& GetConfig(GPUChainTracking* chain);
+  static const GPUSettingsProcessing& GetProcessingConfig(GPUChainTracking* chain);
+
   void DrawGLScene_internal(float animateTime = -1.f, bool renderToMixBuffer = false);
   void DrawGLScene_updateEventData();
   void DrawGLScene_cameraAndAnimation(float animateTime, float& mixSlaveImage, hmm_mat4& nextViewMatrix);
@@ -157,15 +161,7 @@ class GPUDisplay : public GPUDisplayInterface
   void insertVertexList(std::pair<vecpod<int32_t>*, vecpod<uint32_t>*>& vBuf, size_t first, size_t last);
   void insertVertexList(int32_t iSector, size_t first, size_t last);
   template <typename... Args>
-  void SetInfo(Args... args)
-  {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-security"
-    snprintf(mInfoText2, 1024, args...);
-#pragma GCC diagnostic pop
-    GPUInfo("%s", mInfoText2);
-    mInfoText2Timer.ResetStart();
-  }
+  void SetInfo(Args... args);
   void PrintGLHelpText(float colorValue);
   void calcXYZ(const float*);
   void mAnimationCloseAngle(float& newangle, float lastAngle);
@@ -223,6 +219,7 @@ class GPUDisplay : public GPUDisplayInterface
   GPUSettingsDisplayLight mCfgL;
   GPUSettingsDisplayHeavy mCfgH;
   GPUSettingsDisplayRenderer mCfgR;
+  const GPUSettingsProcessing& mProcessingSettings;
   GPUQA* mQA;
   qSem mSemLockDisplay;
 

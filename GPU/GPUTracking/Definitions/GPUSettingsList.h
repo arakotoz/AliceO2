@@ -35,6 +35,9 @@ BeginNamespace(gpu)
 
 // Settings concerning the reconstruction, stored as parameters in GPU constant memory
 // There must be no bool in here, use int8_t, as sizeof(bool) is compiler dependent and fails on GPUs!!!!!!
+// Split in different blocks for global and per Detector
+
+// Reconstruction parameters for TPC, no bool in here !!!
 BeginSubConfig(GPUSettingsRecTPC, tpc, configStandalone.rec, "RECTPC", 0, "Reconstruction settings", rec_tpc)
 AddOptionRTC(rejectQPtB5, float, 1.f / GPUCA_MIN_TRACK_PTB5_REJECT_DEFAULT, "", 0, "QPt threshold to reject clusters of TPC tracks (Inverse Pt, scaled to B=0.5T!!!)")
 AddOptionRTC(hitPickUpFactor, float, 1.f, "", 0, "multiplier for the combined cluster+track error during track following")
@@ -69,7 +72,8 @@ AddOptionRTC(tubeChi2, float, 5.f * 5.f, "", 0, "Max chi2 to mark cluster adjace
 AddOptionRTC(tubeMaxSize2, float, 2.5f * 2.5f, "", 0, "Square of max tube size (normally derrived from tpcTubeChi2)")
 AddOptionRTC(clustersShiftTimebins, float, 0, "", 0, "Shift of TPC clusters (applied during CTF cluster decoding)")
 AddOptionRTC(clustersShiftTimebinsClusterizer, float, 0, "", 0, "Shift of TPC clusters (applied during CTF clusterization)")
-AddOptionRTC(defaultZOffsetOverR, float, 0.5210953f, "", 0, "Shift of TPC clusters (applied during CTF cluster decoding)")
+AddOptionRTC(clustersEdgeFixDistance, float, 0.f, "", 0, "If >0, revert cluster.flag edge bit distance to edge exceeds this parameter (fixed during CTF decoding)")
+AddOptionRTC(defaultZOffsetOverR, float, 0.5210953f, "", 0, "ZOffset for secondary tracks, multiple of radius")
 AddOptionRTC(PID_EKrangeMin, float, 0.47f, "", 0, "min P of electron/K BB bands crossing")
 AddOptionRTC(PID_EKrangeMax, float, 0.57f, "", 0, "max P of electron/K BB bands crossing")
 AddOptionRTC(PID_EPrangeMin, float, 0.93f, "", 0, "min P of electron/p BB bands crossing")
@@ -128,6 +132,7 @@ AddOptionRTC(cfInnerThreshold, uint8_t, 0, "", 0, "Cluster Finder extends cluste
 AddOptionRTC(cfMinSplitNum, uint8_t, 1, "", 0, "Minimum number of split charges in a cluster for the cluster to be marked as split")
 AddOptionRTC(cfNoiseSuppressionEpsilon, uint8_t, 10, "", 0, "Cluster Finder: Difference between peak and charge for the charge to count as a minima during noise suppression")
 AddOptionRTC(cfNoiseSuppressionEpsilonRelative, uint8_t, 76, "", 0, "Cluster Finder: Difference between peak and charge for the charge to count as a minima during noise suppression, relative as fraction of 255")
+AddOptionRTC(cfEdgeTwoPads, uint8_t, 1, "", 0, "Flag clusters with peak on the 2 pads closes to the sector edge as edge cluster")
 AddOptionRTC(nWays, uint8_t, 3, "", 0, "Do N fit passes in final fit of merger")
 AddOptionRTC(nWaysOuter, int8_t, 0, "", 0, "Store outer param")
 AddOptionRTC(trackFitRejectMode, int8_t, 5, "", 0, "0: no limit on rejection or missed hits, >0: break after n rejected hits, <0: reject at max -n hits")
@@ -146,6 +151,7 @@ AddOptionRTC(forceEarlyTransform, int8_t, -1, "", 0, "Force early TPC transforma
 AddOptionRTC(dropLoopers, uint8_t, 0, "", 0, "Drop looping tracks starting from second loop")
 AddOptionRTC(mergerCovSource, uint8_t, 2, "", 0, "Method to obtain covariance in track merger: 0 = simple filterErrors method, 1 = use cov from track following, 2 = refit (default)")
 AddOptionRTC(mergerInterpolateErrors, uint8_t, 1, "", 0, "Use interpolation instead of extrapolation for chi2 based cluster rejection")
+AddOptionRTC(mergerInterpolateRejectAlsoOnCurrentPosition, uint8_t, 1, "", 0, "When using mergerInterpolateErrors, reject based on chi2 twice computed with interpolated and current track position")
 AddOptionRTC(mergeCE, uint8_t, 1, "", 0, "Merge tracks accross the central electrode")
 AddOptionRTC(retryRefit, int8_t, 1, "", 0, "Retry refit with seeding errors and without cluster rejection when fit fails (=2 means retry in same kernel, =1 for separate kernel")
 AddOptionRTC(looperInterpolationInExtraPass, int8_t, -1, "", 0, "Perform looper interpolation in an extra pass")
@@ -154,12 +160,14 @@ AddOptionRTC(enablePID, int8_t, 1, "", 0, "Enable PID response")
 AddOptionRTC(PID_useNsigma, int8_t, 1, "", 0, "Use nSigma instead of absolute distance in PID response")
 AddOptionRTC(adddEdxSubThresholdClusters, int8_t, 1, "", 0, "Add sub threshold clusters in TPC dEdx computation")
 AddOptionRTC(dEdxClusterRejectionFlagMask, int8_t, o2::gpu::GPUTPCGMMergedTrackHit::flagEdge, "", 0, "OR mask of TPC flags that will reject the cluster in dEdx")
+AddOptionRTC(dEdxClusterRejectionFlagMaskAlt, int8_t, o2::gpu::GPUTPCGMMergedTrackHit::flagEdge, "", 0, "OR mask of TPC flags that will reject the cluster in alternative dEdx")
 AddOptionRTC(rejectEdgeClustersInSeeding, int8_t, 0, "", 0, "Reject edge clusters based on uncorrected track Y during seeding")
 AddOptionRTC(rejectEdgeClustersInTrackFit, int8_t, 0, "", 0, "Reject edge clusters based on uncorrected track Y during track fit")
 AddOptionArray(PID_remap, int8_t, 9, (0, 1, 2, 3, 4, 5, 6, 7, 8), "", 0, "Remap Ipid to PID_reamp[Ipid] (no remap if<0)") // BUG: CUDA cannot yet hand AddOptionArrayRTC
 AddHelp("help", 'h')
 EndConfig()
 
+// Reconstruction parameters for TRD, no bool in here !!!
 BeginSubConfig(GPUSettingsRecTRD, trd, configStandalone.rec, "RECTRD", 0, "Reconstruction settings", rec_trd)
 AddOptionRTC(minTrackPt, float, .5f, "", 0, "Min Pt for tracks to be propagated through the TRD")
 AddOptionRTC(maxChi2, float, 20.f, "", 0, "Max chi2 for TRD tracklets to be matched to a track")
@@ -181,11 +189,12 @@ AddOptionRTC(pileupBwdNBC, uint8_t, 80, "", 0, "Pre-trigger Pile-up integration 
 AddHelp("help", 'h')
 EndConfig()
 
-// Dynamic settings, must NOT use AddOptionRTC(...) !!!
+// Dynamic reconstruction parameters, no bool in here!!!, must NOT use AddOptionRTC(...) !!!
 BeginSubConfig(GPUSettingsRecDynamic, dyn, configStandalone.rec, "RECDYN", 0, "Reconstruction settings", rec_dyn)
 AddHelp("help", 'h')
 EndConfig()
 
+// Global reconstruction parameters, no bool in here !!!
 BeginSubConfig(GPUSettingsRec, rec, configStandalone, "REC", 0, "Reconstruction settings", rec)
 AddOptionRTC(maxTrackQPtB5, float, 1.f / GPUCA_MIN_TRACK_PTB5_DEFAULT, "", 0, "required max Q/Pt (==min Pt) of tracks")
 AddOptionRTC(fwdTPCDigitsAsClusters, uint8_t, 0, "", 0, "Forward TPC digits as clusters (if they pass the ZS threshold)")
@@ -202,19 +211,33 @@ AddHelp("help", 'h')
 EndConfig()
 
 #ifndef __OPENCL__
-// Settings steering the processing once the device was selected, only available on the host
+// Parameters that might affect the RTC code (if these change, the cache cannot be used)
 BeginSubConfig(GPUSettingsProcessingRTC, rtc, configStandalone.proc, "RTC", 0, "Processing settings", proc_rtc)
 AddOption(cacheOutput, bool, false, "", 0, "Cache RTC compilation results")
 AddOption(optConstexpr, bool, true, "", 0, "Replace constant variables by static constexpr expressions")
 AddOption(optSpecialCode, int8_t, -1, "", 0, "Insert GPUCA_RTC_SPECIAL_CODE special code during RTC")
+AddOption(deterministic, bool, false, "", 0, "Compile RTC in deterministic mode, with NO_FAST_MATH flags and GPUCA_DETERMINISTIC_MODE define")
 AddOption(compilePerKernel, bool, true, "", 0, "Run one RTC compilation per kernel")
 AddOption(enable, bool, false, "", 0, "Use RTC to optimize GPU code")
-AddOption(runTest, int32_t, 0, "", 0, "Do not run the actual benchmark, but just test RTC compilation (1 full test, 2 test only compilation)")
-AddOption(cacheMutex, bool, true, "", 0, "Use a file lock to serialize access to the cache folder")
-AddOption(ignoreCacheValid, bool, false, "", 0, "If set, allows to use RTC cached code files even if they are not valid for the current source code / parameters")
 AddHelp("help", 'h')
 EndConfig()
 
+// Technical parameters for RunTimeCompilation, which do not change the RTC code
+BeginSubConfig(GPUSettingsProcessingRTCtechnical, rtctech, configStandalone.proc, "RTCTECH", 0, "Processing settings", proc_rtctech)
+AddOption(runTest, int32_t, 0, "", 0, "Do not run the actual benchmark, but just test RTC compilation (1 full test, 2 test only compilation)")
+AddOption(cacheMutex, bool, true, "", 0, "Use a file lock to serialize access to the cache folder")
+AddOption(ignoreCacheValid, bool, false, "", 0, "If set, allows to use RTC cached code files even if they are not valid for the current source code / parameters")
+AddOption(printLaunchBounds, bool, false, "", 0, "Print launch bounds used for RTC code as debugging option")
+AddOption(allowOptimizedSlaveReconstruction, bool, false, "", 0, "Allow RTC with slave GPUReconstruction instances with optConstexpr and optSpecialcode")
+AddOption(cacheFolder, std::string, "./rtccache/", "", 0, "Folder in which the cache file is stored")
+AddOption(prependCommand, std::string, "", "", 0, "Prepend RTC compilation commands by this string")
+AddOption(overrideArchitecture, std::string, "", "", 0, "Override arhcitecture part of RTC compilation command line") // Part of cmdLine, so checked against the cache
+AddOption(loadLaunchBoundsFromFile, std::string, "", "", 0, "Load a parameter object containing the launch bounds from a file")
+AddOption(keepTempFiles, bool, false, "", 0, "Keep temporary source and object files")
+AddHelp("help", 'h')
+EndConfig()
+
+// Parameters that steer reconstruction that do not go to the device, or only in derrived form.
 BeginSubConfig(GPUSettingsProcessingParam, param, configStandalone.proc, "PARAM", 0, "Processing settings", proc_param)
 AddOptionArray(tpcErrorParamY, float, 4, (0.06f, 0.24f, 0.12f, 0.1f), "", 0, "TPC Cluster Y Error Parameterization")
 AddOptionArray(tpcErrorParamZ, float, 4, (0.06f, 0.24f, 0.15f, 0.1f), "", 0, "TPC Cluster Z Error Parameterization")
@@ -222,6 +245,53 @@ AddOption(tpcTriggerHandling, bool, true, "", 0, "Enable TPC trigger handling")
 AddHelp("help", 'h')
 EndConfig()
 
+// Settings steering the processing of NN Clusterization
+BeginSubConfig(GPUSettingsProcessingNNclusterizer, nn, configStandalone.proc, "NN", 0, "Processing settings for neural network clusterizer", proc_nn)
+AddOption(applyNNclusterizer, int, 0, "", 0, "(bool, default = 0), if the neural network clusterizer should be used.")
+AddOption(nnInferenceDevice, std::string, "CPU", "", 0, "(std::string) Specify inference device (cpu (default), rocm, cuda)")
+AddOption(nnInferenceDeviceId, unsigned int, 0, "", 0, "(unsigned int) Specify inference device id")
+AddOption(nnInferenceAllocateDevMem, int, 0, "", 0, "(bool, default = 0), if the device memory should be allocated for inference")
+AddOption(nnInferenceInputDType, std::string, "FP32", "", 0, "(std::string) Specify the datatype for which inference is performed (FP32: default, fp16)") // fp32 or fp16
+AddOption(nnInferenceOutputDType, std::string, "FP32", "", 0, "(std::string) Specify the datatype for which inference is performed (fp32: default, fp16)") // fp32 or fp16
+AddOption(nnInferenceIntraOpNumThreads, int, 1, "", 0, "Number of threads used to evaluate one neural network (ONNX: SetIntraOpNumThreads). 0 = auto-detect, can lead to problems on SLURM systems.")
+AddOption(nnInferenceInterOpNumThreads, int, 1, "", 0, "Number of threads used to evaluate one neural network (ONNX: SetInterOpNumThreads). 0 = auto-detect, can lead to problems on SLURM systems.")
+AddOption(nnInferenceEnableOrtOptimization, unsigned int, 99, "", 0, "Enables graph optimizations in ONNX Runtime. Can be [0, 1, 2, 99] -> see https://github.com/microsoft/onnxruntime/blob/3f71d637a83dc3540753a8bb06740f67e926dc13/include/onnxruntime/core/session/onnxruntime_c_api.h#L347")
+AddOption(nnInferenceUseDeterministicCompute, int, 0, "", 0, "Enables deterministic compute in ONNX Runtime were possible. Can be [0, 1] -> see https://github.com/microsoft/onnxruntime/blob/3b97d79b3c12dbf93aa0d563f345714596dc8ab6/onnxruntime/core/framework/session_options.h#L208")
+AddOption(nnInferenceOrtProfiling, int, 0, "", 0, "Enables profiling of model execution in ONNX Runtime")
+AddOption(nnInferenceOrtProfilingPath, std::string, ".", "", 0, "If nnInferenceOrtProfiling is set, the path to store the profiling data")
+AddOption(nnInferenceVerbosity, int, 1, "", 0, "0: No messages; 1: Warnings; 2: Warnings + major debugs; >3: All debugs")
+AddOption(nnClusterizerAddIndexData, int, 1, "", 0, "If normalized index data (sector, row, pad), should be appended to the input")
+AddOption(nnClusterizerSizeInputRow, int, 3, "", 0, "Size of the input to the NN (currently calcualted as (length-1)/2")
+AddOption(nnClusterizerSizeInputPad, int, 3, "", 0, "Size of the input to the NN (currently calcualted as (length-1)/2")
+AddOption(nnClusterizerSizeInputTime, int, 3, "", 0, "Size of the input to the NN (currently calcualted as (length-1)/2")
+AddOption(nnClusterizerUseCfRegression, int, 0, "", 0, "(bool, default = false) If true, use the regression from the native clusterizer and not the NN")
+AddOption(nnClusterizerApplyCfDeconvolution, int, 0, "", 0, "Applies the CFDeconvolution kernel before the digits to the network are filled")
+AddOption(nnClusterizerBatchedMode, unsigned int, 1, "", 0, "(int, default = 1) If >1, the NN is evaluated on batched input of size specified in this variable")
+AddOption(nnClusterizerVerbosity, int, -1, "", 0, "(int, default = -1) If >0, logging messages of the clusterizer will be displayed")
+AddOption(nnClusterizerBoundaryFillValue, int, -1, "", 0, "Fill value for the boundary of the input to the NN")
+AddOption(nnClusterizerApplyNoiseSuppression, int, 1, "", 0, "Applies the NoiseSuppression kernel before the digits to the network are filled")
+AddOption(nnClusterizerSetDeconvolutionFlags, int, 1, "", 0, "Runs the deconvolution kernel without overwriting the charge in order to make cluster-to-track attachment identical to heuristic CF")
+AddOption(nnClassificationPath, std::string, "network_class.onnx", "", 0, "The classification network path")
+AddOption(nnClassThreshold, float, 0.5, "", 0, "The cutoff at which clusters will be accepted / rejected.")
+AddOption(nnRegressionPath, std::string, "network_reg.onnx", "", 0, "The regression network path")
+AddOption(nnSigmoidTrafoClassThreshold, int, 1, "", 0, "If true (default), then the classification threshold is transformed by an inverse sigmoid function. This depends on how the network was trained (with a sigmoid as acitvation function in the last layer or not).")
+AddOption(nnEvalMode, std::string, "c1:r1", "", 0, "Concatention of modes, e.g. c1:r1 (classification class 1, regression class 1)")
+AddOption(nnClusterizerUseClassification, int, 1, "", 0, "If 1, the classification output of the network is used to select clusters, else only the regression output is used and no clusters are rejected by classification")
+AddOption(nnClusterizerForceGpuInputFill, int, 0, "", 0, "Forces to use the fillInputNNGPU function")
+// CCDB
+AddOption(nnLoadFromCCDB, int, 0, "", 0, "If 1 networks are fetched from ccdb, else locally")
+AddOption(nnLocalFolder, std::string, ".", "", 0, "Local folder in which the networks will be fetched")
+AddOption(nnCCDBURL, std::string, "http://ccdb-test.cern.ch:8080", "", 0, "The CCDB URL from where the network files are fetched")
+AddOption(nnCCDBPath, std::string, "Users/c/csonnabe/TPC/Clusterization", "", 0, "Folder path containing the networks")
+AddOption(nnCCDBWithMomentum, int, 1, "", 0, "Distinguishes between the network with and without momentum output for the regression")
+AddOption(nnCCDBClassificationLayerType, std::string, "FC", "", 0, "Distinguishes between network with different layer types. Options: FC, CNN")
+AddOption(nnCCDBRegressionLayerType, std::string, "CNN", "", 0, "Distinguishes between network with different layer types. Options: FC, CNN")
+AddOption(nnCCDBBeamType, std::string, "PbPb", "", 0, "Distinguishes between networks trained for different beam types. Options: PbPb, pp")
+AddOption(nnCCDBInteractionRate, int, 50, "", 0, "Distinguishes between networks for different interaction rates [kHz].")
+AddHelp("help", 'h')
+EndConfig()
+
+// Settings steering the processing once the device was selected, only available on the host
 BeginSubConfig(GPUSettingsProcessing, proc, configStandalone, "PROC", 0, "Processing settings", proc)
 AddOption(deviceNum, int32_t, -1, "gpuDevice", 0, "Set GPU device to use (-1: automatic, -2: for round-robin usage in timeslice-pipeline)")
 AddOption(gpuDeviceOnly, bool, false, "", 0, "Use only GPU as device (i.e. no CPU for OpenCL)")
@@ -231,10 +301,11 @@ AddOption(trdNCandidates, int32_t, 3, "", 0, "Number of branching track candidat
 AddOption(trdTrackModelO2, bool, false, "", 0, "Use O2 track model instead of GPU track model for TRD tracking")
 AddOption(debugLevel, int32_t, -1, "debug", 'd', "Set debug level (-2 = silent, -1 = autoselect (-2 for O2, 0 for standalone))")
 AddOption(allocDebugLevel, int32_t, 0, "allocDebug", 0, "Some debug output for memory allocations (without messing with normal debug level)")
-AddOption(debugMask, int32_t, 262143, "", 0, "Mask for debug output dumps to file")
+AddOption(debugMask, uint32_t, (1 << 18) - 1, "debugMask", 0, "Mask for debug output dumps to file")
+AddOption(debugLogSuffix, std::string, "", "debugSuffix", 0, "Suffix for debug log files with --debug 6")
 AddOption(serializeGPU, int8_t, 0, "", 0, "Synchronize after each kernel call (bit 1) and DMA transfer (bit 2) and identify failures")
 AddOption(recoTaskTiming, bool, 0, "", 0, "Perform summary timing after whole reconstruction tasks")
-AddOption(deterministicGPUReconstruction, int32_t, -1, "", 0, "Make CPU and GPU debug output comparable (sort / skip concurrent parts), -1 = automatic if debugLevel >= 6")
+AddOption(deterministicGPUReconstruction, int32_t, -1, "", 0, "Make CPU and GPU debug output comparable (sort / skip concurrent parts), -1 = automatic if debugLevel >= 6", def(1))
 AddOption(showOutputStat, bool, false, "", 0, "Print some track output statistics")
 AddOption(runCompressionStatistics, bool, false, "compressionStat", 0, "Run statistics and verification for cluster compression")
 AddOption(resetTimers, int8_t, 1, "", 0, "Reset timers every event")
@@ -246,6 +317,7 @@ AddOption(memoryAllocationStrategy, int8_t, 0, "", 0, "Memory Allocation Strageg
 AddOption(forceMemoryPoolSize, uint64_t, 1, "memSize", 0, "Force size of allocated GPU / page locked host memory", min(0ul))
 AddOption(forceHostMemoryPoolSize, uint64_t, 0, "hostMemSize", 0, "Force size of allocated host page locked host memory (overriding memSize)", min(0ul))
 AddOption(memoryScalingFactor, float, 1.f, "", 0, "Factor to apply to all memory scalers")
+AddOption(memoryScalingFuzz, uint64_t, 0, "", 0, "Fuzz the memoryScalingFactor (0 disable, 1 enable, >1 set seed", def(1))
 AddOption(conservativeMemoryEstimate, bool, false, "", 0, "Use some more conservative defaults for larger buffers during TPC processing")
 AddOption(tpcInputWithClusterRejection, uint8_t, 0, "", 0, "Indicate whether the TPC input is CTF data with cluster rejection, to tune buffer estimations")
 AddOption(forceMaxMemScalers, uint64_t, 0, "", 0, "Force using the maximum values for all buffers, Set a value n > 1 to rescale all maximums to a memory size of n")
@@ -257,9 +329,6 @@ AddOption(autoAdjustHostThreads, bool, true, "", 0, "Auto-adjust number of OMP t
 AddOption(nStreams, int8_t, 8, "", 0, "Number of GPU streams / command queues")
 AddOption(nTPCClustererLanes, int8_t, -1, "", 0, "Number of TPC clusterers that can run in parallel (-1 = autoset)")
 AddOption(overrideClusterizerFragmentLen, int32_t, -1, "", 0, "Force the cluster max fragment len to a certain value (-1 = autodetect)")
-AddOption(trackletSelectorSectors, int8_t, -1, "", 0, "Number of sectors to processes in parallel at max")
-AddOption(trackletConstructorInPipeline, int8_t, -1, "", 0, "Run tracklet constructor in the pipeline")
-AddOption(trackletSelectorInPipeline, int8_t, -1, "", 0, "Run tracklet selector in the pipeline")
 AddOption(delayedOutput, bool, true, "", 0, "Delay output to be parallel to track fit")
 AddOption(mergerSortTracks, int8_t, -1, "", 0, "Sort track indizes for GPU track fit")
 AddOption(alternateBorderSort, int8_t, -1, "", 0, "Alternative implementation for sorting of border tracks")
@@ -291,17 +360,26 @@ AddOption(tpcDownscaledEdx, uint8_t, 0, "", 0, "If != 0, downscale dEdx processi
 AddOption(tpcMaxAttachedClustersPerSectorRow, uint32_t, 51000, "", 0, "Maximum number of TPC attached clusters which can be decoded per SectorRow")
 AddOption(tpcUseOldCPUDecoding, bool, false, "", 0, "Enable old CPU-based TPC decoding")
 AddOption(tpcApplyCFCutsAtDecoding, bool, false, "", 0, "Apply cluster cuts from clusterization during decoding of compressed clusters")
-AddOption(tpcApplyDebugClusterFilter, bool, false, "", 0, "Apply custom cluster filter of GPUTPCClusterFilter class")
-AddOption(RTCcacheFolder, std::string, "./rtccache/", "", 0, "Folder in which the cache file is stored")
-AddOption(RTCprependCommand, std::string, "", "", 0, "Prepend RTC compilation commands by this string")
-AddOption(RTCoverrideArchitecture, std::string, "", "", 0, "Override arhcitecture part of RTC compilation command line")
+AddOption(tpcApplyClusterFilterOnCPU, uint8_t, 0, "", 0, "Apply custom cluster filter of GPUTPCClusterFilter class, 0: off, 1: debug, 2: PbPb23")
 AddOption(oclPlatformNum, int32_t, -1, "", 0, "Platform to use, in case the backend provides multiple platforms (OpenCL only, -1 = auto-select, -2 query all platforms (also incompatible))")
 AddOption(oclCompileFromSources, bool, false, "", 0, "Compile OpenCL binary from included source code instead of using included spirv code")
 AddOption(oclOverrideSourceBuildFlags, std::string, "", "", 0, "Override OCL build flags for compilation from source, put a space for empty options")
 AddOption(printSettings, bool, false, "", 0, "Print all settings when initializing")
+AddOption(tpcFreeAllocatedMemoryAfterProcessing, bool, false, "", 0, "Clean all memory allocated by TPC when TPC processing done, only data written to external output resources will remain")
+AddOption(debugOnFailure, int32_t, 0, "", 0, "Dump raw data in case an error occured, bit 1 enables all dumps, otherwise bitmask for: 2 = signal, 3 = GPUErrorCode", def(1))
+AddOption(debugOnFailureSignalMask, uint32_t, (uint32_t)-1, "", 0, "Mask of signals that trigger debug / dump")
+AddOption(debugOnFailureErrorMask, uint64_t, (uint64_t)-1, "", 0, "Mask of GPUCA_ERRORS that trigger debug / dump")
+AddOption(debugOnFailureNoForwardSignal, bool, false, "", 0, "Do not forward signal to original signal handler")
+AddOption(debugOnFailureMaxN, uint32_t, 1, "", 0, "Max number of times to run the debug / dump")
+AddOption(debugOnFailureMaxFiles, uint32_t, 0, "", 0, "Max number of files to have in the target folder")
+AddOption(debugOnFailureMaxSize, uint32_t, 0, "", 0, "Max size of existing dumps in the target folder in GB")
+AddOption(debugOnFailureDirectory, std::string, ".", "", 0, "Target folder for debug / dump")
+AddOption(amdMI100SerializationWorkaround, bool, false, "", 0, "Enable workaround that mitigates MI100 serialization bug")
 AddVariable(eventDisplay, o2::gpu::GPUDisplayFrontendInterface*, nullptr)
 AddSubConfig(GPUSettingsProcessingRTC, rtc)
+AddSubConfig(GPUSettingsProcessingRTCtechnical, rtctech)
 AddSubConfig(GPUSettingsProcessingParam, param)
+AddSubConfig(GPUSettingsProcessingNNclusterizer, nn)
 AddHelp("help", 'h')
 EndConfig()
 #endif // __OPENCL__
@@ -437,6 +515,9 @@ AddOption(shipToQC, bool, false, "", 0, "Do not write output files but ship hist
 AddOption(shipToQCAsCanvas, bool, false, "", 0, "Send TCanvases with full layout to QC instead of individual histograms")
 AddOption(clusterRejectionHistograms, bool, false, "", 0, "Fill histograms with cluster rejection statistics")
 AddOption(histMaxNClusters, uint32_t, 500000000, "", 0, "Maximum number of clusters in rejection histograms")
+AddOption(minNClFindable, uint32_t, 70, "", 0, "Minimum number of (weighted) MC clusters for a track to count as findable")
+AddOption(minNClEff, uint32_t, 10, "", 0, "Minimum number of (weighted) MC clusters for a track to contribute to all-tracks efficiency histogramm")
+AddOption(minNClRes, uint32_t, 40, "", 0, "Minimum number of (weighted) MC clusters for a track to contribute to resolution histogram")
 AddShortcut("compare", 0, "--QAinput", "Compare QA histograms", "--qa", "--QAinputHistogramsOnly")
 AddHelp("help", 'h')
 EndConfig()
@@ -483,7 +564,8 @@ AddOption(nEvents, int32_t, -1, "", 'n', "Number of events to process (-1; all)"
 AddOption(runs, int32_t, 1, "runs", 'r', "Number of iterations to perform (repeat each event)", min(0))
 AddOption(runs2, int32_t, 1, "runsExternal", 0, "Number of iterations to perform (repeat full processing)", min(1))
 AddOption(runsInit, int32_t, 1, "", 0, "Number of initial iterations excluded from average", min(0))
-AddOption(eventsDir, const char*, "pp", "events", 'e', "Directory with events to process", message("Reading events from Directory events/%s"))
+AddOption(eventsDir, const char*, "pp", "events", 'e', "Directory with events to process", message("Reading events from Directory %s"))
+AddOption(absoluteEventsDir, bool, false, "", 0, "Events directory is absolute, and not inside './events/'")
 AddOption(noEvents, bool, false, "", 0, "Run without data (e.g. for field visualization)")
 AddOption(eventDisplay, int32_t, 0, "display", 'd', "Show standalone event display", def(1))
 AddOption(eventGenerator, bool, false, "", 0, "Run event generator")
@@ -492,7 +574,7 @@ AddOption(outputcontrolmem, uint64_t, 0, "outputMemory", 0, "Use predefined outp
 AddOption(inputcontrolmem, uint64_t, 0, "inputMemory", 0, "Use predefined input buffer of this size", min(0ul), message("Using %s bytes as input memory"))
 AddOption(cpuAffinity, int32_t, -1, "", 0, "Pin CPU affinity to this CPU core", min(-1))
 AddOption(fifoScheduler, bool, false, "", 0, "Use FIFO realtime scheduler", message("Setting FIFO scheduler: %s"))
-AddOption(fpe, bool, true, "", 0, "Trap on floating point exceptions")
+AddOption(fpe, int8_t, -1, "", 0, "Trap on floating point exceptions (-1 = if no ffast-math)")
 AddOption(flushDenormals, bool, true, "", 0, "Enable FTZ and DAZ (Flush all denormals to zero)")
 AddOption(solenoidBzNominalGPU, float, -1e6f, "", 0, "Field strength of solenoid Bz in kGaus")
 AddOption(constBz, bool, false, "", 0, "Force constand Bz")
@@ -578,13 +660,9 @@ EndConfig()
 
 // Derrived parameters used in GPUParam
 BeginHiddenConfig(GPUSettingsParam, param)
-AddVariableRTC(dAlpha, float, 0.f)                 // angular size
-AddVariableRTC(assumeConstantBz, int8_t, 0)   // Assume a constant magnetic field
-AddVariableRTC(toyMCEventsFlag, int8_t, 0)    // events were build with home-made event generator
 AddVariableRTC(continuousTracking, int8_t, 0) // Continuous tracking, estimate bz and errors for abs(z) = 125cm during seeding
 AddVariableRTC(dodEdx, int8_t, 0)             // Do dEdx computation
 AddVariableRTC(earlyTpcTransform, int8_t, 0)  // do Early TPC transformation
-AddVariableRTC(debugLevel, int8_t, 0)         // Debug level
 EndConfig()
 
 EndNamespace() // gpu

@@ -15,6 +15,7 @@
 #include "Framework/RootArrowFilesystem.h"
 #include "Framework/AnalysisDataModelHelpers.h"
 #include "Framework/Output.h"
+#include "Framework/Signpost.h"
 #include "Headers/DataHeader.h"
 #include "Framework/TableTreeHelpers.h"
 #include "Monitoring/Tags.h"
@@ -40,6 +41,9 @@
 
 #include <utility>
 #endif
+
+#include <dlfcn.h>
+O2_DECLARE_DYNAMIC_LOG(reader_memory_dump);
 
 namespace o2::framework
 {
@@ -110,7 +114,7 @@ void DataInputDescriptor::addFileNameHolder(FileNameHolder* fn)
   // remove leading file:// from file name
   if (fn->fileName.rfind("file://", 0) == 0) {
     fn->fileName.erase(0, 7);
-  } else if (!mAlienSupport && fn->fileName.rfind("alien://", 0) == 0) {
+  } else if (!mAlienSupport && fn->fileName.rfind("alien://", 0) == 0 && !gGrid) {
     LOGP(debug, "AliEn file requested. Enabling support.");
     TGrid::Connect("alien://");
     mAlienSupport = true;
@@ -142,6 +146,7 @@ bool DataInputDescriptor::setFile(int counter)
     throw std::runtime_error(fmt::format("Couldn't open file \"{}\"!", filename));
   }
   rootFS = std::dynamic_pointer_cast<TFileFileSystem>(mCurrentFilesystem);
+  printFileOpening();
 
   // get the parent file map if exists
   mParentFileMap = (TMap*)rootFS->GetFile()->Get("parentFiles"); // folder name (DF_XXX) --> parent file (absolute path)
@@ -293,6 +298,21 @@ int DataInputDescriptor::getReadTimeFramesInFile(int counter)
   return std::count(list.begin(), list.end(), true);
 }
 
+void DataInputDescriptor::printFileOpening()
+{
+  auto rootFS = std::dynamic_pointer_cast<TFileFileSystem>(mCurrentFilesystem);
+  auto f = dynamic_cast<TFile*>(rootFS->GetFile());
+  std::string monitoringInfo(fmt::format("lfn={},size={}", f->GetName(), f->GetSize()));
+#if __has_include(<TJAlienFile.h>)
+  auto alienFile = dynamic_cast<TJAlienFile*>(f);
+  if (alienFile) {
+    monitoringInfo += fmt::format(",se={},open_time={:.1f}", alienFile->GetSE(), alienFile->GetElapsed());
+  }
+#endif
+  mMonitoring->send(o2::monitoring::Metric{monitoringInfo, "aod-file-open-info"}.addTag(o2::monitoring::tags::Key::Subsystem, o2::monitoring::tags::Value::DPL));
+  LOGP(info, "Opening file: {}", monitoringInfo);
+}
+
 void DataInputDescriptor::printFileStatistics()
 {
   int64_t wait_time = (int64_t)uv_hrtime() - (int64_t)mCurrentFileStartedAt - (int64_t)mIOTime;
@@ -383,18 +403,53 @@ int DataInputDescriptor::findDFNumber(int file, std::string dfName)
   return it - dfList.begin();
 }
 
+struct CalculateDelta {
+  CalculateDelta(uint64_t& target)
+    : mTarget(target)
+  {
+    start = uv_hrtime();
+  }
+  ~CalculateDelta()
+  {
+    if (!active) {
+      return;
+    }
+    O2_SIGNPOST_ACTION(reader_memory_dump, [](void*) {
+      void (*dump_)(const char*);
+      if (void* sym = dlsym(nullptr, "igprof_dump_now")) {
+        dump_ = __extension__(void (*)(const char*)) sym;
+        if (dump_) {
+          std::string filename = fmt::format("reader-memory-dump-{}.gz", uv_hrtime());
+          dump_(filename.c_str());
+        }
+      }
+    });
+    mTarget += (uv_hrtime() - start);
+  }
+
+  void deactivate() {
+    active = false;
+  }
+
+  bool active = true;
+  uint64_t& mTarget;
+  uint64_t start;
+  uint64_t stop;
+};
+
 bool DataInputDescriptor::readTree(DataAllocator& outputs, header::DataHeader dh, int counter, int numTF, std::string treename, size_t& totalSizeCompressed, size_t& totalSizeUncompressed)
 {
-  auto ioStart = uv_hrtime();
-
+  CalculateDelta t(mIOTime);
   auto folder = getFileFolder(counter, numTF);
   if (!folder.filesystem()) {
+    t.deactivate();
     return false;
   }
 
   auto rootFS = std::dynamic_pointer_cast<TFileFileSystem>(folder.filesystem());
 
   if (!rootFS) {
+    t.deactivate();
     throw std::runtime_error(fmt::format(R"(Not a TFile filesystem!)"));
   }
   // FIXME: Ugly. We should detect the format from the treename, good enough for now.
@@ -416,6 +471,19 @@ bool DataInputDescriptor::readTree(DataAllocator& outputs, header::DataHeader dh
   // FIXME: we should distinguish between an actually missing object and one which has a non compatible
   // format.
   if (!format) {
+    t.deactivate();
+    LOGP(debug, "Could not find tree {}. Trying in parent file.", fullpath.path());
+    auto parentFile = getParentFile(counter, numTF, treename);
+    if (parentFile != nullptr) {
+      int parentNumTF = parentFile->findDFNumber(0, folder.path());
+      if (parentNumTF == -1) {
+        auto parentRootFS = std::dynamic_pointer_cast<TFileFileSystem>(parentFile->mCurrentFilesystem);
+        throw std::runtime_error(fmt::format(R"(DF {} listed in parent file map but not found in the corresponding file "{}")", folder.path(), parentRootFS->GetFile()->GetName()));
+      }
+      // first argument is 0 as the parent file object contains only 1 file
+      return parentFile->readTree(outputs, dh, 0, parentNumTF, treename, totalSizeCompressed, totalSizeUncompressed);
+    }
+    auto rootFS = std::dynamic_pointer_cast<TFileFileSystem>(mCurrentFilesystem);
     throw std::runtime_error(fmt::format(R"(Couldn't get TTree "{}" from "{}". Please check https://aliceo2group.github.io/analysis-framework/docs/troubleshooting/#tree-not-found for more information.)", fullpath.path(), rootFS->GetFile()->GetName()));
   }
 
@@ -432,22 +500,6 @@ bool DataInputDescriptor::readTree(DataAllocator& outputs, header::DataHeader dh
 
   auto fragment = format->MakeFragment(fullpath, {}, *physicalSchema);
 
-  if (!fragment.ok()) {
-    LOGP(debug, "Could not find tree {}. Trying in parent file.", fullpath.path());
-    auto parentFile = getParentFile(counter, numTF, treename);
-    if (parentFile != nullptr) {
-      int parentNumTF = parentFile->findDFNumber(0, folder.path());
-      if (parentNumTF == -1) {
-        auto parentRootFS = std::dynamic_pointer_cast<TFileFileSystem>(parentFile->mCurrentFilesystem);
-        throw std::runtime_error(fmt::format(R"(DF {} listed in parent file map but not found in the corresponding file "{}")", folder.path(), parentRootFS->GetFile()->GetName()));
-      }
-      // first argument is 0 as the parent file object contains only 1 file
-      return parentFile->readTree(outputs, dh, 0, parentNumTF, treename, totalSizeCompressed, totalSizeUncompressed);
-    }
-    auto rootFS = std::dynamic_pointer_cast<TFileFileSystem>(mCurrentFilesystem);
-    throw std::runtime_error(fmt::format(R"(Couldn't get TTree "{}" from "{}". Please check https://aliceo2group.github.io/analysis-framework/docs/troubleshooting/#tree-not-found for more information.)", fullpath.path(), rootFS->GetFile()->GetName()));
-  }
-
   // create table output
   auto o = Output(dh);
 
@@ -459,8 +511,6 @@ bool DataInputDescriptor::readTree(DataAllocator& outputs, header::DataHeader dh
   //// fill the table
   f2b->setLabel(treename.c_str());
   f2b->fill(datasetSchema, format);
-
-  mIOTime += (uv_hrtime() - ioStart);
 
   return true;
 }
@@ -809,7 +859,8 @@ bool DataInputDirector::readTree(DataAllocator& outputs, header::DataHeader dh, 
     treename = aod::datamodel::getTreeName(dh);
   }
 
-  return didesc->readTree(outputs, dh, counter, numTF, treename, totalSizeCompressed, totalSizeUncompressed);
+  auto result = didesc->readTree(outputs, dh, counter, numTF, treename, totalSizeCompressed, totalSizeUncompressed);
+  return result;
 }
 
 void DataInputDirector::closeInputFiles()

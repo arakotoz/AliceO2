@@ -9,6 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 #include "Framework/CompilerBuiltins.h"
+#include "Framework/Lifetime.h"
 #include "Framework/TableBuilder.h"
 #include "Framework/TableTreeHelpers.h"
 #include "Framework/DataAllocator.h"
@@ -121,8 +122,12 @@ fair::mq::MessagePtr DataAllocator::headerMessageFromOutput(Output const& spec, 
   dh.runNumber = timingInfo.runNumber;
 
   DataProcessingHeader dph{timingInfo.timeslice, 1, timingInfo.creation};
-  static_cast<o2::header::BaseHeader&>(dph).flagsDerivedHeader |= timingInfo.keepAtEndOfStream ? DataProcessingHeader::KEEP_AT_EOS_FLAG : 0;
   auto& proxy = mRegistry.get<FairMQDeviceProxy>();
+  auto lifetime = proxy.getOutputRoute(routeIndex).matcher.lifetime;
+  static_cast<o2::header::BaseHeader&>(dph).flagsDerivedHeader |= timingInfo.keepAtEndOfStream ? DataProcessingHeader::KEEP_AT_EOS_FLAG : 0;
+  // Messages associated to sporatic output we always keep, since they are most likely histograms / condition
+  // objects which need to be kept at the end of stream.
+  static_cast<o2::header::BaseHeader&>(dph).flagsDerivedHeader |= (lifetime == Lifetime::Sporadic) ? DataProcessingHeader::KEEP_AT_EOS_FLAG : 0;
   auto* transport = proxy.getOutputTransport(routeIndex);
 
   auto channelAlloc = o2::pmr::getTransportAllocator(transport);
@@ -236,38 +241,6 @@ void DataAllocator::adopt(const Output& spec, LifetimeHolder<TableBuilder>& tb)
   /// To finalise this we write the table to the buffer.
   auto finalizer = [](std::shared_ptr<FairMQResizableBuffer> b) -> void {
     // Finalization not needed, as we do it using the LifetimeHolder callback
-  };
-
-  context.addBuffer(std::move(header), buffer, std::move(finalizer), routeIndex);
-}
-
-void DataAllocator::adopt(const Output& spec, LifetimeHolder<TreeToTable>& t2t)
-{
-  auto& timingInfo = mRegistry.get<TimingInfo>();
-  RouteIndex routeIndex = matchDataHeader(spec, timingInfo.timeslice);
-
-  auto header = headerMessageFromOutput(spec, routeIndex, o2::header::gSerializationMethodArrow, 0);
-  auto& context = mRegistry.get<ArrowContext>();
-
-  auto creator = [transport = context.proxy().getOutputTransport(routeIndex)](size_t s) -> std::unique_ptr<fair::mq::Message> {
-    return transport->CreateMessage(s);
-  };
-  auto buffer = std::make_shared<FairMQResizableBuffer>(creator);
-
-  t2t.callback = [buffer = buffer, transport = context.proxy().getOutputTransport(routeIndex)](TreeToTable& tree) {
-    // Serialization happens in here, so that we can
-    // get rid of the intermediate tree 2 table object, saving memory.
-    auto table = tree.finalize();
-    doWriteTable(buffer, table.get());
-    // deletion happens in the caller
-  };
-
-  /// To finalise this we write the table to the buffer.
-  /// FIXME: most likely not a great idea. We should probably write to the buffer
-  ///        directly in the TableBuilder, incrementally.
-  auto finalizer = [](std::shared_ptr<FairMQResizableBuffer> b) -> void {
-    // This is empty because we already serialised the object when
-    // the LifetimeHolder goes out of scope.
   };
 
   context.addBuffer(std::move(header), buffer, std::move(finalizer), routeIndex);

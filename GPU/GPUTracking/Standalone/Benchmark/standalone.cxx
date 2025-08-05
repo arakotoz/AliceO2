@@ -17,10 +17,23 @@
 #include "GPUReconstructionTimeframe.h"
 #include "GPUReconstructionConvert.h"
 #include "GPUChainTracking.h"
+#include "GPUChainTrackingGetters.inc"
 #include "GPUTPCDef.h"
 #include "GPUQA.h"
+#include "GPUParam.h"
 #include "display/GPUDisplayInterface.h"
 #include "genEvents.h"
+
+#include "TPCFastTransform.h"
+#include "CorrectionMapsHelper.h"
+#include "GPUTPCGMMergedTrack.h"
+#include "GPUSettings.h"
+#include "GPUConstantMem.h"
+
+#include "GPUO2DataTypes.h"
+#include "GPUChainITS.h"
+
+#include "DataFormatsTPC/CompressedClusters.h"
 
 #include <iostream>
 #include <fstream>
@@ -32,6 +45,7 @@
 #include <thread>
 #include <future>
 #include <atomic>
+#include <vector>
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -48,18 +62,6 @@
 #include "utils/qmaths_helpers.h"
 #include "utils/vecpod.h"
 
-#include "TPCFastTransform.h"
-#include "CorrectionMapsHelper.h"
-#include "GPUTPCGMMergedTrack.h"
-#include "GPUSettings.h"
-#include <vector>
-#if not(defined(__ARM_NEON) or defined(__aarch64__)) // ARM doesn't have SSE
-#include <xmmintrin.h>
-#endif
-
-#include "GPUO2DataTypes.h"
-#include "GPUChainITS.h"
-
 using namespace o2::gpu;
 
 // #define BROKEN_EVENTS
@@ -72,9 +74,10 @@ extern GPUSettingsStandalone configStandalone;
 GPUReconstruction *rec, *recAsync, *recPipeline;
 GPUChainTracking *chainTracking, *chainTrackingAsync, *chainTrackingPipeline;
 GPUChainITS *chainITS, *chainITSAsync, *chainITSPipeline;
+std::string eventsDir;
 void unique_ptr_aligned_delete(char* v)
 {
-  operator delete(v GPUCA_OPERATOR_NEW_ALIGNMENT);
+  operator delete(v, std::align_val_t(GPUCA_BUFFER_ALIGNMENT));
 }
 std::unique_ptr<char, void (*)(char*)> outputmemory(nullptr, unique_ptr_aligned_delete), outputmemoryPipeline(nullptr, unique_ptr_aligned_delete), inputmemory(nullptr, unique_ptr_aligned_delete);
 std::unique_ptr<GPUDisplayFrontendInterface> eventDisplay;
@@ -84,23 +87,6 @@ std::atomic<uint32_t> nIteration, nIterationEnd;
 
 std::vector<GPUTrackingInOutPointers> ioPtrEvents;
 std::vector<GPUChainTracking::InOutMemory> ioMemEvents;
-
-void SetCPUAndOSSettings()
-{
-#if not(defined(__ARM_NEON) or defined(__aarch64__)) // ARM doesn't have SSE
-#ifdef FE_DFL_DISABLE_SSE_DENORMS_ENV                // Flush and load denormals to zero in any case
-  fesetenv(FE_DFL_DISABLE_SSE_DENORMS_ENV);
-#else
-#ifndef _MM_FLUSH_ZERO_ON
-#define _MM_FLUSH_ZERO_ON 0x8000
-#endif
-#ifndef _MM_DENORMALS_ZERO_ON
-#define _MM_DENORMALS_ZERO_ON 0x0040
-#endif
-  _mm_setcsr(_mm_getcsr() | (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON));
-#endif
-#endif // ARM
-}
 
 int32_t ReadConfiguration(int argc, char** argv)
 {
@@ -142,7 +128,11 @@ int32_t ReadConfiguration(int argc, char** argv)
       return 1;
     }
   }
+#ifdef __FAST_MATH__
+  if (configStandalone.fpe == 1) {
+#else
   if (configStandalone.fpe) {
+#endif
     feenableexcept(FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW);
   }
   if (configStandalone.flushDenormals) {
@@ -158,7 +148,7 @@ int32_t ReadConfiguration(int argc, char** argv)
     printf("FIFO Scheduler setting not supported on Windows\n");
     return 1;
   }
-  if (configStandalone.fpe) {
+  if (configStandalone.fpe == 1) {
     printf("FPE not supported on Windows\n");
     return 1;
   }
@@ -233,24 +223,32 @@ int32_t ReadConfiguration(int argc, char** argv)
     configStandalone.rec.tpc.nWaysOuter = 1;
     configStandalone.rec.tpc.trackReferenceX = 83;
     configStandalone.proc.outputSharedClusterMap = 1;
+    configStandalone.proc.clearO2OutputFromGPU = 1;
+    configStandalone.QA.clusterRejectionHistograms = 1;
+    configStandalone.proc.tpcIncreasedMinClustersPerRow = 500000;
+    configStandalone.proc.ignoreNonFatalGPUErrors = 1;
+    // TODO: rundEdx=1
+    // GPU_proc.qcRunFraction=$TPC_TRACKING_QC_RUN_FRACTION;"
+    // [[ $CTFINPUT == 1 ]] && GPU_CONFIG_KEY+="GPU_proc.tpcInputWithClusterRejection=1;"
+    // double pipeline / rtc
   }
 
   if (configStandalone.outputcontrolmem) {
     bool forceEmptyMemory = getenv("LD_PRELOAD") && strstr(getenv("LD_PRELOAD"), "valgrind") != nullptr;
-    outputmemory.reset((char*)operator new(configStandalone.outputcontrolmem GPUCA_OPERATOR_NEW_ALIGNMENT));
+    outputmemory.reset((char*)operator new(configStandalone.outputcontrolmem, std::align_val_t(GPUCA_BUFFER_ALIGNMENT)));
     if (forceEmptyMemory) {
       printf("Valgrind detected, emptying GPU output memory to avoid false positive undefined reads");
       memset(outputmemory.get(), 0, configStandalone.outputcontrolmem);
     }
     if (configStandalone.proc.doublePipeline) {
-      outputmemoryPipeline.reset((char*)operator new(configStandalone.outputcontrolmem GPUCA_OPERATOR_NEW_ALIGNMENT));
+      outputmemoryPipeline.reset((char*)operator new(configStandalone.outputcontrolmem, std::align_val_t(GPUCA_BUFFER_ALIGNMENT)));
       if (forceEmptyMemory) {
         memset(outputmemoryPipeline.get(), 0, configStandalone.outputcontrolmem);
       }
     }
   }
   if (configStandalone.inputcontrolmem) {
-    inputmemory.reset((char*)operator new(configStandalone.inputcontrolmem GPUCA_OPERATOR_NEW_ALIGNMENT));
+    inputmemory.reset((char*)operator new(configStandalone.inputcontrolmem, std::align_val_t(GPUCA_BUFFER_ALIGNMENT)));
   }
 
   configStandalone.proc.showOutputStat = true;
@@ -288,21 +286,19 @@ int32_t ReadConfiguration(int argc, char** argv)
 int32_t SetupReconstruction()
 {
   if (!configStandalone.eventGenerator) {
-    char filename[256];
-    snprintf(filename, 256, "events/%s/", configStandalone.eventsDir);
     if (configStandalone.noEvents) {
-      configStandalone.eventsDir = "NON_EXISTING";
+      eventsDir = "NON_EXISTING";
       configStandalone.rundEdx = false;
-    } else if (rec->ReadSettings(filename)) {
+    } else if (rec->ReadSettings(eventsDir.c_str())) {
       printf("Error reading event config file\n");
       return 1;
     }
-    printf("Read event settings from dir %s (solenoidBz: %f, home-made events %d, constBz %d, maxTimeBin %d)\n", filename, rec->GetGRPSettings().solenoidBzNominalGPU, (int32_t)rec->GetGRPSettings().homemadeEvents, (int32_t)rec->GetGRPSettings().constBz, rec->GetGRPSettings().grpContinuousMaxTimeBin);
+    printf("Read event settings from dir %s (solenoidBz: %f, constBz %d, maxTimeBin %d)\n", eventsDir.c_str(), rec->GetGRPSettings().solenoidBzNominalGPU, (int32_t)rec->GetGRPSettings().constBz, rec->GetGRPSettings().grpContinuousMaxTimeBin);
     if (configStandalone.testSyncAsync) {
-      recAsync->ReadSettings(filename);
+      recAsync->ReadSettings(eventsDir.c_str());
     }
     if (configStandalone.proc.doublePipeline) {
-      recPipeline->ReadSettings(filename);
+      recPipeline->ReadSettings(eventsDir.c_str());
     }
   }
 
@@ -316,9 +312,6 @@ int32_t SetupReconstruction()
   procSet = configStandalone.proc;
   GPURecoStepConfiguration steps;
 
-  if (configStandalone.eventGenerator) {
-    grp.homemadeEvents = true;
-  }
   if (configStandalone.solenoidBzNominalGPU != -1e6f) {
     grp.solenoidBzNominalGPU = configStandalone.solenoidBzNominalGPU;
   }
@@ -416,7 +409,6 @@ int32_t SetupReconstruction()
   }
 
   steps.outputs.clear();
-  steps.outputs.setBits(GPUDataTypes::InOutType::TPCSectorTracks, false);
   steps.outputs.setBits(GPUDataTypes::InOutType::TPCMergedTracks, steps.steps.isSet(GPUDataTypes::RecoStep::TPCMerging));
   steps.outputs.setBits(GPUDataTypes::InOutType::TPCCompressedClusters, steps.steps.isSet(GPUDataTypes::RecoStep::TPCCompression));
   steps.outputs.setBits(GPUDataTypes::InOutType::TRDTracks, steps.steps.isSet(GPUDataTypes::RecoStep::TRDTracking));
@@ -519,25 +511,20 @@ int32_t SetupReconstruction()
 
 int32_t ReadEvent(int32_t n)
 {
-  char filename[256];
-  snprintf(filename, 256, "events/%s/" GPUCA_EVDUMP_FILE ".%d.dump", configStandalone.eventsDir, n);
   if (configStandalone.inputcontrolmem && !configStandalone.preloadEvents) {
     rec->SetInputControl(inputmemory.get(), configStandalone.inputcontrolmem);
   }
-  int32_t r = chainTracking->ReadData(filename);
+  int32_t r = chainTracking->ReadData((eventsDir + GPUCA_EVDUMP_FILE "." + std::to_string(n) + ".dump").c_str());
   if (r) {
     return r;
   }
 #if defined(GPUCA_TPC_GEOMETRY_O2) && defined(GPUCA_BUILD_QA) && !defined(GPUCA_O2_LIB)
   if ((configStandalone.proc.runQA || configStandalone.eventDisplay) && !configStandalone.QA.noMC) {
     chainTracking->ForceInitQA();
-    snprintf(filename, 256, "events/%s/mc.%d.dump", configStandalone.eventsDir, n);
     chainTracking->GetQA()->UpdateChain(chainTracking);
-    if (chainTracking->GetQA()->ReadO2MCData(filename)) {
-      snprintf(filename, 256, "events/%s/mc.%d.dump", configStandalone.eventsDir, 0);
-      if (chainTracking->GetQA()->ReadO2MCData(filename) && configStandalone.proc.runQA) {
-        throw std::runtime_error("Error reading O2 MC dump");
-      }
+    if (chainTracking->GetQA()->ReadO2MCData((eventsDir + "mc." + std::to_string(n) + ".dump").c_str()) &&
+        chainTracking->GetQA()->ReadO2MCData((eventsDir + "mc.0.dump").c_str()) && configStandalone.proc.runQA) {
+      throw std::runtime_error("Error reading O2 MC dump");
     }
   }
 #endif
@@ -737,11 +724,10 @@ int32_t main(int argc, char** argv)
 {
   std::unique_ptr<GPUReconstruction> recUnique, recUniqueAsync, recUniquePipeline;
 
-  SetCPUAndOSSettings();
-
   if (ReadConfiguration(argc, argv)) {
     return 1;
   }
+  eventsDir = std::string(configStandalone.absoluteEventsDir ? "" : "events/") + configStandalone.eventsDir + "/";
 
   GPUSettingsDeviceBackend deviceSet;
   deviceSet.deviceType = configStandalone.runGPU ? GPUDataTypes::GetDeviceType(configStandalone.gpuType.c_str()) : GPUDataTypes::DeviceType::CPU;
@@ -779,9 +765,9 @@ int32_t main(int argc, char** argv)
     chainTrackingPipeline->SetQAFromForeignChain(chainTracking);
   }
   if (!configStandalone.proc.doublePipeline) {
-    chainITS = rec->AddChain<GPUChainITS>(0);
+    chainITS = rec->AddChain<GPUChainITS>();
     if (configStandalone.testSyncAsync) {
-      chainITSAsync = recAsync->AddChain<GPUChainITS>(0);
+      chainITSAsync = recAsync->AddChain<GPUChainITS>();
     }
   }
 
@@ -804,9 +790,7 @@ int32_t main(int argc, char** argv)
 
   for (nEventsInDirectory = 0; true; nEventsInDirectory++) {
     std::ifstream in;
-    char filename[256];
-    snprintf(filename, 256, "events/%s/" GPUCA_EVDUMP_FILE ".%d.dump", configStandalone.eventsDir, nEventsInDirectory);
-    in.open(filename, std::ifstream::binary);
+    in.open((eventsDir + GPUCA_EVDUMP_FILE "." + std::to_string(nEventsInDirectory) + ".dump").c_str(), std::ifstream::binary);
     if (in.fail()) {
       break;
     }
@@ -818,7 +802,7 @@ int32_t main(int argc, char** argv)
   }
 
   if (configStandalone.eventGenerator) {
-    genEvents::RunEventGenerator(chainTracking);
+    genEvents::RunEventGenerator(chainTracking, eventsDir);
     return 0;
   }
 
@@ -828,9 +812,12 @@ int32_t main(int argc, char** argv)
   } else {
     if (nEvents == -1 || nEvents > nEventsInDirectory) {
       if (nEvents >= 0) {
-        printf("Only %d events available in directors %s (%d events requested)\n", nEventsInDirectory, configStandalone.eventsDir, nEvents);
+        printf("Only %d events available in directory %s (%d events requested)\n", nEventsInDirectory, eventsDir.c_str(), nEvents);
       }
       nEvents = nEventsInDirectory;
+    }
+    if (nEvents == 0 && !configStandalone.noEvents) {
+      printf("No event data found in event folder\n");
     }
     if (configStandalone.TF.nMerge > 1) {
       nEvents /= configStandalone.TF.nMerge;
@@ -916,7 +903,7 @@ int32_t main(int argc, char** argv)
       double pipelineWalltime = 1.;
       if (configStandalone.proc.doublePipeline) {
         HighResTimer timerPipeline;
-        if (RunBenchmark(rec, chainTracking, 1, iEvent, &nTracksTotal, &nClustersTotal) || RunBenchmark(recPipeline, chainTrackingPipeline, 2, iEvent, &nTracksTotal, &nClustersTotal)) {
+        if (configStandalone.proc.debugLevel < 2 && (RunBenchmark(rec, chainTracking, 1, iEvent, &nTracksTotal, &nClustersTotal) || RunBenchmark(recPipeline, chainTrackingPipeline, 2, iEvent, &nTracksTotal, &nClustersTotal))) {
           goto breakrun;
         }
         auto pipeline1 = std::async(std::launch::async, RunBenchmark, rec, chainTracking, configStandalone.runs, iEvent, &nTracksTotal, &nClustersTotal, 0, &timerPipeline);
@@ -934,7 +921,7 @@ int32_t main(int argc, char** argv)
       nEventsProcessed++;
 
       if (configStandalone.timeFrameTime) {
-        double nClusters = chainTracking->GetTPCMerger().NMaxClusters();
+        double nClusters = chainTracking->GetProcessors()->tpcMerger.NMaxClusters();
         if (nClusters > 0) {
           const int32_t nOrbits = 32;
           const double colRate = 50000;

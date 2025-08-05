@@ -1001,8 +1001,8 @@ void ITSThresholdCalibrator::setRunType(const short int& runtype)
     this->mFitType = NO_FIT;
     this->mMin = 0;
     this->mMax = 400; // strobe delay goes from 0 to 400 (included) in steps of 4
-    this->mStep = 4;
-    this->mStrobeWindow = 5; // it's 4 but it corresponds to 4+1 (as from alpide manual)
+    this->mStep = 1;
+    this->mStrobeWindow = 1; // it's 0 but it corresponds to 0+1 (as from alpide manual)
     this->N_RANGE = (mMax - mMin) / mStep + 1;
     this->mCheckExactRow = true;
   } else if (runtype == TOT_CALIBRATION_1_ROW) {
@@ -1013,7 +1013,7 @@ void ITSThresholdCalibrator::setRunType(const short int& runtype)
     this->mMin = 0;
     this->mMax = 2000; // strobe delay goes from 0 to 2000 in steps of 10
     this->mStep = 10;
-    this->mStrobeWindow = 2; // it's 1 but it corresponds to 1+1 (as from alpide manual)
+    this->mStrobeWindow = 10; // it's 9 but it corresponds to 9+1 (as from alpide manual)
     this->N_RANGE = (mMax - mMin) / mStep + 1;
     this->mMin2 = 0;   // charge min
     this->mMax2 = 170; // charge max
@@ -1028,7 +1028,7 @@ void ITSThresholdCalibrator::setRunType(const short int& runtype)
     this->mMin = 300;
     this->mMax = 1100; // strobe delay goes from 300 to 1100 (included) in steps of 10
     this->mStep = 10;
-    this->mStrobeWindow = 2; // it's 1 but it corresponds to 1+1 (as from alpide manual)
+    this->mStrobeWindow = 10; // it's 9 but it corresponds to 9+1 (as from alpide manual)
     this->N_RANGE = (mMax - mMin) / mStep + 1;
     this->mMin2 = 30;                 // charge min
     this->mMax2 = 60;                 // charge max
@@ -1111,59 +1111,52 @@ void ITSThresholdCalibrator::setRunType(const short int& runtype)
 std::vector<float> ITSThresholdCalibrator::calculatePulseParams(const short int& chipID)
 {
 
-  int rt_mindel = -1, rt_maxdel = -1, tot_mindel = -1, tot_maxdel = -1;
-  int sumRt = 0, sumSqRt = 0, countRt = 0, sumTot = 0, sumSqTot = 0, countTot = 0;
+  int tot_mindel = -1, tot_maxdel = -1;
+  float sumToA = 0., sumSqToA = 0., countToA = 0., sumTot = 0., sumSqTot = 0., countTot = 0.;
+  float toa = -1.;
 
   for (auto itrow = mPixelHits[chipID].begin(); itrow != mPixelHits[chipID].end(); itrow++) { // loop over the chip rows
     short int row = itrow->first;
-    for (short int col_i = 0; col_i < this->N_COL; col_i++) {                                                                     // loop over the pixels on the row
-      for (short int sdel_i = 0; sdel_i < this->N_RANGE; sdel_i++) {                                                              // loop over the strobe delays
-        if (mPixelHits[chipID][row][col_i][0][sdel_i] > 0 && mPixelHits[chipID][row][col_i][0][sdel_i] < nInj && rt_mindel < 0) { // from left, the last bin with 0 hits or the first with some hits
-          rt_mindel = sdel_i > 0 ? ((sdel_i - 1) * mStep) + 1 : (sdel_i * mStep) + 1;                                             // + 1 because if delay = n, we get n+1 in reality (ALPIDE feature)
-        }
-        if (mPixelHits[chipID][row][col_i][0][sdel_i] == nInj) {
-          rt_maxdel = (sdel_i * mStep) + 1;
-          tot_mindel = (sdel_i * mStep) + 1;
+    for (short int col_i = 0; col_i < this->N_COL; col_i++) { // loop over the pixels on the row
+
+      for (short int sdel_i = 0; sdel_i < N_RANGE; sdel_i++) {
+        if (mPixelHits[chipID][row][col_i][0][sdel_i] >= 0.5 * nInj) { // for ToT and ToA take the 50% point
+          tot_mindel = (sdel_i * mStep) + 1;                           // +1 is for n --> n+1 (alpide manual)
+          toa = (sdel_i * mStep) + 1;
           break;
         }
       }
 
-      for (short int sdel_i = N_RANGE - 1; sdel_i >= 0; sdel_i--) { // from right, the first bin with nInj hits
-        if (mPixelHits[chipID][row][col_i][0][sdel_i] == nInj) {
+      for (short int sdel_i = N_RANGE - 1; sdel_i >= 0; sdel_i--) { // from right, the first bin with 50% nInj hits
+        if (mPixelHits[chipID][row][col_i][0][sdel_i] >= 0.5 * nInj) {
           tot_maxdel = (sdel_i * mStep) + 1;
           break;
         }
       }
 
       if (tot_maxdel > tot_mindel && tot_mindel >= 0 && tot_maxdel >= 0) {
-        sumTot += tot_maxdel - tot_mindel - (int)(mStrobeWindow / 2);
-        sumSqTot += (tot_maxdel - tot_mindel - (int)(mStrobeWindow / 2)) * (tot_maxdel - tot_mindel - (int)(mStrobeWindow / 2));
+        sumTot += tot_maxdel - tot_mindel - mStrobeWindow;
+        sumSqTot += (tot_maxdel - tot_mindel - mStrobeWindow) * (tot_maxdel - tot_mindel - mStrobeWindow);
         countTot++;
       }
 
-      if (rt_maxdel > rt_mindel && rt_maxdel > 0) {
-        if (rt_mindel < 0) {
-          sumRt += mStep + (int)(mStrobeWindow / 2); // resolution -> in case the rise is "instantaneous"
-          sumSqRt += (mStep + (int)(mStrobeWindow / 2)) * (mStep + (int)(mStrobeWindow / 2));
-        } else {
-          sumRt += rt_maxdel - rt_mindel + (int)(mStrobeWindow / 2);
-          sumSqRt += (rt_maxdel - rt_mindel + (int)(mStrobeWindow / 2)) * (rt_maxdel - rt_mindel + (int)(mStrobeWindow / 2));
-        }
-        countRt++;
+      if (toa > 0) {
+        sumToA += toa + float(mStrobeWindow) / 2.;
+        sumSqToA += (toa + float(mStrobeWindow) / 2.) * (toa + float(mStrobeWindow) / 2.);
+        countToA++;
       }
 
-      rt_mindel = -1;
-      rt_maxdel = -1;
+      toa = -1.;
       tot_maxdel = -1;
       tot_mindel = -1;
     } // end loop over col_i
   }   // end loop over chip rows
 
-  std::vector<float> output; // {avgRt, rmsRt, avgTot, rmsTot}
+  std::vector<float> output; // {avgToA, rmsToA, avgTot, rmsTot}
   // Avg Rt
-  output.push_back(!countRt ? 0. : (float)sumRt / (float)countRt);
+  output.push_back(!countToA ? 0. : (float)sumToA / (float)countToA);
   // Rms Rt
-  output.push_back(!countRt ? 0. : (std::sqrt((float)sumSqRt / (float)countRt - output[0] * output[0])) * 25.);
+  output.push_back(!countToA ? 0. : (std::sqrt((float)sumSqToA / (float)countToA - output[0] * output[0])) * 25.);
   output[0] *= 25.;
   // Avg ToT
   output.push_back(!countTot ? 0. : (float)sumTot / (float)countTot);
@@ -1232,8 +1225,8 @@ std::vector<float> ITSThresholdCalibrator::calculatePulseParams2D(const short in
       }
 
       if (maxPl > tot_mindel && tot_mindel < 1e7 && maxPl >= 0) { // ToT
-        sumTot += maxPl - tot_mindel - (int)(mStrobeWindow / 2);
-        sumSqTot += (maxPl - tot_mindel - (int)(mStrobeWindow / 2)) * (maxPl - tot_mindel - (int)(mStrobeWindow / 2));
+        sumTot += maxPl - tot_mindel - mStrobeWindow;
+        sumSqTot += (maxPl - tot_mindel - mStrobeWindow) * (maxPl - tot_mindel - mStrobeWindow);
         countTot++;
       }
 
@@ -1728,8 +1721,8 @@ void ITSThresholdCalibrator::addDatabaseEntry(
     o2::dcs::addConfigItem(this->mTuning, "ChipDbID", std::to_string(confDBid));
     o2::dcs::addConfigItem(this->mTuning, "Tot", std::to_string(data[2]));    // time over threshold
     o2::dcs::addConfigItem(this->mTuning, "TotRms", std::to_string(data[3])); // time over threshold rms
-    o2::dcs::addConfigItem(this->mTuning, "Rt", std::to_string(data[0]));     // rise time
-    o2::dcs::addConfigItem(this->mTuning, "RtRms", std::to_string(data[1]));  // rise time rms
+    o2::dcs::addConfigItem(this->mTuning, "ToA", std::to_string(data[0]));    // rise time
+    o2::dcs::addConfigItem(this->mTuning, "ToARms", std::to_string(data[1])); // rise time rms
   }
 
   //- Pulse shape 2D: avgToT, rmsToT, MTC, rmsMTC, avgMTCD, rmsMTCD, avgMPL, rmsMPL, avgMPLC, rmsMPLC

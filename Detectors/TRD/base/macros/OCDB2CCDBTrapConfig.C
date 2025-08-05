@@ -1,3 +1,14 @@
+// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+// All rights not expressly granted are reserved.
+//
+// This software is distributed under the terms of the GNU General Public
+// License v3 (GPL Version 3), copied verbatim in the file "COPYING".
+//
+// In applying this license CERN does not waive the privileges and immunities
+// granted to it by virtue of its status as an Intergovernmental Organization
+// or submit itself to any jurisdiction.
+
 // Use this macro to extract TRD calibration data from run2 for O2 calibrations class
 // Alot of this was taken from OCDBtoTree.C in AliRoot/TRD/macros/
 // Usage:
@@ -172,7 +183,7 @@ void OCDB2CCDBTrapConfig(TString ccdbPath = "http://localhost:8080", Int_t run =
   TTimeStamp jobStartTime;
   // if the storage is on alien than we need to do some extra stuff
   TString storageString(storageURI);
-  if (storageString.Contains("raw://")) {
+  if (storageString.Contains("raw://") && !gGrid) {
     TGrid::Connect("alien://");
   }
 
@@ -195,7 +206,7 @@ void OCDB2CCDBTrapConfig(TString ccdbPath = "http://localhost:8080", Int_t run =
   //Connect to CCDB
   //
   o2::ccdb::CcdbApi ccdb;
-  map<string, string> metadata;               // do we want to store any meta data?
+  std::map<std::string, std::string> metadata; // do we want to store any meta data?
   metadata.emplace(std::make_pair("UploadedBy", "marten"));
   metadata.emplace(std::make_pair("Description", "Default TRAP config for Run 3 simulations in LS2"));
   ccdb.init(ccdbPath.Data());

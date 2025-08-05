@@ -77,7 +77,7 @@ class EPNMonitor
   std::unordered_map<std::string, fileMon> mFiles;
   std::string mPath;
   std::vector<std::regex> mFilters;
-  std::unordered_map<std::string, std::pair<InfoLogger::InfoLogger::Severity, int>> mMapRootLogTypes;
+  std::unordered_map<std::string, std::pair<InfoLogger::InfoLogger::Severity, int>> mMapLogTypes;
   volatile unsigned int mRunNumber;
   std::string mPartition;
   unsigned int nLines = 0;
@@ -95,12 +95,11 @@ EPNMonitor::EPNMonitor(std::string path, bool infoLogger, int runNumber, std::st
   mFilters.emplace_back("^Warning in <TGraph");
   mFilters.emplace_back("^Warning in <TInterpreter");
   mFilters.emplace_back("Dividing histograms with different labels");
-  mMapRootLogTypes.emplace("Info in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Info, 13});
-  mMapRootLogTypes.emplace("Print in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Info, 13});
-  mMapRootLogTypes.emplace("Warning in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Warning, 11});
-  mMapRootLogTypes.emplace("Error in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Error, 2});
-  mMapRootLogTypes.emplace("Fatal in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Fatal, 1});
-  mMapRootLogTypes.emplace("*** Break ***", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Fatal, 1});
+  mMapLogTypes.emplace("(core dumped)", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Error, 1});
+  mMapLogTypes.emplace("Warning in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Warning, 11});
+  mMapLogTypes.emplace("Error in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Error, 2});
+  mMapLogTypes.emplace("Fatal in <", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Fatal, 1});
+  mMapLogTypes.emplace("*** Break ***", std::pair<InfoLogger::InfoLogger::Severity, int>{InfoLogger::InfoLogger::Severity::Fatal, 1});
   mInfoLoggerActive = infoLogger;
   mPath = path;
   mRunNumber = runNumber;
@@ -134,7 +133,7 @@ void EPNMonitor::sendLog(const std::string& file, const std::string& message, co
   if (mInfoLoggerActive) {
     mLoggerContext->setField(InfoLogger::InfoLoggerContext::FieldName::Facility, ("stderr/" + file).substr(0, 31));
     mLoggerContext->setField(InfoLogger::InfoLoggerContext::FieldName::Run, mRunNumber != 0 ? std::to_string(mRunNumber) : "unspecified");
-    static const InfoLogger::InfoLogger::InfoLoggerMessageOption opt = {severity, level, InfoLogger::InfoLogger::undefinedMessageOption.errorCode, InfoLogger::InfoLogger::undefinedMessageOption.sourceFile, InfoLogger::InfoLogger::undefinedMessageOption.sourceLine};
+    const InfoLogger::InfoLogger::InfoLoggerMessageOption opt = {severity, level, InfoLogger::InfoLogger::undefinedMessageOption.errorCode, InfoLogger::InfoLogger::undefinedMessageOption.sourceFile, InfoLogger::InfoLogger::undefinedMessageOption.sourceLine};
     mLogger->log(opt, *mLoggerContext, "stderr: %s", file == "SYSLOG" ? (std::string("[GLOBAL SYSLOG]: ") + message).c_str() : message.c_str());
   } else {
     printf("stderr: [%c] %s: %s\n", severity, file.c_str(), message.c_str());
@@ -214,7 +213,7 @@ void EPNMonitor::thread()
             // assign proper severity / level for remaining ROOT log messages
             auto severity{InfoLogger::InfoLogger::Severity::Error};
             int level{3};
-            for (const auto& logType : mMapRootLogTypes) {
+            for (const auto& logType : mMapLogTypes) {
               if (line.find(logType.first) != std::string::npos) {
                 severity = std::get<InfoLogger::InfoLogger::Severity>(logType.second);
                 level = std::get<int>(logType.second);

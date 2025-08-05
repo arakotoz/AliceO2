@@ -25,7 +25,9 @@ int MCTrackInfo::getNITSClusCont() const
   int longest = 0, current = 0;
   for (int i = 0; i < 7; i++) {
     if (pattITSCl & (0x1 << i)) {
-      longest = ++current;
+      if (++current > longest) {
+        longest = current;
+      }
     } else {
       current = 0;
     }
@@ -73,6 +75,68 @@ int MCTrackInfo::getHighestITSLayer() const
     }
   }
   return -1;
+}
+
+o2::track::TrackPar MCTrackInfo::getTrackParTPC(float b, float x) const
+{
+  o2::track::TrackPar t(track);
+  int ntri = 0;
+  while (ntri < 2) {
+    int sector0 = o2::math_utils::angle2Sector(t.getAlpha());
+    if (!t.propagateParamTo(x, b)) {
+      t.invalidate();
+      break;
+    }
+    int sector = o2::math_utils::angle2Sector(t.getPhiPos());
+    float alpha = o2::math_utils::sector2Angle(sector);
+    if (!t.rotateParam(alpha)) {
+      t.invalidate();
+      break;
+    }
+    if (sector != sector0) {
+      ntri++;
+      continue;
+    }
+    break;
+  }
+  //  printf("%s ->\n%s <-\n",track.asString().c_str(), t.asString().c_str());
+  return t;
+}
+
+float MCTrackInfo::getTrackParTPCPar(int i, float b, float x) const
+{
+  auto t = getTrackParTPC(b, x);
+  return t.isValid() ? t.getParam(i) : -999.;
+}
+
+float MCTrackInfo::getTrackParTPCPhiSec(float b, float x) const
+{
+  auto t = getTrackParTPC(b, x);
+  return t.isValid() ? std::atan2(t.getY(), t.getX()) : -999.;
+}
+
+int TrackFamily::getLongestTPCTrackEntry() const
+{
+  int n = -1, ncl = 0;
+  int ntr = recTracks.size();
+  for (int i = 0; i < ntr; i++) {
+    if (recTracks[i].nClTPC > ncl) {
+      ncl = recTracks[i].nClTPC;
+      n = i;
+    }
+  }
+  return n;
+}
+
+int TrackFamily::getNTPCClones() const
+{
+  int n = 0;
+  for (auto& t : recTracks) {
+    if (t.nClTPC > 0) {
+      n++;
+    }
+  }
+  return n;
 }
 
 } // namespace o2::trackstudy

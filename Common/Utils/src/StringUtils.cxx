@@ -12,7 +12,10 @@
 #include "CommonUtils/StringUtils.h"
 #include <cstdlib>
 #include <filesystem>
+#ifndef GPUCA_STANDALONE
 #include <TGrid.h>
+#include <fmt/format.h>
+#endif
 #include <unistd.h>
 
 using namespace o2::utils;
@@ -32,6 +35,19 @@ std::vector<std::string> Str::tokenize(const std::string& src, char delim, bool 
     }
   }
   return tokens;
+}
+
+// replace all occurencies of from by to, return count
+int Str::replaceAll(std::string& s, const std::string& from, const std::string& to)
+{
+  int count = 0;
+  size_t pos = 0;
+  while ((pos = s.find(from, pos)) != std::string::npos) {
+    s.replace(pos, from.length(), to);
+    pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    count++;
+  }
+  return count;
 }
 
 // generate random string of given lenght, suitable for file names
@@ -64,6 +80,7 @@ std::string Str::getFullPath(const std::string_view p)
   return std::filesystem::canonical(std::string{p}).string();
 }
 
+#ifndef GPUCA_STANDALONE
 std::string Str::rectifyDirectory(const std::string_view p)
 {
   std::string dir(p);
@@ -91,6 +108,7 @@ std::string Str::rectifyDirectory(const std::string_view p)
   }
   return dir;
 }
+#endif
 
 // Create unique non-existing path name starting with prefix. Loose equivalent of boost::filesystem::unique_path()
 // The prefix can be either existing directory or just a string to add in front of the random part

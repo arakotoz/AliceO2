@@ -19,7 +19,6 @@
 #include "GPUCommonMath.h"
 #include "GPUDef.h"
 #include "GPUSettings.h"
-#include "GPUTPCGeometry.h"
 #include "GPUTPCGMPolynomialField.h"
 
 #if !defined(GPUCA_GPUCODE)
@@ -48,6 +47,8 @@ namespace internal
 {
 template <class T, class S>
 struct GPUParam_t {
+  static constexpr float dAlpha = 0.349066f;
+
   T rec;
   S par;
 
@@ -55,14 +56,13 @@ struct GPUParam_t {
   float bzCLight;
   float qptB5Scaler;
 
-  int8_t dodEdxDownscaled;
+  int8_t dodEdxEnabled;
   int32_t continuousMaxTimeBin;
   int32_t tpcCutTimeBin;
 
-  GPUTPCGeometry tpcGeometry;                       // TPC Geometry
-  GPUTPCGMPolynomialField polynomialField;          // Polynomial approx. of magnetic field for TPC GM
-  const uint32_t* occupancyMap;                     // Ptr to TPC occupancy map
-  uint32_t occupancyTotal;                          // Total occupancy in the TPC (nCl / nHbf)
+  GPUTPCGMPolynomialField polynomialField; // Polynomial approx. of magnetic field for TPC GM
+  const uint32_t* occupancyMap;            // Ptr to TPC occupancy map
+  uint32_t occupancyTotal;                 // Total occupancy in the TPC (nCl / nHbf)
 
   GPUParamSector SectorParam[GPUCA_NSECTORS];
 
@@ -79,10 +79,10 @@ struct GPUParam_t {
 struct GPUParam : public internal::GPUParam_t<GPUSettingsRec, GPUSettingsParam> {
 
 #ifndef GPUCA_GPUCODE
-  void SetDefaults(float solenoidBz);
+  void SetDefaults(float solenoidBz, bool assumeConstantBz);
   void SetDefaults(const GPUSettingsGRP* g, const GPUSettingsRec* r = nullptr, const GPUSettingsProcessing* p = nullptr, const GPURecoStepConfiguration* w = nullptr);
   void UpdateSettings(const GPUSettingsGRP* g, const GPUSettingsProcessing* p = nullptr, const GPURecoStepConfiguration* w = nullptr, const GPUSettingsRecDynamic* d = nullptr);
-  void UpdateBzOnly(float newSolenoidBz);
+  void UpdateBzOnly(float newSolenoidBz, bool assumeConstantBz);
   void UpdateRun3ClusterErrors(const float* yErrorParam, const float* zErrorParam);
 #endif
 
@@ -94,7 +94,7 @@ struct GPUParam : public internal::GPUParam_t<GPUSettingsRec, GPUSettingsParam> 
     if (iSector >= GPUCA_NSECTORS / 4) {
       iSector -= GPUCA_NSECTORS / 2;
     }
-    return 0.174533f + par.dAlpha * iSector;
+    return 0.174533f + dAlpha * iSector;
   }
   GPUd() float GetClusterErrorSeeding(int32_t yz, int32_t type, float zDiff, float angle2, float unscaledMult) const;
   GPUd() void GetClusterErrorsSeeding2(uint8_t sector, int32_t row, float z, float sinPhi, float DzDs, float time, float& ErrY2, float& ErrZ2) const;

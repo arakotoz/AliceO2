@@ -31,7 +31,8 @@ if(ALIGPU_BUILD_TYPE STREQUAL "O2")
 endif()
 
 if(Vulkan_FOUND)
-  if(NOT ${Vulkan_VERSION} VERSION_GREATER_EQUAL "1.3.0" OR Vulkan_GLSLC_EXECUTABLE STREQUAL "Vulkan_GLSLC_EXECUTABLE-NOTFOUND")
+  string(FIND "${Vulkan_VERSION}" "." vulkan_dot_index)
+  if(NOT ${Vulkan_VERSION} VERSION_GREATER_EQUAL "1.3.0" OR vulkan_dot_index EQUAL -1 OR Vulkan_GLSLC_EXECUTABLE STREQUAL "Vulkan_GLSLC_EXECUTABLE-NOTFOUND")
     set(Vulkan_FOUND 0)
   endif()
 endif()
@@ -131,10 +132,7 @@ if(ALIGPU_BUILD_TYPE STREQUAL "O2")
                  PUBLIC_INCLUDE_DIRECTORIES .
              SOURCES ${SRCS} ${SRCS_NO_H})
 
-  target_compile_definitions(${targetName} PRIVATE $<TARGET_PROPERTY:O2::GPUTracking,COMPILE_DEFINITIONS>)
   target_compile_definitions(${targetName} PRIVATE GPUCA_BUILD_EVENT_DISPLAY_GLFW GPUCA_DISPLAY_GL3W GPUCA_DISPLAY_OPENGL_CORE)
-
-  install(FILES ${HDRS} ${HDRS_INSTALL} DESTINATION include/GPU)
 
   o2_add_executable(field-uniform-exporter
           TARGETVARNAME exporterName
@@ -152,13 +150,17 @@ if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
   target_link_libraries(${targetName} PUBLIC O2::GPUTracking)
   install(TARGETS ${MODULE})
 
-  install(DIRECTORY filterMacros/ DESTINATION displayTrackFilter FILES_MATCHING PATTERN "*.C")
+  install(DIRECTORY filterMacros/ DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/GPU/displayTrackFilter FILES_MATCHING PATTERN "*.C")
   get_property(GPU_DISPLAY_INCLUDE_PATH DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
   configure_file(filterMacros/setinclude.sh.in setinclude.sh @ONLY)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setinclude.sh PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE DESTINATION displayTrackFilter)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setinclude.sh PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/GPU/displayTrackFilter)
 endif()
 
-message(STATUS "Building GPU Event Display (Vulkan ${GPUCA_EVENT_DISPLAY_VULKAN}, Wayland ${GPUCA_EVENT_DISPLAY_WAYLAND}, Freetype ${GPUCA_EVENT_DISPLAY_FREETYPE}, Fontconfig ${Fontconfig_FOUND}, Qt ${GPUCA_EVENT_DISPLAY_QT})")
+install(FILES ${HDRS} ${HDRS_INSTALL} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/GPU)
+
+target_compile_definitions(${targetName} PRIVATE $<TARGET_PROPERTY:O2::GPUTracking,COMPILE_DEFINITIONS>)
+
+message(STATUS "Building GPU Event Display (Vulkan ${GPUCA_EVENT_DISPLAY_VULKAN} ${Vulkan_VERSION}, Wayland ${GPUCA_EVENT_DISPLAY_WAYLAND}, Freetype ${GPUCA_EVENT_DISPLAY_FREETYPE}, Fontconfig ${Fontconfig_FOUND}, Qt ${GPUCA_EVENT_DISPLAY_QT})")
 target_link_libraries(${targetName} PUBLIC ${GLFW_LIBRARIES} OpenGL::GL)
 target_include_directories(${targetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -179,9 +181,12 @@ if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
   endif()
   if(GPUCA_CONFIG_GL3W)
     target_compile_definitions(${targetName} PRIVATE GPUCA_DISPLAY_GL3W)
+    target_sources(${targetName} PRIVATE ${GPUTRACKING_DIR}/display/3rdparty/gl3w.c)
   else()
     target_link_libraries(${targetName} PRIVATE ${GLEW_LIBRARIES})
   endif()
+  target_sources(${targetName} PRIVATE ${GPUTRACKING_DIR}/display/3rdparty/HandMadeMath/HandMadeMathImpl.cxx)
+  target_include_directories(${targetName} SYSTEM PUBLIC ${GPUTRACKING_DIR}/display/3rdparty)
 endif()
 
 if (OPENGL_GLU_FOUND)

@@ -12,15 +12,15 @@
 #ifndef ALICEO2_ITSDPLTRACKINGPARAM_H_
 #define ALICEO2_ITSDPLTRACKINGPARAM_H_
 
+#include <limits>
 #include "CommonUtils/ConfigurableParam.h"
 #include "CommonUtils/ConfigurableParamHelper.h"
 
-namespace o2
-{
-namespace its
+namespace o2::its
 {
 
 struct VertexerParamConfig : public o2::conf::ConfigurableParamHelper<VertexerParamConfig> {
+  bool saveTimeBenchmarks = false; // dump metrics on file
 
   int nIterations = 1;                     // Number of vertexing passes to perform.
   int vertPerRofThreshold = 0;             // Maximum number of vertices per ROF to trigger second a iteration.
@@ -48,7 +48,13 @@ struct VertexerParamConfig : public o2::conf::ConfigurableParamHelper<VertexerPa
   int ZBins = 1;     // z-phi index table configutation: number of z bins
   int PhiBins = 128; // z-phi index table configutation: number of phi bins
 
+  bool useTruthSeeding{false};  // overwrite seeding vertices with MC truth
+  bool outputContLabels{false}; // output additioanlly for each vertex its contributing line labels
+
   int nThreads = 1;
+  bool printMemory = false;
+  size_t maxMemory = std::numeric_limits<size_t>::max();
+  bool dropTFUponFailure = false;
 
   O2ParamDef(VertexerParamConfig, "ITSVertexerParam");
 };
@@ -56,15 +62,16 @@ struct VertexerParamConfig : public o2::conf::ConfigurableParamHelper<VertexerPa
 struct TrackerParamConfig : public o2::conf::ConfigurableParamHelper<TrackerParamConfig> {
   // Use TGeo for mat. budget
   static const int MaxIter = 4;
-  static const int MinTrackLenght = 4;
-  static const int MaxTrackLenght = 7;
-  bool useMatCorrTGeo = false;  // use full geometry to corect for material budget accounting in the fits. Default is to use the material budget LUT.
-  bool useFastMaterial = false; // use faster material approximation for material budget accounting in the fits.
-  int deltaRof = 0;             // configure the width of the window in ROFs to be considered for the tracking.
+  static const int MinTrackLength = 4;
+  static const int MaxTrackLength = 7;
+  bool useMatCorrTGeo = false;                                              // use full geometry to corect for material budget accounting in the fits. Default is to use the material budget LUT.
+  bool useFastMaterial = false;                                             // use faster material approximation for material budget accounting in the fits.
+  int deltaRof = 0;                                                         // configure the width of the window in ROFs to be considered for the tracking.
   int minTrackLgtIter[MaxIter] = {};                                        // minimum track length at each iteration, used only if >0, otherwise use code defaults
-  float minPtIterLgt[MaxIter * (MaxTrackLenght - MinTrackLenght + 1)] = {}; // min.pT for given track length at this iteration, used only if >0, otherwise use code defaults
-  float sysErrY2[7] = {0};      // systematic error^2 in Y per layer
-  float sysErrZ2[7] = {0};      // systematic error^2 in Z per layer
+  uint8_t startLayerMask[MaxIter] = {};                                     // mask of start layer for this iteration (if >0)
+  float minPtIterLgt[MaxIter * (MaxTrackLength - MinTrackLength + 1)] = {}; // min.pT for given track length at this iteration, used only if >0, otherwise use code defaults
+  float sysErrY2[7] = {0};                                                  // systematic error^2 in Y per layer
+  float sysErrZ2[7] = {0};                                                  // systematic error^2 in Z per layer
   float maxChi2ClusterAttachment = -1.f;
   float maxChi2NDF = -1.f;
   float nSigmaCut = -1.f;
@@ -75,14 +82,12 @@ struct TrackerParamConfig : public o2::conf::ConfigurableParamHelper<TrackerPara
   int LUTbinsZ = -1;
   float diamondPos[3] = {0.f, 0.f, 0.f}; // override the position of the vertex
   bool useDiamond = false;               // enable overriding the vertex position
-  unsigned long maxMemory = 0;           // override default protections on the maximum memory to be used by the tracking
   int useTrackFollower = -1;             // bit 0: allow mixing implies bits 1&2; bit 1: topwards; bit2: downwards; => 0 off
   float trackFollowerNSigmaZ = 1.f;      // sigma in z-cut for track-following search rectangle
   float trackFollowerNSigmaPhi = 1.f;    // sigma in phi-cut for track-following search rectangle
   float cellsPerClusterLimit = -1.f;
   float trackletsPerClusterLimit = -1.f;
   int findShortTracks = -1;
-  int nThreads = 1;                        // number of threads to perform the operations in parallel.
   int nROFsPerIterations = 0;              // size of the slice of ROFs to be processed at a time, preferably integer divisors of nROFs per TF, to balance the iterations.
   int nOrbitsPerIterations = 0;            // not implemented: size of the slice of ROFs to be processed at a time, computed using the number of ROFs per orbit.
   bool perPrimaryVertexProcessing = false; // perform the full tracking considering the vertex hypotheses one at the time.
@@ -90,21 +95,47 @@ struct TrackerParamConfig : public o2::conf::ConfigurableParamHelper<TrackerPara
   bool overrideBeamEstimation = false;     // use beam position from meanVertex CCDB object
   int trackingMode = -1;                   // -1: unset, 0=sync, 1=async, 2=cosmics used by gpuwf only
   bool doUPCIteration = false;             // Perform an additional iteration for UPC events on tagged vertices. You want to combine this config with VertexerParamConfig.nIterations=2
-  bool fataliseUponFailure = true;         // granular management of the fatalisation in async mode
+  int nIterations = MaxIter;               // overwrite the number of iterations
+
+  int nThreads = 1;
+  bool printMemory = false;
+  size_t maxMemory = std::numeric_limits<size_t>::max();
   bool dropTFUponFailure = false;
+  bool fataliseUponFailure = true; // granular management of the fatalisation in async mode
 
   O2ParamDef(TrackerParamConfig, "ITSCATrackerParam");
 };
 
 struct ITSGpuTrackingParamConfig : public o2::conf::ConfigurableParamHelper<ITSGpuTrackingParamConfig> {
-  // GPU-specific parameters
-  unsigned int tmpCUBBufferSize = 1e5; // In average in pp events there are required 4096 bytes
-  int nBlocks = 20;
-  int nThreads = 256;
+  static constexpr int MaxIter = TrackerParamConfig::MaxIter;
+
+  /// Set nBlocks/nThreads to summarily override all kernel launch parameters in each iteration.
+  /// Parameters must start with nBlocks/nThreads.
+  static constexpr int OverrideValue{-1};
+  static constexpr char const* BlocksName = "nBlocks";
+  static constexpr char const* ThreadsName = "nThreads";
+  int nBlocks = OverrideValue;
+  int nThreads = OverrideValue;
+  void maybeOverride() const;
+
+  /// Individual kernel launch parameter for each iteration
+  int nBlocksLayerTracklets[MaxIter] = {30, 30, 30, 30};
+  int nThreadsLayerTracklets[MaxIter] = {256, 256, 256, 256};
+
+  int nBlocksLayerCells[MaxIter] = {30, 30, 30, 30};
+  int nThreadsLayerCells[MaxIter] = {256, 256, 256, 256};
+
+  int nBlocksFindNeighbours[MaxIter] = {30, 30, 30, 30};
+  int nThreadsFindNeighbours[MaxIter] = {256, 256, 256, 256};
+
+  int nBlocksProcessNeighbours[MaxIter] = {30, 30, 30, 30};
+  int nThreadsProcessNeighbours[MaxIter] = {256, 256, 256, 256};
+
+  int nBlocksTracksSeeds[MaxIter] = {30, 30, 30, 30};
+  int nThreadsTracksSeeds[MaxIter] = {256, 256, 256, 256};
 
   O2ParamDef(ITSGpuTrackingParamConfig, "ITSGpuTrackingParam");
 };
 
-} // namespace its
-} // namespace o2
+} // namespace o2::its
 #endif

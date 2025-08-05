@@ -209,6 +209,8 @@ Bool_t GeneratorPythia8::Init()
       mPythia.setUserHooksPtr((Pythia8::UserHooksPtr)powhegHooks);
     }
   }
+  /** Add 20Neon to collision particle database */
+  mPythia.particleData.addParticle(1000100200, "20Ne", 6, 30, 0, 19.992440);
   /** initialise **/
   if (!mPythia.init()) {
     LOG(fatal) << "Failed to init \'Pythia8\': init returned with error";
@@ -655,7 +657,7 @@ Bool_t
     auto st = o2::mcgenstatus::MCGenStatusEncoding(particle.statusHepMC(), //
                                                    particle.status())      //
                 .fullEncoding;
-    mParticles.push_back(TParticle(particle.id(),            // Particle type
+    mParticles.push_back(TParticle(pdg,                      // Particle type
                                    st,                       // status
                                    particle.mother1() - 1,   // first mother
                                    particle.mother2() - 1,   // second mother
@@ -774,7 +776,11 @@ void GeneratorPythia8::updateHeader(o2::dataformats::MCEventHeader* eventHeader)
                               hiinfo->nAbsProj() + hiinfo->nDiffProj());
     eventHeader->putInfo<int>(Key::nPartTarget,
                               hiinfo->nAbsTarg() + hiinfo->nDiffTarg());
+#if PYTHIA_VERSION_INTEGER >= 8313
+    eventHeader->putInfo<int>(Key::nCollHard, hiinfo->nCollND());
+#else
     eventHeader->putInfo<int>(Key::nCollHard, hiinfo->nCollNDTot());
+#endif
   }
 }
 

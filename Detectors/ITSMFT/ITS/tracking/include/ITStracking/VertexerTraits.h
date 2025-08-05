@@ -17,9 +17,11 @@
 #define O2_ITS_TRACKING_VERTEXER_TRAITS_H_
 
 #include <array>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "ITStracking/BoundedAllocator.h"
 #include "ITStracking/Cluster.h"
 #include "ITStracking/ClusterLines.h"
 #include "ITStracking/Configuration.h"
@@ -27,9 +29,12 @@
 #include "ITStracking/IndexTableUtils.h"
 #include "ITStracking/TimeFrame.h"
 #include "ITStracking/Tracklet.h"
+#include "ITStracking/MathUtils.h"
 
 #include "GPUCommonDef.h"
 #include "GPUCommonMath.h"
+
+#include <oneapi/tbb/task_arena.h>
 
 namespace o2
 {
@@ -37,8 +42,6 @@ class MCCompLabel;
 
 namespace its
 {
-class ROframe;
-using constants::its::LayersNumberVertexer;
 
 enum class TrackletMode {
   Layer0Layer1 = 0,
@@ -47,94 +50,85 @@ enum class TrackletMode {
 
 class VertexerTraits
 {
+  static constexpr int NLayers{7};
+  using TimeFrame7 = TimeFrame<NLayers>;
+
  public:
   VertexerTraits() = default;
   virtual ~VertexerTraits() = default;
 
-  GPUhd() static constexpr int4 getEmptyBinsRect()
+  GPUhdi() static consteval int4 getEmptyBinsRect()
   {
     return int4{0, 0, 0, 0};
   }
   GPUhd() const int4 getBinsRect(const Cluster&, const int, const float, float maxdeltaz, float maxdeltaphi);
-  GPUhd() const int2 getPhiBins(float phi, float deltaPhi);
-
   GPUhd() static const int4 getBinsRect(const Cluster&, const int, const float, float maxdeltaz, float maxdeltaphi, const IndexTableUtils&);
   GPUhd() static const int2 getPhiBins(float phi, float deltaPhi, const IndexTableUtils&);
+  GPUhd() const int2 getPhiBins(float phi, float deltaPhi) { return getPhiBins(phi, deltaPhi, mIndexTableUtils); }
 
   // virtual vertexer interface
   virtual void initialise(const TrackingParameters& trackingParams, const int iteration = 0);
   virtual void computeTracklets(const int iteration = 0);
   virtual void computeTrackletMatching(const int iteration = 0);
   virtual void computeVertices(const int iteration = 0);
-  virtual void adoptTimeFrame(TimeFrame* tf);
+  virtual void adoptTimeFrame(TimeFrame7* tf) noexcept { mTimeFrame = tf; }
   virtual void updateVertexingParameters(const std::vector<VertexingParameters>& vrtPar, const TimeFrameGPUParameters& gpuTfPar);
-  // Hybrid
-  virtual void initialiseHybrid(const TrackingParameters& trackingParams, const int iteration = 0) { initialise(trackingParams, iteration); };
-  virtual void computeTrackletsHybrid(const int iteration = 0) { computeTracklets(iteration); };
-  virtual void computeTrackletMatchingHybrid(const int iteration = 0) { computeTrackletMatching(iteration); };
-  virtual void computeVerticesHybrid(const int iteration = 0) { computeVertices(iteration); };
-  virtual void adoptTimeFrameHybrid(TimeFrame* tf) { adoptTimeFrame(tf); };
 
-  void computeVerticesInRof(int,
-                            gsl::span<const o2::its::Line>&,
-                            std::vector<bool>&,
-                            std::vector<o2::its::ClusterLines>&,
-                            std::array<float, 2>&,
-                            std::vector<Vertex>&,
-                            std::vector<int>&,
-                            TimeFrame*,
-                            std::vector<o2::MCCompLabel>*,
-                            const int iteration = 0);
-
-  static const std::vector<std::pair<int, int>> selectClusters(const int* indexTable,
-                                                               const std::array<int, 4>& selectedBinsRect,
-                                                               const IndexTableUtils& utils);
+  // truth tracking
+  void addTruthSeedingVertices();
 
   // utils
-  std::vector<VertexingParameters>& getVertexingParameters() { return mVrtParams; }
-  std::vector<VertexingParameters> getVertexingParameters() const { return mVrtParams; }
-  void setIsGPU(const unsigned char isgpu) { mIsGPU = isgpu; };
+  auto& getVertexingParameters() { return mVrtParams; }
+  auto getVertexingParameters() const { return mVrtParams; }
   void setVertexingParameters(std::vector<VertexingParameters>& vertParams) { mVrtParams = vertParams; }
-  unsigned char getIsGPU() const { return mIsGPU; };
   void dumpVertexerTraits();
-  void setNThreads(int n);
-  int getNThreads() const { return mNThreads; }
+  void setNThreads(int n, std::shared_ptr<tbb::task_arena>& arena);
+  int getNThreads() { return mTaskArena->max_concurrency(); }
+  virtual bool isGPU() const noexcept { return false; }
+  virtual const char* getName() const noexcept { return "CPU"; }
+  virtual bool usesMemoryPool() const noexcept { return true; }
+  void setMemoryPool(std::shared_ptr<BoundedMemoryResource>& pool) { mMemoryPool = pool; }
 
-  template <typename T = o2::MCCompLabel>
-  static std::pair<T, float> computeMain(const std::vector<T>& elements)
+  static std::pair<o2::MCCompLabel, float> computeMain(const bounded_vector<o2::MCCompLabel>& elements)
   {
-    T elem;
+    // we only care about the source&event of the tracks, not the trackId
+    auto composeVtxLabel = [](const o2::MCCompLabel& lbl) -> o2::MCCompLabel {
+      return {o2::MCCompLabel::maxTrackID(), lbl.getEventID(), lbl.getSourceID(), lbl.isFake()};
+    };
+    std::unordered_map<o2::MCCompLabel, size_t> frequency;
+    for (const auto& element : elements) {
+      ++frequency[composeVtxLabel(element)];
+    }
+    o2::MCCompLabel elem{};
     size_t maxCount = 0;
-    for (auto& element : elements) {
-      size_t count = std::count(elements.begin(), elements.end(), element);
+    for (const auto& [key, count] : frequency) {
       if (count > maxCount) {
         maxCount = count;
-        elem = element;
+        elem = key;
       }
     }
-    return std::make_pair(elem, static_cast<float>(maxCount) / elements.size());
+    return std::make_pair(elem, static_cast<float>(maxCount) / static_cast<float>(elements.size()));
   }
 
  protected:
-  unsigned char mIsGPU;
-  int mNThreads = 1;
-
   std::vector<VertexingParameters> mVrtParams;
   IndexTableUtils mIndexTableUtils;
 
   // Frame related quantities
-  TimeFrame* mTimeFrame = nullptr;
+  TimeFrame7* mTimeFrame = nullptr; // observer ptr
+ private:
+  std::shared_ptr<BoundedMemoryResource> mMemoryPool;
+  std::shared_ptr<tbb::task_arena> mTaskArena;
+
+  // debug output
+  void debugComputeTracklets(int iteration);
+  void debugComputeTrackletMatching(int iteration);
+  void debugComputeVertices(int iteration);
 };
 
 inline void VertexerTraits::initialise(const TrackingParameters& trackingParams, const int iteration)
 {
   mTimeFrame->initialise(0, trackingParams, 3, (bool)(!iteration)); // iteration for initialisation must be 0 for correctly resetting the frame, we need to pass the non-reset flag for vertices as well, tho.
-  setIsGPU(false);
-}
-
-GPUhdi() const int2 VertexerTraits::getPhiBins(float phi, float dPhi)
-{
-  return VertexerTraits::getPhiBins(phi, dPhi, mIndexTableUtils);
 }
 
 GPUhdi() const int2 VertexerTraits::getPhiBins(float phi, float dPhi, const IndexTableUtils& utils)
@@ -168,8 +162,6 @@ GPUhdi() const int4 VertexerTraits::getBinsRect(const Cluster& currentCluster, c
 {
   return VertexerTraits::getBinsRect(currentCluster, layerIndex, directionZIntersection, maxdeltaz, maxdeltaphi, mIndexTableUtils);
 }
-
-inline void VertexerTraits::adoptTimeFrame(TimeFrame* tf) { mTimeFrame = tf; }
 
 } // namespace its
 } // namespace o2

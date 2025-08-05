@@ -45,7 +45,7 @@ class propagatorInterface<o2::base::Propagator>
 {
  public:
   typedef o2::base::Propagator propagatorParam;
-  GPUd() propagatorInterface(const propagatorParam* prop) : mProp(prop){};
+  GPUd() propagatorInterface(const propagatorParam* prop) : mProp(prop) {};
   GPUd() propagatorInterface(const propagatorInterface<o2::base::Propagator>&) = delete;
   GPUd() propagatorInterface& operator=(const propagatorInterface<o2::base::Propagator>&) = delete;
 
@@ -59,8 +59,8 @@ class propagatorInterface<o2::base::Propagator>
   GPUdi() bool update(const float p[2], const float cov[3])
   {
     if (mParam) {
-      gpustd::array<float, 2> pTmp = {p[0], p[1]};
-      gpustd::array<float, 3> covTmp = {cov[0], cov[1], cov[2]};
+      std::array<float, 2> pTmp = {p[0], p[1]};
+      std::array<float, 3> covTmp = {cov[0], cov[1], cov[2]};
       return mParam->update(pTmp, covTmp);
     } else {
       return false;
@@ -69,8 +69,8 @@ class propagatorInterface<o2::base::Propagator>
   GPUdi() float getPredictedChi2(const float p[2], const float cov[3])
   {
     if (mParam) {
-      gpustd::array<float, 2> pTmp = {p[0], p[1]};
-      gpustd::array<float, 3> covTmp = {cov[0], cov[1], cov[2]};
+      std::array<float, 2> pTmp = {p[0], p[1]};
+      std::array<float, 3> covTmp = {cov[0], cov[1], cov[2]};
       return mParam->getPredictedChi2(pTmp, covTmp);
     } else {
       return 99999.f;
@@ -187,7 +187,6 @@ class propagatorInterface<GPUTPCGMPropagator> : public GPUTPCGMPropagator
     this->SetMaterialTPC();
     this->SetPolynomialField(pField);
     this->SetMaxSinPhi(GPUCA_MAX_SIN_PHI);
-    this->SetToyMCEventsFlag(0);
     this->SetFitInProjections(0);
     this->SelectFieldRegion(GPUTPCGMPropagator::TRD);
   };
@@ -200,7 +199,7 @@ class propagatorInterface<GPUTPCGMPropagator> : public GPUTPCGMPropagator
   }
   GPUd() bool propagateToX(float x, float maxSnp, float maxStep)
   {
-    //bool ok = PropagateToXAlpha(x, GetAlpha(), true) == 0 ? true : false;
+    // bool ok = PropagateToXAlpha(x, GetAlpha(), true) == 0 ? true : false;
     int32_t retVal = PropagateToXAlpha(x, GetAlpha(), true);
     bool ok = (retVal == 0) ? true : false;
     ok = mTrack->CheckNumericalQuality();

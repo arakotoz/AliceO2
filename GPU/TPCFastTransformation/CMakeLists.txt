@@ -64,7 +64,6 @@ if(${ALIGPU_BUILD_TYPE} STREQUAL "O2")
                             HEADERS ${HDRS_CINT_O2}
                             LINKDEF TPCFastTransformationLinkDef_O2.h)
 
-  install(FILES ${HDRS_CINT_O2} DESTINATION include/GPU)
   file(COPY ${HDRS_CINT_O2} DESTINATION ${CMAKE_BINARY_DIR}/stage/include/GPU)
 
   o2_add_test(${MODULE}
@@ -115,14 +114,17 @@ if(${ALIGPU_BUILD_TYPE} STREQUAL "O2")
                            LABELS gpu tpc)
   endforeach()
 
+  install(FILES macro/TPCFastTransformInit.C
+          DESTINATION share/macro/)
 endif()
 
 if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
   add_library(${MODULE} SHARED ${SRCS})
+  set(targetName ${MODULE})
+  target_include_directories(${targetName} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
-install (FILES macro/TPCFastTransformInit.C
-         DESTINATION share/macro/)
+install(FILES ${HDRS_CINT_O2} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/GPU)
 
 #
 # FIXME: this one is misplaced : it depends (at least) on TPCSimulation which is

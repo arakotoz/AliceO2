@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include <memory>
+#include <array>
 
 // root includes
 #include "TFile.h"
@@ -21,7 +22,6 @@
 // o2 includes
 #include "DataFormatsTPC/TrackTPC.h"
 #include "DataFormatsTPC/dEdxInfo.h"
-#include "GPUCommonArray.h"
 #include "DetectorsBase/Propagator.h"
 #include "TPCQC/Tracks.h"
 #include "TPCQC/Helpers.h"
@@ -38,7 +38,7 @@ struct binning {
 const std::vector<std::string_view> types{"A_Pos", "A_Neg", "C_Pos", "C_Neg"};
 const binning binsDCAr{200, -5., 5.};
 const binning binsDCArLargerRange{400, -10., 10.};
-const binning binsEta{200, -1., 1.};
+const binning binsEta{300, -1.5, 1.5};
 const binning binsClus{120, 60., 180.};
 const binning binsClusLargerRange{140, 60., 200.};
 //______________________________________________________________________________
@@ -179,10 +179,9 @@ bool Tracks::processTrack(const o2::tpc::TrackTPC& track)
 
       if (propagator->getMatLUT() && propagator->hasMagFieldSet()) {
         // ---| fill DCA histos |---
-        o2::gpu::gpustd::array<float, 2> dca;
-        const o2::math_utils::Point3D<float> refPoint{0, 0, 0};
+        std::array<float, 2> dca;
         o2::track::TrackPar propTrack(track);
-        if (propagator->propagateToDCABxByBz(refPoint, propTrack, 2.f, o2::base::Propagator::MatCorrType::USEMatCorrLUT, &dca)) {
+        if (propagator->propagateToDCABxByBz(mPositionOfPV, propTrack, 2.f, o2::base::Propagator::MatCorrType::USEMatCorrLUT, &dca)) {
           const auto phi = o2::math_utils::to02PiGen(track.getPhi());
           dcaHistPT->Fill(pt, dca[0]);
           dcaHist->Fill(phi, dca[0]);

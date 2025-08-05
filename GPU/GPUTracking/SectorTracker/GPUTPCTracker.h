@@ -29,7 +29,6 @@
 
 namespace o2::gpu
 {
-class GPUTPCSectorOutput;
 struct GPUTPCClusterData;
 struct GPUParam;
 class GPUTPCTrack;
@@ -50,8 +49,6 @@ class GPUTPCTracker : public GPUProcessor
   void InitializeRows(const GPUParam* param) { mData.InitializeRows(*param); }
 
   int32_t CheckEmptySector();
-  void WriteOutputPrepare();
-  void WriteOutput();
 
   // Debugging Stuff
   void DumpTrackingData(std::ostream& out);         // Dump Input Sector Data
@@ -60,27 +57,16 @@ class GPUTPCTracker : public GPUProcessor
   void DumpHitWeights(std::ostream& out);           //....
   void DumpTrackHits(std::ostream& out);            // Same for Track Hits
   void DumpTrackletHits(std::ostream& out);         // Same for Track Hits
-  void DumpOutput(std::ostream& out);               // Similar for output
 #endif
 
-  struct StructGPUParameters {
-    GPUAtomic(uint32_t) nextStartHit; // Next Tracklet to process
-  };
-
-  struct StructGPUParametersConst {
-    GPUglobalref() char* gpumem; // Base pointer to GPU memory (Needed for OpenCL for verification)
-  };
-
   struct commonMemoryStruct {
-    commonMemoryStruct() : nStartHits(0), nTracklets(0), nRowHits(0), nTracks(0), nLocalTracks(0), nTrackHits(0), nLocalTrackHits(0), gpuParameters() {}
-    GPUAtomic(uint32_t) nStartHits;    // number of start hits
-    GPUAtomic(uint32_t) nTracklets;    // number of tracklets
-    GPUAtomic(uint32_t) nRowHits;      // number of tracklet hits
-    GPUAtomic(uint32_t) nTracks;       // number of reconstructed tracks
-    int32_t nLocalTracks;              // number of reconstructed tracks before extrapolation tracking
-    GPUAtomic(uint32_t) nTrackHits;    // number of track hits
-    int32_t nLocalTrackHits;           // see above
-    StructGPUParameters gpuParameters; // GPU parameters
+    GPUAtomic(uint32_t) nStartHits = 0; // number of start hits
+    GPUAtomic(uint32_t) nTracklets = 0; // number of tracklets
+    GPUAtomic(uint32_t) nRowHits = 0;   // number of tracklet hits
+    GPUAtomic(uint32_t) nTracks = 0;    // number of reconstructed tracks
+    int32_t nLocalTracks = 0;           // number of reconstructed tracks before extrapolation tracking
+    GPUAtomic(uint32_t) nTrackHits = 0; // number of track hits
+    int32_t nLocalTrackHits = 0;        // see above
   };
 
   GPUhdi() GPUglobalref() const GPUTPCClusterData* ClusterData() const
@@ -88,7 +74,6 @@ class GPUTPCTracker : public GPUProcessor
     return mData.ClusterData();
   }
   GPUhdi() const GPUTPCRow& Row(const GPUTPCHitId& HitId) const { return mData.Row(HitId.RowIndex()); }
-  GPUhdi() GPUglobalref() GPUTPCSectorOutput* Output() const { return mOutput; }
   GPUhdni() GPUglobalref() commonMemoryStruct* CommonMemory() const
   {
     return (mCommonMem);
@@ -210,13 +195,6 @@ class GPUTPCTracker : public GPUProcessor
 
   GPUhd() GPUglobalref() GPUTPCRow* TrackingDataRows() const { return (mData.Rows()); }
   GPUhd() GPUglobalref() int32_t* RowStartHitCountOffset() const { return (mRowStartHitCountOffset); }
-  GPUhd() GPUglobalref() StructGPUParameters* GPUParameters() const { return (&mCommonMem->gpuParameters); }
-  GPUhd() StructGPUParametersConst* GPUParametersConst()
-  {
-    return (&mGPUParametersConst);
-  }
-  GPUhd() const StructGPUParametersConst* GetGPUParametersConst() const { return (&mGPUParametersConst); }
-  GPUhd() void SetGPUTextureBase(GPUglobalref() const void* val) { mData.SetGPUTextureBase(val); }
 
   struct trackSortData {
     int32_t fTtrack; // Track ID
@@ -258,8 +236,6 @@ class GPUTPCTracker : public GPUProcessor
   GPUglobalref() GPUTPCHitId* mTrackletTmpStartHits = nullptr; // Unsorted start hits
   GPUglobalref() char* mGPUTrackletTemp = nullptr;             // Temp Memory for GPU Tracklet Constructor
 
-  StructGPUParametersConst mGPUParametersConst; // Parameters for GPU if this is a GPU tracker
-
   // event
   GPUglobalref() commonMemoryStruct* mCommonMem = nullptr;  // common event memory
   GPUglobalref() GPUTPCHitId* mTrackletStartHits = nullptr; // start hits for the tracklets
@@ -267,10 +243,6 @@ class GPUTPCTracker : public GPUProcessor
   GPUglobalref() calink* mTrackletRowHits = nullptr;        // Hits for each Tracklet in each row
   GPUglobalref() GPUTPCTrack* mTracks = nullptr;            // reconstructed tracks
   GPUglobalref() GPUTPCHitId* mTrackHits = nullptr;         // array of track hit numbers
-
-  // output
-  GPUglobalref() GPUTPCSectorOutput* mOutput; // address of pointer pointing to SectorOutput Object
-  void* mOutputMemory;                        // Pointer to output memory if stored internally
 
   static int32_t StarthitSortComparison(const void* a, const void* b);
 };

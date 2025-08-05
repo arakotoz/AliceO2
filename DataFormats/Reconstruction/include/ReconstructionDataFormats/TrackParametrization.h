@@ -29,7 +29,6 @@
 #include "GPUCommonDef.h"
 #include "GPUCommonRtypes.h"
 #include "GPUCommonMath.h"
-#include "GPUCommonArray.h"
 #include "GPUROOTCartesianFwd.h"
 
 #ifndef GPUCA_GPUCODE_DEVICE
@@ -39,6 +38,7 @@
 #include <cstring>
 #include <iosfwd>
 #include <type_traits>
+#include <array>
 #endif
 
 #ifndef GPUCA_ALIGPUCODE // Used only by functions that are hidden on the GPU
@@ -128,9 +128,9 @@ class TrackParametrization
 
  public:
   using value_t = value_T;
-  using dim2_t = gpu::gpustd::array<value_t, 2>;
-  using dim3_t = gpu::gpustd::array<value_t, 3>;
-  using params_t = gpu::gpustd::array<value_t, kNParams>;
+  using dim2_t = std::array<value_t, 2>;
+  using dim3_t = std::array<value_t, 3>;
+  using params_t = std::array<value_t, kNParams>;
 
   struct yzerr_t { // 2 measurement with error
     dim2_t yz;
@@ -191,6 +191,7 @@ class TrackParametrization
   GPUd() value_t getPhi() const;
   GPUd() value_t getPhiPos() const;
 
+  GPUd() value_t getQ2P2() const;
   GPUd() value_t getPtInv() const;
   GPUd() value_t getP2Inv() const;
   GPUd() value_t getP2() const;
@@ -208,7 +209,7 @@ class TrackParametrization
   GPUd() math_utils::Point3D<value_t> getXYZGlo() const;
   GPUd() void getXYZGlo(dim3_t& xyz) const;
   GPUd() bool getPxPyPzGlo(dim3_t& pxyz) const;
-  GPUd() bool getPosDirGlo(gpu::gpustd::array<value_t, 9>& posdirp) const;
+  GPUd() bool getPosDirGlo(std::array<value_t, 9>& posdirp) const;
 
   // methods for track params estimate at other point
   GPUd() bool getYZAt(value_t xk, value_t b, value_t& y, value_t& z) const;
@@ -247,6 +248,8 @@ class TrackParametrization
 #ifndef GPUCA_ALIGPUCODE
   std::string asString() const;
   std::string asStringHexadecimal();
+  size_t hash() const { return hash(getX(), getAlpha(), getY(), getZ(), getSnp(), getTgl(), getQ2Pt()); }
+  static size_t hash(float x, float alp, float y, float z, float snp, float tgl, float q2pt);
 #endif
 
   GPUd() void updateParam(value_t delta, int i);
@@ -557,6 +560,18 @@ GPUdi() auto TrackParametrization<value_T>::getPhiPos() const -> value_t
 
 //____________________________________________________________
 template <typename value_T>
+GPUdi() auto TrackParametrization<value_T>::getQ2P2() const -> value_t
+{
+  // return the (q/p)^2
+  value_t q2pt2 = mP[kQ2Pt] * mP[kQ2Pt];
+  if (q2pt2 < MinPTInv * MinPTInv) {
+    q2pt2 = MinPTInv * MinPTInv;
+  }
+  return q2pt2 / (1.f + getTgl() * getTgl());
+}
+
+//____________________________________________________________
+template <typename value_T>
 GPUdi() auto TrackParametrization<value_T>::getPtInv() const -> value_t
 {
   // return the inverted track pT
@@ -738,6 +753,21 @@ GPUdi() void TrackParametrization<value_T>::updateParams(const value_t* delta)
     mP[kSnp] = -constants::math::Almost1;
   }
 }
+
+#ifndef GPUCA_ALIGPUCODE
+template <typename value_T>
+size_t TrackParametrization<value_T>::hash(float x, float alp, float y, float z, float snp, float tgl, float q2pt)
+{
+  size_t h = std::hash<float>{}(o2::math_utils::detail::truncateFloatFraction(x, 0xFFFFFFF0));
+  h ^= std::hash<float>{}(o2::math_utils::detail::truncateFloatFraction(alp, 0xFFFFFFF0)) << 1;
+  h ^= std::hash<float>{}(o2::math_utils::detail::truncateFloatFraction(y, 0xFFFFFFF0)) << 1;
+  h ^= std::hash<float>{}(o2::math_utils::detail::truncateFloatFraction(z, 0xFFFFFFF0)) << 1;
+  h ^= std::hash<float>{}(o2::math_utils::detail::truncateFloatFraction(snp, 0xFFFFFF00)) << 1;
+  h ^= std::hash<float>{}(o2::math_utils::detail::truncateFloatFraction(tgl, 0xFFFFFF00)) << 1;
+  h ^= std::hash<float>{}(o2::math_utils::detail::truncateFloatFraction(q2pt, 0xFFFFFC00)) << 1;
+  return h;
+}
+#endif
 
 } // namespace track
 } // namespace o2

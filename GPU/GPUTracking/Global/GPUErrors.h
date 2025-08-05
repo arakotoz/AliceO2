@@ -16,6 +16,9 @@
 #define GPUERRORS_H
 
 #include "GPUCommonDef.h"
+#ifndef GPUCA_GPUCODE
+#include <unordered_map>
+#endif
 
 namespace o2::gpu
 {
@@ -33,7 +36,10 @@ class GPUErrors
   GPUd() bool hasError() { return *mErrors > 0; }
   void setMemory(GPUglobalref() uint32_t* m) { mErrors = m; }
   void clear();
-  void printErrors(bool silent = false);
+  bool printErrors(bool silent = false, uint64_t mask = 0);
+#ifndef GPUCA_GPUCODE
+  static const std::unordered_map<uint32_t, const char*>& getErrorNames();
+#endif
   uint32_t getNErrors() const;
   const uint32_t* getErrorPtr() const;
   static uint32_t getMaxErrors();

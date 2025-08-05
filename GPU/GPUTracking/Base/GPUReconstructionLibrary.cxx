@@ -9,7 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// \file GPUReconstruction.cxx
+/// \file GPUReconstructionLibrary.cxx
 /// \author David Rohr
 
 #ifdef _WIN32
@@ -24,6 +24,7 @@
 
 #include "GPUReconstruction.h"
 #include "GPUReconstructionAvailableBackends.h"
+#include "GPUSettings.h"
 
 #include "utils/qlibload.h"
 
@@ -34,7 +35,6 @@ using namespace o2::gpu;
 GPUReconstruction* GPUReconstruction::CreateInstance(DeviceType type, bool forceType, GPUReconstruction* master)
 {
   GPUSettingsDeviceBackend cfg;
-  new (&cfg) GPUSettingsDeviceBackend;
   cfg.deviceType = type;
   cfg.forceDeviceType = forceType;
   cfg.master = master;
@@ -183,4 +183,9 @@ int32_t GPUReconstruction::LibraryLoader::CloseLibrary()
   mGPULib = nullptr;
   mGPUEntry = nullptr;
   return 0;
+}
+
+std::string GPUReconstruction::getBackendVersions()
+{
+  return GPUCA_M_STR(GPUCA_COMPILER_VERSIONS);
 }

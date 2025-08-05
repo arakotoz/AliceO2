@@ -18,6 +18,7 @@
 #include "DetectorsBase/GlobalParams.h"
 #include "DetectorsBase/Propagator.h"
 #include "ReconstructionDataFormats/TrackTPCITS.h"
+#include "ReconstructionDataFormats/Vertex.h"
 #include "DataFormatsTRD/Tracklet64.h"
 #include "DataFormatsTRD/CalibratedTracklet.h"
 #include "DataFormatsTRD/TriggerRecord.h"
@@ -51,6 +52,8 @@
 #include "GPUTRDTrackletWord.h"
 #include "GPUTRDInterfaces.h"
 #include "GPUTRDGeometry.h"
+#include "GPUConstantMem.h"
+#include "GPUTRDTrackerKernels.h"
 
 #ifdef ENABLE_UPGRADES
 #include "ITS3Reconstruction/IOUtils.h"
@@ -636,7 +639,7 @@ bool TRDGlobalTracking::refitITSTPCTRDTrack(TrackTRD& trk, float timeTRD, o2::gl
   }
   auto posEnd = trk.getXYZGlo();
   auto lInt = propagator->estimateLTIncrement(trk, posStart, posEnd);
-  trk.getLTIntegralOut().addStep(lInt, trk.getP2Inv());
+  trk.getLTIntegralOut().addStep(lInt, trk.getQ2P2());
   // trk.getLTIntegralOut().addX2X0(lInt * mTPCmeanX0Inv); // do we need to account for the material budget here? probably
 
   const auto& trackTune = TrackTuneParams::Instance();
@@ -731,7 +734,7 @@ bool TRDGlobalTracking::refitTPCTRDTrack(TrackTRD& trk, float timeTRD, o2::globa
   }
   auto posEnd = trk.getXYZGlo();
   auto lInt = propagator->estimateLTIncrement(trk, posStart, posEnd);
-  trk.getLTIntegralOut().addStep(lInt, trk.getP2Inv());
+  trk.getLTIntegralOut().addStep(lInt, trk.getQ2P2());
   // trk.getLTIntegralOut().addX2X0(lInt * mTPCmeanX0Inv); // do we need to account for the material budget here? probably?
 
   if (!propagator->PropagateToXBxByBz(trk, o2::constants::geom::XTPCInnerRef, o2::base::Propagator::MAX_SIN_PHI, o2::base::Propagator::MAX_STEP, matCorr, &trk.getLTIntegralOut())) {

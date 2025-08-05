@@ -14,14 +14,17 @@
 
 #include "GPUCommonDef.h"
 #include "GPUCommonMath.h"
-#include "GPUCommonArray.h"
 #include <MathUtils/Cartesian.h>
 
 #include "CommonDataFormat/TimeStamp.h"
 #ifndef GPUCA_GPUCODE_DEVICE
-#include <iosfwd>
-#include <string>
 #include <type_traits>
+#include <array>
+#ifndef GPUCA_NO_FMT
+#include <sstream>
+#include <string>
+#include <fmt/format.h>
+#endif
 #endif
 
 namespace o2
@@ -42,7 +45,7 @@ class VertexBase
   static constexpr int kNCov = 6;
   GPUhdDefault() VertexBase() = default;
   GPUhdDefault() ~VertexBase() = default;
-  GPUhd() VertexBase(const math_utils::Point3D<float>& pos, const gpu::gpustd::array<float, kNCov>& cov) : mPos(pos), mCov(cov)
+  GPUhd() VertexBase(const math_utils::Point3D<float>& pos, const std::array<float, kNCov>& cov) : mPos(pos), mCov(cov)
   {
   }
 
@@ -65,7 +68,7 @@ class VertexBase
   GPUd() float getSigmaY() const { return gpu::CAMath::Sqrt(getSigmaY2()); }
   GPUd() float getSigmaZ() const { return gpu::CAMath::Sqrt(getSigmaZ2()); }
 
-  GPUd() const gpu::gpustd::array<float, kNCov>& getCov() const { return mCov; }
+  GPUd() const std::array<float, kNCov>& getCov() const { return mCov; }
 
   GPUd() math_utils::Point3D<float> getXYZ() const { return mPos; }
   GPUd() math_utils::Point3D<float>& getXYZ() { return mPos; }
@@ -101,14 +104,14 @@ class VertexBase
     setSigmaXZ(sxz);
     setSigmaYZ(syz);
   }
-  GPUd() void setCov(const gpu::gpustd::array<float, kNCov>& cov) { mCov = cov; }
+  GPUd() void setCov(const std::array<float, kNCov>& cov) { mCov = cov; }
 
   bool operator==(const VertexBase& other) const;
   bool operator!=(const VertexBase& other) const { return !(*this == other); }
 
  protected:
   math_utils::Point3D<float> mPos{0., 0., 0.}; ///< cartesian position
-  gpu::gpustd::array<float, kNCov> mCov{};     ///< errors, see CovElems enum
+  std::array<float, kNCov> mCov{};             ///< errors, see CovElems enum
 
   ClassDefNV(VertexBase, 1);
 };
@@ -130,10 +133,15 @@ class Vertex : public VertexBase
 
   GPUhdDefault() Vertex() = default;
   GPUhdDefault() ~Vertex() = default;
-  GPUhd() Vertex(const math_utils::Point3D<float>& pos, const gpu::gpustd::array<float, kNCov>& cov, ushort nCont, float chi2)
+  GPUhd() Vertex(const math_utils::Point3D<float>& pos, const std::array<float, kNCov>& cov, ushort nCont, float chi2)
     : VertexBase(pos, cov), mChi2(chi2), mNContributors(nCont)
   {
   }
+
+#if !defined(GPUCA_NO_FMT) && !defined(GPUCA_GPUCODE_DEVICE)
+  void print() const;
+  std::string asString() const;
+#endif
 
   GPUd() ushort getNContributors() const { return mNContributors; }
   GPUd() void setNContributors(ushort v) { mNContributors = v; }
@@ -162,6 +170,49 @@ class Vertex : public VertexBase
 
 #if !defined(GPUCA_GPUCODE_DEVICE) && !defined(GPUCA_NO_FMT)
 std::ostream& operator<<(std::ostream& os, const o2::dataformats::VertexBase& v);
+
+namespace detail
+{
+template <typename T>
+concept Streamable = requires(std::ostream& os, const T& a) {
+  { os << a } -> std::same_as<std::ostream&>;
+};
+
+template <typename T>
+concept HasFormattableTimeStamp = requires(const T& t) {
+  { fmt::format("{}", t.getTimeStamp()) } -> std::convertible_to<std::string>;
+};
+} // namespace detail
+
+template <typename Stamp>
+inline std::string Vertex<Stamp>::asString() const
+{
+  const std::string stamp = [&]() -> std::string {
+    if constexpr (detail::Streamable<Stamp>) {
+      std::ostringstream oss;
+      oss << mTimeStamp;
+      return oss.str();
+    } else if constexpr (detail::HasFormattableTimeStamp<Stamp>) {
+      return fmt::format("{}", mTimeStamp.getTimeStamp());
+    } else {
+      return "X";
+    }
+  }();
+  return fmt::format("{} NContrib:{} Chi2:{:.2f} Flags:{:b} Stamp:{}", VertexBase::asString(), mNContributors, mChi2, mBits, stamp);
+}
+
+template <typename Stamp>
+inline std::ostream& operator<<(std::ostream& os, const o2::dataformats::Vertex<Stamp>& v)
+{
+  os << v.asString();
+  return os;
+}
+
+template <typename Stamp>
+inline void Vertex<Stamp>::print() const
+{
+  std::cout << *this << '\n';
+}
 #endif
 
 } // namespace dataformats

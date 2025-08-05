@@ -226,6 +226,7 @@ class GPUQA
   float GetMCLabelWeight(uint32_t i, uint32_t j);
   float GetMCLabelWeight(const mcLabels_t& label, uint32_t j);
   float GetMCLabelWeight(const mcLabel_t& label);
+  static bool CompareIgnoreFake(const mcLabelI_t& l1, const mcLabelI_t& l2);
   const auto& GetClusterLabels();
   bool mcPresent();
 
@@ -258,7 +259,7 @@ class GPUQA
   std::vector<additionalClusterParameters> mClusterParam;
   int32_t mNTotalFakes = 0;
 
-  TH1F* mEff[4][2][2][5]; // eff,clone,fake,all - findable - secondaries - y,z,phi,eta,pt - work,result
+  TH1F* mEff[5][2][2][5]; // eff,clone,fake,all,all-fake - findable - secondaries - y,z,phi,eta,pt - work,result
   TGraphAsymmErrors* mEffResult[4][2][2][5];
   TCanvas* mCEff[6];
   TPad* mPEff[6][4];
@@ -290,7 +291,7 @@ class GPUQA
   TLegend* mLClust[N_CLS_TYPE];
 
   struct counts_t {
-    int64_t nRejected = 0, nTube = 0, nTube200 = 0, nLoopers = 0, nLowPt = 0, n200MeV = 0, nPhysics = 0, nProt = 0, nUnattached = 0, nTotal = 0, nHighIncl = 0, nAbove400 = 0, nFakeRemove400 = 0, nFullFakeRemove400 = 0, nBelow40 = 0, nFakeProtect40 = 0, nMergedLooper = 0;
+    int64_t nRejected = 0, nTube = 0, nTube200 = 0, nLoopers = 0, nLowPt = 0, n200MeV = 0, nPhysics = 0, nProt = 0, nUnattached = 0, nTotal = 0, nHighIncl = 0, nAbove400 = 0, nFakeRemove400 = 0, nFullFakeRemove400 = 0, nBelow40 = 0, nFakeProtect40 = 0, nMergedLooper = 0, nCorrectlyAttachedNormalized = 0, nCorrectlyAttachedNormalizedNonFake = 0;
     double nUnaccessible = 0;
   } mClusterCounts;
 
@@ -299,10 +300,10 @@ class GPUQA
   TPad* mPTracks;
   TLegend* mLTracks;
 
-  TH1F* mNCl;
-  TCanvas* mCNCl;
-  TPad* mPNCl;
-  TLegend* mLNCl;
+  TH1F* mNCl[2];
+  TCanvas* mCNCl[2];
+  TPad* mPNCl[2];
+  TLegend* mLNCl[2];
 
   TH2F* mClXY;
   TCanvas* mCClXY;

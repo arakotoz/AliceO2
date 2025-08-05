@@ -14,13 +14,37 @@
 
 #include "GPUReconstructionProcessing.h"
 #include "GPUReconstructionThreading.h"
+#include "GPUDefParametersLoad.inc"
+#include "GPUReconstructionKernelIncludes.h"
+#include "GPUSettings.h"
+#include "GPULogging.h"
 
 using namespace o2::gpu;
+
+GPUReconstructionProcessing::GPUReconstructionProcessing(const GPUSettingsDeviceBackend& cfg) : GPUReconstruction(cfg)
+{
+  if (mMaster == nullptr) {
+    mParCPU = new GPUDefParameters(o2::gpu::internal::GPUDefParametersLoad());
+    mParDevice = new GPUDefParameters();
+  } else {
+    GPUReconstructionProcessing* master = dynamic_cast<GPUReconstructionProcessing*>(mMaster);
+    mParCPU = master->mParCPU;
+    mParDevice = master->mParDevice;
+  }
+}
+
+GPUReconstructionProcessing::~GPUReconstructionProcessing()
+{
+  if (mMaster == nullptr) {
+    delete mParCPU;
+    delete mParDevice;
+  }
+}
 
 int32_t GPUReconstructionProcessing::getNKernelHostThreads(bool splitCores)
 {
   int32_t nThreads = 0;
-  if (mProcessingSettings.inKernelParallel == 2 && mNActiveThreadsOuterLoop) {
+  if (GetProcessingSettings().inKernelParallel == 2 && mNActiveThreadsOuterLoop) {
     if (splitCores) {
       nThreads = mMaxHostThreads / mNActiveThreadsOuterLoop;
       nThreads += (uint32_t)getHostThreadIndex() < mMaxHostThreads % mNActiveThreadsOuterLoop;
@@ -29,7 +53,7 @@ int32_t GPUReconstructionProcessing::getNKernelHostThreads(bool splitCores)
     }
     nThreads = std::max(1, nThreads);
   } else {
-    nThreads = mProcessingSettings.inKernelParallel ? mMaxHostThreads : 1;
+    nThreads = GetProcessingSettings().inKernelParallel ? mMaxHostThreads : 1;
   }
   return nThreads;
 }
@@ -38,7 +62,7 @@ void GPUReconstructionProcessing::SetNActiveThreads(int32_t n)
 {
   mActiveHostKernelThreads = std::max(1, n < 0 ? mMaxHostThreads : std::min(n, mMaxHostThreads));
   mThreading->activeThreads = std::make_unique<tbb::task_arena>(mActiveHostKernelThreads);
-  if (mProcessingSettings.debugLevel >= 3) {
+  if (GetProcessingSettings().debugLevel >= 3) {
     GPUInfo("Set number of active parallel kernels threads on host to %d (%d requested)", mActiveHostKernelThreads, n);
   }
 }
@@ -57,17 +81,24 @@ void GPUReconstructionProcessing::runParallelOuterLoop(bool doGPU, uint32_t nThr
   }
 }
 
-namespace o2::gpu
+uint32_t GPUReconstructionProcessing::SetAndGetNActiveThreadsOuterLoop(bool condition, uint32_t max)
 {
-namespace // anonymous
-{
-static std::atomic_flag timerFlag = ATOMIC_FLAG_INIT; // TODO: Should be a class member not global, but cannot be moved to header due to ROOT limitation
-} // anonymous namespace
-} // namespace o2::gpu
+  if (condition && GetProcessingSettings().inKernelParallel != 1) {
+    mNActiveThreadsOuterLoop = GetProcessingSettings().inKernelParallel == 2 ? std::min<uint32_t>(max, mMaxHostThreads) : mMaxHostThreads;
+  } else {
+    mNActiveThreadsOuterLoop = 1;
+  }
+  if (GetProcessingSettings().debugLevel >= 5) {
+    printf("Running %d threads in outer loop\n", mNActiveThreadsOuterLoop);
+  }
+  return mNActiveThreadsOuterLoop;
+}
+
+std::atomic_flag GPUReconstructionProcessing::mTimerFlag = ATOMIC_FLAG_INIT;
 
 GPUReconstructionProcessing::timerMeta* GPUReconstructionProcessing::insertTimer(uint32_t id, std::string&& name, int32_t J, int32_t num, int32_t type, RecoStep step)
 {
-  while (timerFlag.test_and_set()) {
+  while (mTimerFlag.test_and_set()) {
   }
   if (mTimers.size() <= id) {
     mTimers.resize(id + 1);
@@ -81,20 +112,20 @@ GPUReconstructionProcessing::timerMeta* GPUReconstructionProcessing::insertTimer
     mTimers[id]->count++;
   }
   timerMeta* retVal = mTimers[id].get();
-  timerFlag.clear();
+  mTimerFlag.clear();
   return retVal;
 }
 
 GPUReconstructionProcessing::timerMeta* GPUReconstructionProcessing::getTimerById(uint32_t id, bool increment)
 {
   timerMeta* retVal = nullptr;
-  while (timerFlag.test_and_set()) {
+  while (mTimerFlag.test_and_set()) {
   }
   if (mTimers.size() > id && mTimers[id]) {
     retVal = mTimers[id].get();
     retVal->count += increment;
   }
-  timerFlag.clear();
+  mTimerFlag.clear();
   return retVal;
 }
 
@@ -104,23 +135,30 @@ uint32_t GPUReconstructionProcessing::getNextTimerId()
   return id.fetch_add(1);
 }
 
-uint32_t GPUReconstructionProcessing::SetAndGetNActiveThreadsOuterLoop(bool condition, uint32_t max)
+std::unique_ptr<GPUReconstructionProcessing::threadContext> GPUReconstructionProcessing::GetThreadContext()
 {
-  if (condition && mProcessingSettings.inKernelParallel != 1) {
-    mNActiveThreadsOuterLoop = mProcessingSettings.inKernelParallel == 2 ? std::min<uint32_t>(max, mMaxHostThreads) : mMaxHostThreads;
-  } else {
-    mNActiveThreadsOuterLoop = 1;
-  }
-  if (mProcessingSettings.debugLevel >= 5) {
-    printf("Running %d threads in outer loop\n", mNActiveThreadsOuterLoop);
-  }
-  return mNActiveThreadsOuterLoop;
-}
-
-std::unique_ptr<gpu_reconstruction_kernels::threadContext> GPUReconstructionProcessing::GetThreadContext()
-{
-  return std::make_unique<gpu_reconstruction_kernels::threadContext>();
+  return std::make_unique<threadContext>();
 }
 
 gpu_reconstruction_kernels::threadContext::threadContext() = default;
 gpu_reconstruction_kernels::threadContext::~threadContext() = default;
+
+const std::vector<std::string> GPUReconstructionProcessing::mKernelNames = {
+#define GPUCA_KRNL(x_class, ...) GPUCA_M_STR(GPUCA_M_KRNL_NAME(x_class)),
+#include "GPUReconstructionKernelList.h"
+#undef GPUCA_KRNL
+};
+
+#define GPUCA_KRNL(x_class, x_attributes, x_arguments, x_forward, x_types, x_num)          \
+  template <>                                                                              \
+  uint32_t GPUReconstructionProcessing::GetKernelNum<GPUCA_M_KRNL_TEMPLATE(x_class)>()     \
+  {                                                                                        \
+    return x_num;                                                                          \
+  }                                                                                        \
+  template <>                                                                              \
+  const char* GPUReconstructionProcessing::GetKernelName<GPUCA_M_KRNL_TEMPLATE(x_class)>() \
+  {                                                                                        \
+    return GPUCA_M_STR(GPUCA_M_KRNL_NAME(x_class));                                        \
+  }
+#include "GPUReconstructionKernelList.h"
+#undef GPUCA_KRNL

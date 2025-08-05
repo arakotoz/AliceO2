@@ -28,7 +28,10 @@
 #include "GPUCommonArray.h"
 #include "GPUParam.h"
 #include "GPUTrackParamConvert.h"
-#include "GPUCommonTypeTraits.h"
+
+#ifndef GPUCA_GPUCODE_DEVICE
+#include <type_traits>
+#endif
 
 using namespace o2::gpu;
 using namespace o2::track;
@@ -85,7 +88,6 @@ GPUd() void GPUTrackingRefit::initProp<GPUgeneric() GPUTPCGMPropagator>(GPUTPCGM
 {
   prop.SetMaterialTPC();
   prop.SetMaxSinPhi(GPUCA_MAX_SIN_PHI);
-  prop.SetToyMCEventsFlag(false);
   prop.SetSeedingErrors(false);
   prop.SetFitInProjections(mPparam->rec.fitInProjections != 0);
   prop.SetPropagateBzOnly(false);
@@ -256,7 +258,7 @@ GPUd() int32_t GPUTrackingRefit::RefitTrack(T& trkX, bool outward, bool resetCov
   int32_t nAvgCharge = 0;
 
   for (int32_t i = start; i != stop; i += cl ? 0 : direction) {
-    float x = 0, y = 0, z = 0, charge = 0; // FIXME: initialization unneeded, but GCC incorrectly produces uninitialized warnings otherwise
+    float x = 0, y = 0, z = 0, charge = 0;                  // FIXME: initialization unneeded, but GCC incorrectly produces uninitialized warnings otherwise
     float time = 0.f, invCharge = 0.f, invSqrtCharge = 0.f; // Same here...
     int32_t clusters = 0;
     while (true) {
@@ -265,7 +267,7 @@ GPUd() int32_t GPUTrackingRefit::RefitTrack(T& trkX, bool outward, bool resetCov
         if constexpr (std::is_same_v<T, GPUTPCGMMergedTrack>) {
           const auto& hit = mPtrackHits[trkX.FirstClusterRef() + i];
           cl = &mPclusterNative->clustersLinear[hit.num];
-          if (hit.state & (GPUTPCGMMergedTrackHit::flagReject | GPUTPCGMMergedTrackHit::flagNotFit)) {
+          if (hit.state & (GPUTPCGMMergedTrackHit::flagReject | GPUTPCGMMergedTrackHit::flagHighIncl)) {
             cl = nullptr;
             if (i + direction != stop) {
               i += direction;
@@ -384,8 +386,8 @@ GPUd() int32_t GPUTrackingRefit::RefitTrack(T& trkX, bool outward, bool resetCov
         TrackParCovChi2 = 0.f;
       }
       CADEBUG(printf("\t%21sPropaga Alpha %8.3f    , X %8.3f - Y %8.3f, Z %8.3f   -   QPt %7.2f (%7.2f), SP %5.2f (%5.2f)   ---   Res %8.3f %8.3f   ---   Cov sY %8.3f sZ %8.3f sSP %8.3f sPt %8.3f   -   YPt %8.3f\n", "", trk.getAlpha(), x, trk.getParams()[0], trk.getParams()[1], trk.getParams()[4], trk.getParams()[4], trk.getParams()[2], trk.getParams()[2], trk.getParams()[0] - y, trk.getParams()[1] - z, sqrtf(trk.getCov()[0]), sqrtf(trk.getCov()[2]), sqrtf(trk.getCov()[5]), sqrtf(trk.getCov()[14]), trk.getCov()[10]));
-      gpu::gpustd::array<float, 2> p = {y, z};
-      gpu::gpustd::array<float, 3> c = {0, 0, 0};
+      std::array<float, 2> p = {y, z};
+      std::array<float, 3> c = {0, 0, 0};
       GPUTPCGMPropagator::GetErr2(c[0], c[2], *mPparam, getPar(trk)[2], getPar(trk)[3], z, x, y, currentRow, clusterState, sector, time, invAvgCharge, invCharge, false);
       TrackParCovChi2 += trk.getPredictedChi2(p, c);
       if (!trk.update(p, c)) {

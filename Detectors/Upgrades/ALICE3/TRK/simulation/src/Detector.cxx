@@ -53,6 +53,28 @@ Detector::Detector(bool active)
     configServices();
   }
 
+  mSensorName.resize(mNumberOfVolumes); // hardcoded. TODO: change size when a different naming scheme for VD is in place. Ideally could be 4 petals + 8 layers = 12
+  int VDvolume = 0;
+  for (int i = 0; i < 4; i++) { /// VD
+    for (int j = 0; j < 3; j++) {
+      mSensorName[VDvolume].Form("%s%d_%s%d_%s%d", GeometryTGeo::getTRKPetalPattern(), i, GeometryTGeo::getTRKPetalLayerPattern(), j, GeometryTGeo::getTRKSensorPattern(), j);
+      VDvolume++;
+    }
+    for (int j = 0; j < 6; j++) {
+      mSensorName[VDvolume].Form("%s%d_%s%d_%s%d", GeometryTGeo::getTRKPetalPattern(), i, GeometryTGeo::getTRKPetalDiskPattern(), j, GeometryTGeo::getTRKSensorPattern(), j);
+      VDvolume++;
+    }
+  }
+
+  for (int i = 0; i < 8; i++) { /// MLOT
+    mSensorName[VDvolume].Form("%s%d", GeometryTGeo::getTRKSensorPattern(), i);
+    VDvolume++;
+  }
+
+  for (auto vd : mSensorName) {
+    std::cout << "Volume name: " << vd << std::endl;
+  }
+
   LOGP(info, "Summary of TRK configuration:");
   for (auto& layer : mLayers) {
     LOGP(info, "Layer: {} name: {} r: {} cm | z: {} cm | thickness: {} cm", layer.getNumber(), layer.getName(), layer.getInnerRadius(), layer.getZ(), layer.getChipThickness());
@@ -80,17 +102,17 @@ void Detector::configDefault()
   mLayers.clear();
 
   LOGP(warning, "Loading Scoping Document configuration for ALICE3 TRK");
-  mLayers.emplace_back(0, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(0)}, 0.5f, 50.f, 100.e-4);
-  mLayers.emplace_back(1, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(1)}, 1.2f, 50.f, 100.e-4);
-  mLayers.emplace_back(2, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(2)}, 2.5f, 50.f, 100.e-4);
-  mLayers.emplace_back(3, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(3)}, 3.78f, 124.f, 100.e-3);
-  mLayers.emplace_back(4, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(4)}, 7.f, 124.f, 100.e-3);
-  mLayers.emplace_back(5, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(5)}, 12.f, 124.f, 100.e-3);
-  mLayers.emplace_back(6, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(6)}, 20.f, 124.f, 100.e-3);
-  mLayers.emplace_back(7, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(7)}, 30.f, 124.f, 100.e-3);
-  mLayers.emplace_back(8, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(8)}, 45.f, 258.f, 100.e-3);
-  mLayers.emplace_back(9, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(9)}, 60.f, 258.f, 100.e-3);
-  mLayers.emplace_back(10, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(10)}, 80.f, 258.f, 100.e-3);
+  // mLayers.emplace_back(0, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(0)}, 0.5f, 50.f, 100.e-4);
+  // mLayers.emplace_back(1, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(1)}, 1.2f, 50.f, 100.e-4);
+  // mLayers.emplace_back(2, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(2)}, 2.5f, 50.f, 100.e-4);
+  mLayers.emplace_back(0, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(0)}, 3.78f, 124.f, 100.e-3);
+  mLayers.emplace_back(1, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(1)}, 7.f, 124.f, 100.e-3);
+  mLayers.emplace_back(2, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(2)}, 12.f, 124.f, 100.e-3);
+  mLayers.emplace_back(3, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(3)}, 20.f, 124.f, 100.e-3);
+  mLayers.emplace_back(4, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(4)}, 30.f, 124.f, 100.e-3);
+  mLayers.emplace_back(5, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(5)}, 45.f, 258.f, 100.e-3);
+  mLayers.emplace_back(6, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(6)}, 60.f, 258.f, 100.e-3);
+  mLayers.emplace_back(7, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(7)}, 80.f, 258.f, 100.e-3);
 }
 
 void Detector::buildTRKNewVacuumVessel()
@@ -103,31 +125,32 @@ void Detector::buildTRKNewVacuumVessel()
   mLayers.clear();
 
   LOGP(warning, "Loading \"After Upgrade Days March 2024\" configuration for ALICE3 TRK");
-  mLayers.emplace_back(0, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(0)}, 0.5f, 50.f, 100.e-4);
-  mLayers.emplace_back(1, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(1)}, 1.2f, 50.f, 100.e-4);
-  mLayers.emplace_back(2, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(2)}, 2.5f, 50.f, 100.e-4);
-  mLayers.emplace_back(3, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(3)}, 7.f, 124.f, 100.e-3);
-  mLayers.emplace_back(4, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(4)}, 9.f, 124.f, 100.e-3);
-  mLayers.emplace_back(5, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(5)}, 12.f, 124.f, 100.e-3);
-  mLayers.emplace_back(6, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(6)}, 20.f, 124.f, 100.e-3);
-  mLayers.emplace_back(7, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(7)}, 30.f, 124.f, 100.e-3);
-  mLayers.emplace_back(8, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(8)}, 45.f, 258.f, 100.e-3);
-  mLayers.emplace_back(9, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(9)}, 60.f, 258.f, 100.e-3);
-  mLayers.emplace_back(10, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(10)}, 80.f, 258.f, 100.e-3);
+  // mLayers.emplace_back(0, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(0)}, 0.5f, 50.f, 100.e-4);
+  // mLayers.emplace_back(1, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(1)}, 1.2f, 50.f, 100.e-4);
+  // mLayers.emplace_back(2, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(2)}, 2.5f, 50.f, 100.e-4);
+  mLayers.emplace_back(0, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(0)}, 7.f, 124.f, 100.e-3);
+  LOGP(info, "TRKLayer created. Name: {}", std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(0)});
+  mLayers.emplace_back(1, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(1)}, 9.f, 124.f, 100.e-3);
+  mLayers.emplace_back(2, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(2)}, 12.f, 124.f, 100.e-3);
+  mLayers.emplace_back(3, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(3)}, 20.f, 124.f, 100.e-3);
+  mLayers.emplace_back(4, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(4)}, 30.f, 124.f, 100.e-3);
+  mLayers.emplace_back(5, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(5)}, 45.f, 258.f, 100.e-3);
+  mLayers.emplace_back(6, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(6)}, 60.f, 258.f, 100.e-3);
+  mLayers.emplace_back(7, std::string{GeometryTGeo::getTRKLayerPattern() + std::to_string(7)}, 80.f, 258.f, 100.e-3);
 
   auto& trkPars = TRKBaseParam::Instance();
 
   // Middle layers
+  mLayers[0].setLayout(trkPars.layoutML);
+  mLayers[1].setLayout(trkPars.layoutML);
+  mLayers[2].setLayout(trkPars.layoutML);
   mLayers[3].setLayout(trkPars.layoutML);
-  mLayers[4].setLayout(trkPars.layoutML);
-  mLayers[5].setLayout(trkPars.layoutML);
-  mLayers[6].setLayout(trkPars.layoutML);
 
   // Outer tracker
+  mLayers[4].setLayout(trkPars.layoutOL);
+  mLayers[5].setLayout(trkPars.layoutOL);
+  mLayers[6].setLayout(trkPars.layoutOL);
   mLayers[7].setLayout(trkPars.layoutOL);
-  mLayers[8].setLayout(trkPars.layoutOL);
-  mLayers[9].setLayout(trkPars.layoutOL);
-  mLayers[10].setLayout(trkPars.layoutOL);
 }
 
 void Detector::configFromFile(std::string fileName)
@@ -173,7 +196,7 @@ void Detector::configToFile(std::string fileName)
 
 void Detector::configServices()
 {
-  mServices = TRKServices{2.6f, 50.f, 150.e-3};
+  mServices = TRKServices();
 }
 
 void Detector::createMaterials()
@@ -237,6 +260,14 @@ void Detector::createGeometry()
 
   // Add service for inner tracker
   mServices.createServices(vTRK);
+  mPetalCases.clear();
+  // Add petal cases (the sensitive layers inside the petal cases get constructed here too)
+  auto& trkPars = TRKBaseParam::Instance();
+  for (Int_t petalCaseNumber = 0; petalCaseNumber < sNumberVDPetalCases; ++petalCaseNumber) {
+    mPetalCases.emplace_back(petalCaseNumber, vTRK, trkPars.irisOpen);
+    mServices.excavateFromVacuum(mPetalCases[petalCaseNumber].getFullName());
+  }
+  mServices.registerVacuum(vTRK);
 }
 
 void Detector::InitializeO2Detector()
@@ -244,6 +275,12 @@ void Detector::InitializeO2Detector()
   LOG(info) << "Initialize TRK O2Detector";
   mGeometryTGeo = GeometryTGeo::Instance();
   defineSensitiveVolumes();
+
+  mSensorID.resize(mNumberOfVolumes); // hardcoded. TODO: change size when a different namingh scheme for VD is in place. Ideally could be 4 petals + 8 layers = 12
+  for (int i = 0; i < mNumberOfVolumes; i++) {
+    mSensorID[i] = gMC ? TVirtualMC::GetMC()->VolId(mSensorName[i]) : 0; // Volume ID from the Geant geometry
+    LOGP(info, "{}: mSensorID={}", i, mSensorID[i]);
+  }
 }
 
 void Detector::defineSensitiveVolumes()
@@ -254,9 +291,35 @@ void Detector::defineSensitiveVolumes()
   TString volumeName;
   LOGP(info, "Adding TRK Sensitive Volumes");
 
+  // Add petal case sensitive volumes
+  for (int petalCase = 0; petalCase < sNumberVDPetalCases; ++petalCase) {
+    // Petal layers
+    for (int petalLayer = 0; petalLayer < mPetalCases[petalCase].mPetalLayers.size(); ++petalLayer) {
+      volumeName = mPetalCases[petalCase].mPetalLayers[petalLayer].getSensorName();
+      if (petalLayer == 0) {
+        mFirstOrLastLayers.push_back(volumeName.Data());
+      }
+      LOGP(info, "Trying {}", volumeName.Data());
+      v = geoManager->GetVolume(volumeName.Data());
+      LOGP(info, "Adding TRK Sensitive Volume {}", v->GetName());
+      AddSensitiveVolume(v);
+    }
+    // Petal disks
+    for (int petalDisk = 0; petalDisk < mPetalCases[petalCase].mPetalDisks.size(); ++petalDisk) {
+      volumeName = mPetalCases[petalCase].mPetalDisks[petalDisk].getSensorName();
+      LOGP(info, "Trying {}", volumeName.Data());
+      v = geoManager->GetVolume(volumeName.Data());
+      LOGP(info, "Adding TRK Sensitive Volume {}", v->GetName());
+      AddSensitiveVolume(v);
+    }
+  }
+
   // The names of the TRK sensitive volumes have the format: TRKLayer(0...mLayers.size()-1)
   for (int j{0}; j < mLayers.size(); j++) {
     volumeName = GeometryTGeo::getTRKSensorPattern() + TString::Itoa(j, 10);
+    if (j == mLayers.size() - 1) {
+      mFirstOrLastLayers.push_back(volumeName.Data());
+    }
     LOGP(info, "Trying {}", volumeName.Data());
     v = geoManager->GetVolume(volumeName.Data());
     LOGP(info, "Adding TRK Sensitive Volume {}", v->GetName());
@@ -284,6 +347,18 @@ void Detector::Reset()
   }
 }
 
+bool Detector::InsideFirstOrLastLayer(std::string layerName)
+{
+  bool inside = false;
+  for (auto& firstOrLastLayer : mFirstOrLastLayers) {
+    if (firstOrLastLayer == layerName) {
+      inside = true;
+      break;
+    }
+  }
+  return inside;
+}
+
 bool Detector::ProcessHits(FairVolume* vol)
 {
   // This method is called from the MC stepping
@@ -291,16 +366,36 @@ bool Detector::ProcessHits(FairVolume* vol)
     return false;
   }
 
-  int lay = vol->getVolumeId();
+  int subDetID = -1;
+  int layer = -1;
+  int volume = 0;
+  int stave = -1;
   int volID = vol->getMCid();
+
+  bool notSens = false;
+  while ((volume < mNumberOfVolumes) && (notSens = (volID != mSensorID[volume]))) {
+    ++volume; /// there are 44 volumes, 36 for the VD (1 for each sensing element) and 8 for the MLOT (1 for each layer)
+  }
+
+  if (notSens) {
+    return kFALSE; // RS: can this happen? This method must be called for sensors only?
+  }
+
+  if (volume < mNumberOfVolumesVD) {
+    subDetID = 0; // VD. For the moment each "chip" is a volume./// TODO: change this logic once the naming scheme is changed
+  } else {
+    subDetID = 1; // MLOT
+    layer = volume - mNumberOfVolumesVD;
+  }
 
   // Is it needed to keep a track reference when the outer ITS volume is encountered?
   auto stack = (o2::data::Stack*)fMC->GetStack();
-  if (fMC->IsTrackExiting() && (lay == 0 || lay == mLayers.size() - 1)) {
+  // if (fMC->IsTrackExiting() && (lay == 0 || lay == mLayers.size() - 1)) {
+  if (fMC->IsTrackExiting() && InsideFirstOrLastLayer(vol->GetName())) {
     // Keep the track refs for the innermost and outermost layers only
     o2::TrackReference tr(*fMC, GetDetId());
     tr.setTrackID(stack->GetCurrentTrackNumber());
-    tr.setUserId(lay);
+    tr.setUserId(volume);
     stack->addTrackReference(tr);
   }
   bool startHit = false, stopHit = false;
@@ -350,13 +445,17 @@ bool Detector::ProcessHits(FairVolume* vol)
     TLorentzVector positionStop;
     fMC->TrackPosition(positionStop);
     // Retrieve the indices with the volume path
-    int stave(0), halfstave(0), chipinmodule(0), module;
-    fMC->CurrentVolOffID(1, chipinmodule);
-    fMC->CurrentVolOffID(2, module);
-    fMC->CurrentVolOffID(3, halfstave);
-    fMC->CurrentVolOffID(4, stave);
+    int stave(0), halfstave(0);
+    if (subDetID == 1) {
+      fMC->CurrentVolOffID(1, halfstave);
+      fMC->CurrentVolOffID(2, stave);
+    } /// if VD, for the moment the volume is the "chipID" so no need to retrieve other elments
 
-    Hit* p = addHit(stack->GetCurrentTrackNumber(), lay, mTrackData.mPositionStart.Vect(), positionStop.Vect(),
+    int chipID = mGeometryTGeo->getChipIndex(subDetID, volume, layer, stave, halfstave);
+
+    Print(vol, volume, subDetID, layer, stave, halfstave, chipID);
+
+    Hit* p = addHit(stack->GetCurrentTrackNumber(), chipID, mTrackData.mPositionStart.Vect(), positionStop.Vect(),
                     mTrackData.mMomentumStart.Vect(), mTrackData.mMomentumStart.E(), positionStop.T(),
                     mTrackData.mEnergyLoss, mTrackData.mTrkStatusStart, status);
     // p->SetTotalEnergy(vmc->Etot());
@@ -376,6 +475,25 @@ o2::itsmft::Hit* Detector::addHit(int trackID, int detID, const TVector3& startP
   mHits->emplace_back(trackID, detID, startPos, endPos, startMom, startE, endTime, eLoss, startStatus, endStatus);
   return &(mHits->back());
 }
+
+void Detector::Print(FairVolume* vol, int volume, int subDetID, int layer, int stave, int halfstave, int chipID) const
+{
+  int currentVol(0);
+  LOG(info) << "Current volume name: " << fMC->CurrentVolName() << " and ID " << fMC->CurrentVolID(currentVol);
+  LOG(info) << "volume: " << volume << "/" << mNumberOfVolumes - 1;
+  if (subDetID == 1 && mGeometryTGeo->getNumberOfHalfStaves(layer) == 2) { // staggered geometry
+    LOG(info) << "off volume name 1 " << fMC->CurrentVolOffName(1) << "  halfstave: " << halfstave;
+    LOG(info) << "off volume name 2  " << fMC->CurrentVolOffName(2) << "  stave: " << stave;
+    LOG(info) << "SubDetector ID: " << subDetID << "  Layer: " << layer << "  staveinLayer: " << stave << "  Chip ID: " << chipID;
+  } else if (subDetID == 1 && mGeometryTGeo->getNumberOfHalfStaves(layer) == 1) { // turbo geometry
+    LOG(info) << "off volume name 2  " << fMC->CurrentVolOffName(2) << "  stave: " << stave;
+    LOG(info) << "SubDetector ID: " << subDetID << "  Layer: " << layer << "  staveinLayer: " << stave << "  Chip ID: " << chipID;
+  } else {
+    LOG(info) << "SubDetector ID: " << subDetID << "  Chip ID: " << chipID;
+  }
+  LOG(info);
+}
+
 } // namespace trk
 } // namespace o2
 

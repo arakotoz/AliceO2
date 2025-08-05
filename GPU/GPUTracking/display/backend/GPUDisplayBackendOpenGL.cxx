@@ -27,6 +27,8 @@
 #include "GPUDisplayBackendOpenGL.h"
 #include "shaders/GPUDisplayShaders.h"
 #include "GPUDisplay.h"
+#include "GPULogging.h"
+#include "GPUParam.h"
 
 #define OPENGL_EMULATE_MULTI_DRAW 0
 
@@ -59,28 +61,23 @@ GPUDisplayBackendOpenGL::GPUDisplayBackendOpenGL()
   mBackendName = "OpenGL";
 }
 
+int32_t GPUDisplayBackendOpenGL::ExtInit()
+{
 #ifdef GPUCA_DISPLAY_GL3W
-int32_t GPUDisplayBackendOpenGL::ExtInit()
-{
   return gl3wInit();
-}
 #else
-int32_t GPUDisplayBackendOpenGL::ExtInit()
-{
   return glewInit();
-}
 #endif
+}
+
+bool GPUDisplayBackendOpenGL::CoreProfile()
+{
 #ifdef GPUCA_DISPLAY_OPENGL_CORE
-bool GPUDisplayBackendOpenGL::CoreProfile()
-{
   return true;
-}
 #else
-bool GPUDisplayBackendOpenGL::CoreProfile()
-{
   return false;
-}
 #endif
+}
 
 // #define CHKERR(cmd) {cmd;}
 #define CHKERR(cmd)                                                                                                 \
@@ -303,7 +300,7 @@ int32_t GPUDisplayBackendOpenGL::checkProgramStatus(uint32_t program)
 
 int32_t GPUDisplayBackendOpenGL::InitBackendA()
 {
-  if (mDisplay->param()->par.debugLevel >= 2) {
+  if (mDisplay->GetProcessingSettings().debugLevel >= 2) {
     auto renderer = glGetString(GL_RENDERER);
     GPUInfo("Renderer: %s", (const char*)renderer);
   }
@@ -333,9 +330,9 @@ int32_t GPUDisplayBackendOpenGL::InitBackendA()
 #if defined(GL_VERSION_4_6) && GL_VERSION_4_6 == 1 && defined(GPUCA_BUILD_EVENT_DISPLAY_VULKAN)
   if (getenv("USE_SPIRV_SHADERS") && atoi(getenv("USE_SPIRV_SHADERS"))) {
     CHKERR(glShaderBinary(1, &mVertexShader, GL_SHADER_BINARY_FORMAT_SPIR_V_ARB, _binary_shaders_shaders_vertex_vert_spv_start, _binary_shaders_shaders_vertex_vert_spv_len));
-    CHKERR(glSpecializeShader(mVertexShader, "main", 0, 0, 0));
+    CHKERR(glSpecializeShader(mVertexShader, "main", 0, nullptr, nullptr));
     CHKERR(glShaderBinary(1, &mFragmentShader, GL_SHADER_BINARY_FORMAT_SPIR_V_ARB, _binary_shaders_shaders_fragmentUniform_frag_spv_start, _binary_shaders_shaders_fragmentUniform_frag_spv_len));
-    CHKERR(glSpecializeShader(mFragmentShader, "main", 0, 0, 0));
+    CHKERR(glSpecializeShader(mFragmentShader, "main", 0, nullptr, nullptr));
     GPUInfo("Using SPIR-V shaders");
     mSPIRVShaders = true;
   } else

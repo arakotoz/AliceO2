@@ -17,6 +17,7 @@
 #endif
 
 #include "GPUDisplay.h"
+#include "frontend/GPUDisplayInfo.inc"
 #include "GPUO2DataTypes.h"
 #include "GPUTPCClusterData.h"
 #include "GPUTPCConvertImpl.h"
@@ -150,13 +151,13 @@ void GPUDisplay::DrawGLScene_updateEventData()
         float4* ptr = &mGlobalPos[cid];
         if (mParam->par.earlyTpcTransform) {
           const auto& cl = mIOPtrs->clusterData[iSector][i];
-          mParam->Sector2Global(iSector, (mCfgH.clustersOnNominalRow ? mParam->tpcGeometry.Row2X(row) : cl.x) + mCfgH.xAdd, cl.y, cl.z, &ptr->x, &ptr->y, &ptr->z);
+          mParam->Sector2Global(iSector, (mCfgH.clustersOnNominalRow ? GPUTPCGeometry::Row2X(row) : cl.x) + mCfgH.xAdd, cl.y, cl.z, &ptr->x, &ptr->y, &ptr->z);
         } else {
           float x, y, z;
           const auto& cln = mIOPtrs->clustersNative->clusters[iSector][0][i];
           GPUTPCConvertImpl::convert(*mCalib->fastTransform, *mParam, iSector, row, cln.getPad(), cln.getTime(), x, y, z);
           if (mCfgH.clustersOnNominalRow) {
-            x = mParam->tpcGeometry.Row2X(row);
+            x = GPUTPCGeometry::Row2X(row);
           }
           mParam->Sector2Global(iSector, x + mCfgH.xAdd, y, z, &ptr->x, &ptr->y, &ptr->z);
         }

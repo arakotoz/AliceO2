@@ -42,7 +42,6 @@ struct ClusterNative;
 namespace o2::gpu
 {
 class GPUTPCSectorTrack;
-class GPUTPCSectorOutput;
 class GPUTPCGMTrackParam;
 class GPUTPCTracker;
 class GPUChainTracking;
@@ -70,8 +69,8 @@ class GPUTPCGMMerger : public GPUProcessor
     GPUAtomic(uint32_t) nRetryRefit;
     GPUAtomic(uint32_t) nLoopData;
     GPUAtomic(uint32_t) nUnpackedTracks;
-    GPUAtomic(uint32_t) nOutputTracks;
-    GPUAtomic(uint32_t) nOutputTrackClusters;
+    GPUAtomic(uint32_t) nMergedTracks;
+    GPUAtomic(uint32_t) nMergedTrackClusters;
     GPUAtomic(uint32_t) nO2Tracks;
     GPUAtomic(uint32_t) nO2ClusRefs;
     const GPUTPCTrack* firstExtrapolatedTracks[NSECTORS];
@@ -104,16 +103,18 @@ class GPUTPCGMMerger : public GPUProcessor
   void* SetPointersOutputState(void* mem);
   void* SetPointersMemory(void* mem);
 
-  GPUhdi() int32_t NOutputTracks() const { return mMemory->nOutputTracks; }
-  GPUhdi() const GPUTPCGMMergedTrack* OutputTracks() const { return mOutputTracks; }
-  GPUhdi() GPUTPCGMMergedTrack* OutputTracks() { return mOutputTracks; }
-  GPUhdi() const GPUdEdxInfo* OutputTracksdEdx() const { return mOutputTracksdEdx; }
-  GPUhdi() GPUdEdxInfo* OutputTracksdEdx() { return mOutputTracksdEdx; }
+  GPUhdi() int32_t NMergedTracks() const { return mMemory->nMergedTracks; }
+  GPUhdi() const GPUTPCGMMergedTrack* MergedTracks() const { return mMergedTracks; }
+  GPUhdi() GPUTPCGMMergedTrack* MergedTracks() { return mMergedTracks; }
+  GPUhdi() const GPUdEdxInfo* MergedTracksdEdx() const { return mMergedTracksdEdx; }
+  GPUhdi() GPUdEdxInfo* MergedTracksdEdx() { return mMergedTracksdEdx; }
+  GPUhdi() const GPUdEdxInfo* MergedTracksdEdxAlt() const { return mMergedTracksdEdxAlt; }
+  GPUhdi() GPUdEdxInfo* MergedTracksdEdxAlt() { return mMergedTracksdEdxAlt; }
   GPUhdi() uint32_t NClusters() const { return mNClusters; }
   GPUhdi() uint32_t NMaxClusters() const { return mNMaxClusters; }
   GPUhdi() uint32_t NMaxTracks() const { return mNMaxTracks; }
-  GPUhdi() uint32_t NMaxOutputTrackClusters() const { return mNMaxOutputTrackClusters; }
-  GPUhdi() uint32_t NOutputTrackClusters() const { return mMemory->nOutputTrackClusters; }
+  GPUhdi() uint32_t NMaxMergedTrackClusters() const { return mNMaxMergedTrackClusters; }
+  GPUhdi() uint32_t NMergedTrackClusters() const { return mMemory->nMergedTrackClusters; }
   GPUhdi() const GPUTPCGMMergedTrackHit* Clusters() const { return mClusters; }
   GPUhdi() GPUTPCGMMergedTrackHit* Clusters() { return (mClusters); }
   GPUhdi() const GPUTPCGMMergedTrackHitXYZ* ClustersXYZ() const { return mClustersXYZ; }
@@ -200,6 +201,7 @@ class GPUTPCGMMerger : public GPUProcessor
   void DumpFitPrepare(std::ostream& out) const;
   void DumpRefit(std::ostream& out) const;
   void DumpFinal(std::ostream& out) const;
+  void DumpLoopers(std::ostream& out) const;
 
   template <int32_t mergeType>
   void MergedTrackStreamerInternal(const GPUTPCGMBorderTrack& b1, const GPUTPCGMBorderTrack& b2, const char* name, int32_t sector1, int32_t sector2, int32_t mergeMode, float weight, float frac) const;
@@ -247,7 +249,7 @@ class GPUTPCGMMerger : public GPUProcessor
   uint32_t mNTotalSectorTracks = 0;      // maximum number of incoming sector tracks
   uint32_t mNMaxTracks = 0;              // maximum number of output tracks
   uint32_t mNMaxSingleSectorTracks = 0;  // max N tracks in one sector
-  uint32_t mNMaxOutputTrackClusters = 0; // max number of clusters in output tracks (double-counting shared clusters)
+  uint32_t mNMaxMergedTrackClusters = 0; // max number of clusters in output tracks (double-counting shared clusters)
   uint32_t mNMaxClusters = 0;            // max total unique clusters (in event)
   uint32_t mNMaxLooperMatches = 0;       // Maximum number of candidate pairs for looper matching
 
@@ -260,8 +262,9 @@ class GPUTPCGMMerger : public GPUProcessor
   uint16_t mMemoryResOutputO2Scratch = (uint16_t)-1;
 
   int32_t mNClusters = 0;                           // Total number of incoming clusters (from sector tracks)
-  GPUTPCGMMergedTrack* mOutputTracks = nullptr;     //* array of output merged tracks
-  GPUdEdxInfo* mOutputTracksdEdx = nullptr;         //* dEdx information
+  GPUTPCGMMergedTrack* mMergedTracks = nullptr;     //* array of output merged tracks
+  GPUdEdxInfo* mMergedTracksdEdx = nullptr;         //* dEdx information
+  GPUdEdxInfo* mMergedTracksdEdxAlt = nullptr;      //* dEdx alternative information
   GPUTPCGMSectorTrack* mSectorTrackInfos = nullptr; //* additional information for sector tracks
   int32_t* mSectorTrackInfoIndex = nullptr;
   GPUTPCGMMergedTrackHit* mClusters = nullptr;

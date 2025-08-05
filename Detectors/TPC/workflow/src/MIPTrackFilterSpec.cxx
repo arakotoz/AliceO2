@@ -106,6 +106,7 @@ void MIPTrackFilterDevice::init(framework::InitContext& ic)
 
 void MIPTrackFilterDevice::run(ProcessingContext& pc)
 {
+  o2::base::GRPGeomHelper::instance().checkUpdates(pc);
   const auto currentTF = processing_helpers::getCurrentTF(pc);
   if ((mTFCounter++ % mProcessEveryNthTF) && (currentTF >= mProcessNFirstTFs)) {
     LOGP(info, "Skipping TF {}", currentTF);
@@ -115,7 +116,6 @@ void MIPTrackFilterDevice::run(ProcessingContext& pc)
     }
     return;
   }
-  o2::base::GRPGeomHelper::instance().checkUpdates(pc);
 
   const auto tracks = pc.inputs().get<gsl::span<TrackTPC>>("tracks");
   const auto nTracks = tracks.size();
@@ -178,7 +178,7 @@ bool MIPTrackFilterDevice::acceptDCA(const TrackTPC& track)
   }
 
   auto propagator = o2::base::Propagator::Instance();
-  o2::gpu::gpustd::array<float, 2> dca;
+  std::array<float, 2> dca;
   const o2::math_utils::Point3D<float> refPoint{0, 0, 0};
   o2::track::TrackPar propTrack(track);
   const auto ok = propagator->propagateToDCABxByBz(refPoint, propTrack, 2., o2::base::Propagator::MatCorrType::USEMatCorrLUT, &dca);

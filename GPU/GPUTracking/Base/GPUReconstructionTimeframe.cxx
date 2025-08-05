@@ -14,6 +14,8 @@
 
 #include "GPUReconstructionTimeframe.h"
 #include "GPUReconstruction.h"
+#include "GPUChainTracking.h"
+#include "GPUChainTrackingGetters.inc"
 #include "display/GPUDisplayInterface.h"
 #include "GPUQA.h"
 #include "AliHLTTPCClusterMCData.h"
@@ -23,13 +25,12 @@
 #include "TPCFastTransform.h"
 #include "CorrectionMapsHelper.h"
 #include "GPUO2DataTypes.h"
+#include "GPUSettings.h"
 
 #include <cstdio>
 #include <exception>
 #include <memory>
 #include <cstring>
-
-#include "utils/qconfig.h"
 
 using namespace o2::gpu;
 

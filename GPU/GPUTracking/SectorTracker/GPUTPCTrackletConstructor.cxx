@@ -123,10 +123,10 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
         break; // SG!!! - jump over the row
       }
 
-      cahit2 hh = CA_TEXTURE_FETCH(cahit22, gAliTexRefu2, tracker.HitData(row), r.mCurrIH);
+      cahit2 hh = tracker.HitData(row)[r.mCurrIH];
 
       int32_t seedIH = r.mCurrIH;
-      r.mCurrIH = CA_TEXTURE_FETCH(calink, gAliTexRefs, tracker.HitLinkUpData(row), r.mCurrIH);
+      r.mCurrIH = tracker.HitLinkUpData(row)[r.mCurrIH];
 
       float x = row.X();
       float y = y0 + hh.x * stepY;
@@ -282,10 +282,8 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
           break;
         }
 
-#ifndef GPUCA_TEXTURE_FETCH_CONSTRUCTOR
         GPUglobalref() const cahit2* hits = tracker.HitData(row);
         GPUglobalref() const calink* firsthit = tracker.FirstHitInBin(row);
-#endif //! GPUCA_TEXTURE_FETCH_CONSTRUCTOR
         tracker.GetConstantMem()->calibObjects.fastTransformHelper->InverseTransformYZtoNominalYZ(tracker.ISector(), iRow, yUncorrected, zUncorrected, yUncorrected, zUncorrected);
 
         if (tracker.Param().rec.tpc.rejectEdgeClustersInSeeding && tracker.Param().rejectEdgeClusterByY(yUncorrected, iRow, CAMath::Sqrt(tParam.Err2Y()))) {
@@ -318,14 +316,14 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
 #endif
             int32_t nBinsY = row.Grid().Ny();
             int32_t mybin = bin + k * nBinsY;
-            uint32_t hitFst = CA_TEXTURE_FETCH(calink, gAliTexRefu, firsthit, mybin);
-            uint32_t hitLst = CA_TEXTURE_FETCH(calink, gAliTexRefu, firsthit, mybin + ny + 1);
+            uint32_t hitFst = firsthit[mybin];
+            uint32_t hitLst = firsthit[mybin + ny + 1];
 #ifdef __HIPCC__ // Todo: fixme!
             for (uint32_t ih = hitFst - 1; ++ih < hitLst; /*ih++*/) {
 #else
             for (uint32_t ih = hitFst; ih < hitLst; ih++) {
 #endif
-              cahit2 hh = CA_TEXTURE_FETCH(cahit2, gAliTexRefu2, hits, ih);
+              cahit2 hh = hits[ih];
               float y = y0 + hh.x * stepY;
               float z = z0 + hh.y * stepZ;
               float dy = y - yUncorrected;
@@ -353,7 +351,7 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
           }
         }
 
-        cahit2 hh = CA_TEXTURE_FETCH(cahit2, gAliTexRefu2, hits, best);
+        cahit2 hh = hits[best];
         float y = y0 + hh.x * stepY + tParam.GetY() - yUncorrected;
         float z = z0 + hh.y * stepZ + tParam.GetZ() - zUncorrected;
 
@@ -377,8 +375,8 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
       } while (false);
       (void)found;
       if (!found && tracker.GetConstantMem()->calibObjects.dEdxCalibContainer) {
-        uint32_t pad = CAMath::Float2UIntRn(tracker.Param().tpcGeometry.LinearY2Pad(tracker.ISector(), iRow, yUncorrected));
-        if (pad < tracker.Param().tpcGeometry.NPads(iRow) && tracker.GetConstantMem()->calibObjects.dEdxCalibContainer->isDead(tracker.ISector(), iRow, pad)) {
+        uint32_t pad = CAMath::Float2UIntRn(GPUTPCGeometry::LinearY2Pad(tracker.ISector(), iRow, yUncorrected));
+        if (pad < GPUTPCGeometry::NPads(iRow) && tracker.GetConstantMem()->calibObjects.dEdxCalibContainer->isDead(tracker.ISector(), iRow, pad)) {
           r.mNMissed--;
           rowHit = CALINK_DEAD_CHANNEL;
         }
@@ -390,12 +388,12 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
     const GPUglobalref() GPUTPCRow& GPUrestrict() row2 = tracker.Row(r.mLastRow);
     GPUglobalref() const cahit2* hits1 = tracker.HitData(row1);
     GPUglobalref() const cahit2* hits2 = tracker.HitData(row2);
-    const cahit2 hh1 = CA_TEXTURE_FETCH(cahit2, gAliTexRefu2, hits1, rowHits[r.mFirstRow]);
-    const cahit2 hh2 = CA_TEXTURE_FETCH(cahit2, gAliTexRefu2, hits2, rowHits[r.mLastRow]);
+    const cahit2 hh1 = hits1[rowHits[r.mFirstRow]];
+    const cahit2 hh2 = hits2[rowHits[r.mLastRow]];
     const float z1 = row1.Grid().ZMin() + hh1.y * row1.HstepZ();
     const float z2 = row2.Grid().ZMin() + hh2.y * row2.HstepZ();
     float oldOffset = tParam.ZOffset();
-    tParam.ShiftZ(z1, z2, tracker.Param().tpcGeometry.Row2X(r.mFirstRow), tracker.Param().tpcGeometry.Row2X(r.mLastRow), tracker.Param().bzCLight, tracker.Param().rec.tpc.defaultZOffsetOverR);
+    tParam.ShiftZ(z1, z2, GPUTPCGeometry::Row2X(r.mFirstRow), GPUTPCGeometry::Row2X(r.mLastRow), tracker.Param().bzCLight, tracker.Param().rec.tpc.defaultZOffsetOverR);
     r.mLastZ -= tParam.ZOffset() - oldOffset;
     CADEBUG(printf("Shifted z from %f to %f\n", oldOffset, tParam.ZOffset()));
   }
@@ -476,7 +474,7 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::DoTracklet(GPUconstantref() GPUTPCT
 }
 
 template <>
-GPUdii() void GPUTPCTrackletConstructor::Thread<GPUTPCTrackletConstructor::singleSector>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUsharedref() GPUSharedMemory& sMem, processorType& GPUrestrict() tracker)
+GPUdii() void GPUTPCTrackletConstructor::Thread(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUsharedref() GPUSharedMemory& sMem, processorType& GPUrestrict() tracker)
 {
   if (get_local_id(0) == 0) {
     sMem.mNStartHits = *tracker.NStartHits();
@@ -490,79 +488,6 @@ GPUdii() void GPUTPCTrackletConstructor::Thread<GPUTPCTrackletConstructor::singl
     DoTracklet(tracker, sMem, rMem);
   }
 }
-
-template <>
-GPUdii() void GPUTPCTrackletConstructor::Thread<GPUTPCTrackletConstructor::allSectors>(int32_t nBlocks, int32_t nThreads, int32_t iBlock, int32_t iThread, GPUsharedref() GPUSharedMemory& sMem, processorType& GPUrestrict() tracker0)
-{
-  GPUconstantref() GPUTPCTracker* GPUrestrict() pTracker = &tracker0;
-#ifdef GPUCA_GPUCODE
-  int32_t mySector = get_group_id(0) % GPUCA_NSECTORS;
-  int32_t currentSector = -1;
-
-  if (get_local_id(0) == 0) {
-    sMem.mNextStartHitFirstRun = 1;
-  }
-  GPUCA_UNROLL(, U())
-  for (uint32_t iSector = 0; iSector < GPUCA_NSECTORS; iSector++) {
-    GPUconstantref() GPUTPCTracker& GPUrestrict() tracker = pTracker[mySector];
-
-    GPUTPCThreadMemory rMem;
-
-    while ((rMem.mISH = FetchTracklet(tracker, sMem)) != -2) {
-      if (rMem.mISH >= 0 && get_local_id(0) < GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCTrackletConstructor)) {
-        rMem.mISH += get_local_id(0);
-      } else {
-        rMem.mISH = -1;
-      }
-
-      if (mySector != currentSector) {
-        if (get_local_id(0) == 0) {
-          sMem.mNStartHits = *tracker.NStartHits();
-        }
-        CA_SHARED_CACHE(&sMem.mRows[0], tracker.TrackingDataRows(), GPUCA_ROW_COUNT * sizeof(GPUTPCRow));
-        GPUbarrier();
-        currentSector = mySector;
-      }
-
-      if (rMem.mISH >= 0 && rMem.mISH < sMem.mNStartHits) {
-        rMem.mGo = true;
-        DoTracklet(tracker, sMem, rMem);
-      }
-    }
-    if (++mySector >= GPUCA_NSECTORS) {
-      mySector = 0;
-    }
-  }
-#else
-  for (int32_t iSector = 0; iSector < GPUCA_NSECTORS; iSector++) {
-    Thread<singleSector>(nBlocks, nThreads, iBlock, iThread, sMem, pTracker[iSector]);
-  }
-#endif
-}
-
-#ifdef GPUCA_GPUCODE
-
-GPUd() int32_t GPUTPCTrackletConstructor::FetchTracklet(GPUconstantref() GPUTPCTracker& GPUrestrict() tracker, GPUsharedref() GPUSharedMemory& sMem)
-{
-  const uint32_t nStartHit = *tracker.NStartHits();
-  GPUbarrier();
-  if (get_local_id(0) == 0) {
-    int32_t firstStartHit = -2;
-    if (sMem.mNextStartHitFirstRun == 1) {
-      firstStartHit = (get_group_id(0) - tracker.ISector()) / GPUCA_NSECTORS * GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCTrackletConstructor);
-      sMem.mNextStartHitFirstRun = 0;
-    } else {
-      if (tracker.GPUParameters()->nextStartHit < nStartHit) {
-        firstStartHit = CAMath::AtomicAdd<uint32_t>(&tracker.GPUParameters()->nextStartHit, GPUCA_GET_THREAD_COUNT(GPUCA_LB_GPUTPCTrackletConstructor));
-      }
-    }
-    sMem.mNextStartHitFirst = firstStartHit < (int32_t)nStartHit ? firstStartHit : -2;
-  }
-  GPUbarrier();
-  return (sMem.mNextStartHitFirst);
-}
-
-#endif // GPUCA_GPUCODE
 
 template <> // FIXME: GPUgeneric() needed to make the clang spirv output link correctly
 GPUd() int32_t GPUTPCTrackletConstructor::GPUTPCTrackletConstructorExtrapolationTracking<GPUgeneric() GPUTPCExtrapolationTracking::GPUSharedMemory>(GPUconstantref() GPUTPCTracker& GPUrestrict() tracker, GPUsharedref() GPUTPCExtrapolationTracking::GPUSharedMemory& sMem, GPUTPCTrackParam& GPUrestrict() tParam, int32_t row, int32_t increment, int32_t iTracklet, calink* rowHits)
