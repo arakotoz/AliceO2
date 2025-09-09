@@ -25,6 +25,7 @@ using namespace o2::framework::expressions;
 
 namespace o2::aod
 {
+O2ORIGIN("EMB");
 namespace skimmedExampleTrack
 {
 DECLARE_SOA_COLUMN(Pt, pt, float);   //!
@@ -39,8 +40,17 @@ DECLARE_SOA_TABLE(SkimmedExampleTrack, "AOD", "SKIMEXTRK", //!
 struct EtaAndClsHistogramsSimple {
   OutputObj<TH2F> etaClsH{TH2F("eta_vs_pt", "#eta vs pT", 102, -2.01, 2.01, 100, 0, 10)};
   Produces<o2::aod::SkimmedExampleTrack> skimEx;
+  Configurable<std::string> trackFilterString{"track-filter", "o2::aod::track::pt < 10.f", "Track filter string"};
+  Filter trackFilter = o2::aod::track::pt < 10.f;
 
-  void process(aod::Tracks const& tracks, aod::FT0s const&)
+  void init(InitContext&)
+  {
+    if (!trackFilterString->empty()) {
+      trackFilter = Parser::parse((std::string)trackFilterString);
+    }
+  }
+
+  void process(soa::Filtered<aod::Tracks> const& tracks, aod::FT0s const&, aod::StoredTracksFrom<o2::aod::Hash<"EMB"_h>> const& ortherTracks)
   {
     LOGP(info, "Invoking the simple one");
     for (auto& track : tracks) {
@@ -53,10 +63,19 @@ struct EtaAndClsHistogramsSimple {
 struct EtaAndClsHistogramsIUSimple {
   OutputObj<TH2F> etaClsH{TH2F("eta_vs_pt", "#eta vs pT", 102, -2.01, 2.01, 100, 0, 10)};
   Produces<o2::aod::SkimmedExampleTrack> skimEx;
+  Configurable<std::string> trackFilterString{"track-filter", "o2::aod::track::pt < 10.f", "Track filter string"};
+  Filter trackFilter = o2::aod::track::pt < 10.f;
 
-  void process(aod::TracksIU const& tracks, aod::FT0s const&)
+  void init(InitContext&)
   {
-    LOGP(info, "Invoking the simple one");
+    if (!trackFilterString->empty()) {
+      trackFilter = Parser::parse((std::string)trackFilterString);
+    }
+  }
+
+  void process(soa::Filtered<aod::TracksIU> const& tracks, aod::FT0s const&, aod::TracksIUFrom<o2::aod::Hash<"EMB"_h>> const& otherTracks)
+  {
+    LOGP(info, "Invoking the simple one IU");
     for (auto& track : tracks) {
       etaClsH->Fill(track.eta(), track.pt());
       skimEx(track.pt(), track.eta());
@@ -66,8 +85,17 @@ struct EtaAndClsHistogramsIUSimple {
 
 struct EtaAndClsHistogramsFull {
   OutputObj<TH3F> etaClsH{TH3F("eta_vs_cls_vs_sigmapT", "#eta vs N_{cls} vs sigma_{1/pT}", 102, -2.01, 2.01, 160, -0.5, 159.5, 100, 0, 10)};
+  Configurable<std::string> trackFilterString{"track-filter", "o2::aod::track::pt < 10.f", "Track filter string"};
+  Filter trackFilter = o2::aod::track::pt < 10.f;
 
-  void process(soa::Join<aod::FullTracks, aod::TracksCov> const& tracks)
+  void init(InitContext&)
+  {
+    if (!trackFilterString->empty()) {
+      trackFilter = Parser::parse((std::string)trackFilterString);
+    }
+  }
+
+  void process(soa::Filtered<soa::Join<aod::FullTracks, aod::TracksCov>> const& tracks)
   {
     LOGP(info, "Invoking the run 3 one");
     for (auto& track : tracks) {
