@@ -947,13 +947,17 @@ void clearMCKeepStore(std::vector<std::vector<std::unordered_map<int, int>>>& st
 }
 
 // helper function to add a particle/track to the MC keep store
-void keepMCParticle(std::vector<std::vector<std::unordered_map<int, int>>>& store, int source, int event, int track, int value = 1)
+void keepMCParticle(std::vector<std::vector<std::unordered_map<int, int>>>& store, int source, int event, int track, int value = 1, bool useSigFilt = false)
 {
   if (track < 0) {
     LOG(warn) << "trackID is smaller than 0. Neglecting";
     return;
   }
-  store[source][event][track] = value;
+  if (useSigFilt && source == 0) {
+    store[source][event][track] = -1;
+  } else {
+    store[source][event][track] = value;
+  }
 }
 
 void AODProducerWorkflowDPL::fillMCParticlesTable(o2::steer::MCKinematicsReader& mcReader,
@@ -982,7 +986,7 @@ void AODProducerWorkflowDPL::fillMCParticlesTable(o2::steer::MCKinematicsReader&
     if (!mcLabel.isValid()) {
       return;
     }
-    keepMCParticle(mToStore, mcLabel.getSourceID(), mcLabel.getEventID(), mcLabel.getTrackID());
+    keepMCParticle(mToStore, mcLabel.getSourceID(), mcLabel.getEventID(), mcLabel.getTrackID(), 1, mUseSigFiltMC);
   };
 
   // mark reconstructed MC particles to store them into the table
@@ -997,7 +1001,7 @@ void AODProducerWorkflowDPL::fillMCParticlesTable(o2::steer::MCKinematicsReader&
           if (!mcTruth.isValid()) {
             continue;
           }
-          keepMCParticle(mToStore, mcTruth.getSourceID(), mcTruth.getEventID(), mcTruth.getTrackID());
+          keepMCParticle(mToStore, mcTruth.getSourceID(), mcTruth.getEventID(), mcTruth.getTrackID(), 1, mUseSigFiltMC);
           // treating contributors of global tracks
           auto contributorsGID = data.getSingleDetectorRefs(trackIndex);
           if (contributorsGID[GIndex::Source::TPC].isIndexSet()) {
@@ -1012,7 +1016,7 @@ void AODProducerWorkflowDPL::fillMCParticlesTable(o2::steer::MCKinematicsReader&
               if (!mcLabel.isValid()) {
                 continue;
               }
-              keepMCParticle(mToStore, mcLabel.getSourceID(), mcLabel.getEventID(), mcLabel.getTrackID());
+              keepMCParticle(mToStore, mcLabel.getSourceID(), mcLabel.getEventID(), mcLabel.getTrackID(), 1, mUseSigFiltMC);
             }
           }
         }
@@ -1026,7 +1030,7 @@ void AODProducerWorkflowDPL::fillMCParticlesTable(o2::steer::MCKinematicsReader&
       if (!mcTruth.isValid()) {
         continue;
       }
-      keepMCParticle(mToStore, mcTruth.getSourceID(), mcTruth.getEventID(), mcTruth.getTrackID());
+      keepMCParticle(mToStore, mcTruth.getSourceID(), mcTruth.getEventID(), mcTruth.getTrackID(), 1, mUseSigFiltMC);
     }
   }
   if (mInputSources[GIndex::PHS]) {
@@ -1035,7 +1039,7 @@ void AODProducerWorkflowDPL::fillMCParticlesTable(o2::steer::MCKinematicsReader&
       if (!mcTruth.isValid()) {
         continue;
       }
-      keepMCParticle(mToStore, mcTruth.getSourceID(), mcTruth.getEventID(), mcTruth.getTrackID());
+      keepMCParticle(mToStore, mcTruth.getSourceID(), mcTruth.getEventID(), mcTruth.getTrackID(), 1, mUseSigFiltMC);
     }
   }
   using namespace aodmchelpers;
@@ -1126,7 +1130,7 @@ void AODProducerWorkflowDPL::fillMCTrackLabelsTable(MCTrackLabelCursorType& mcTr
           if (!needToStore(mGIDToTableID)) {
             continue;
           }
-          if (mcTruth.isValid()) { // if not set, -1 will be stored
+          if (mcTruth.isValid()) {                                                                               // if not set, -1 will be stored
             labelHolder.labelID = (mToStore[mcTruth.getSourceID()][mcTruth.getEventID()])[mcTruth.getTrackID()]; // defined by TPC if it contributes, otherwise: by ITS
             if (mcTruth.isFake()) {
               labelHolder.labelMask |= (0x1 << 15);
@@ -1139,6 +1143,21 @@ void AODProducerWorkflowDPL::fillMCTrackLabelsTable(MCTrackLabelCursorType& mcTr
                 }
               }
             }
+            if (trackIndex.includesDet(DetID::ITS)) {
+              auto itsGID = data.getITSContributorGID(trackIndex);
+              auto itsSource = itsGID.getSource();
+              if (itsSource == GIndex::ITS) {
+                auto& itsTrack = data.getITSTrack(itsGID);
+                for (unsigned int iL = 0; iL < 7; ++iL) {
+                  if (itsTrack.isFakeOnLayer(iL)) {
+                    labelHolder.labelMask |= (0x1 << iL);
+                  }
+                }
+              } else if (itsSource == GIndex::ITSAB) {
+                labelHolder.labelMask |= (data.getTrackMCLabel(itsGID).isFake() << 12);
+              }
+            }
+
           } else if (mcTruth.isNoise()) {
             labelHolder.labelMask |= (0x1 << 14);
           }
@@ -1728,6 +1747,8 @@ void AODProducerWorkflowDPL::init(InitContext& ic)
     LOG(info) << "The Run number will be obtained from DPL headers";
   }
 
+  mUseSigFiltMC = ic.options().get<bool>("mc-signal-filt");
+
   // set no truncation if selected by user
   if (mTruncate != 1) {
     LOG(info) << "Truncation is not used!";
@@ -2041,6 +2062,28 @@ void AODProducerWorkflowDPL::run(ProcessingContext& pc)
     int nMCCollisions = mcReader->getDigitizationContext()->getNCollisions();
     const auto& mcRecords = mcReader->getDigitizationContext()->getEventRecords();
     const auto& mcParts = mcReader->getDigitizationContext()->getEventParts();
+
+    // if signal filtering enabled, let's check if there are more than one source; otherwise fatalise
+    if (mUseSigFiltMC) {
+      std::vector<int> sourceIDs{};
+      for (int iCol = 0; iCol < nMCCollisions; iCol++) {
+        for (auto const& colPart : mcParts[iCol]) {
+          int sourceID = colPart.sourceID;
+          if (std::find(sourceIDs.begin(), sourceIDs.end(), sourceID) == sourceIDs.end()) {
+            sourceIDs.push_back(sourceID);
+          }
+          if (sourceIDs.size() > 1) { // we found more than one, exit
+            break;
+          }
+        }
+        if (sourceIDs.size() > 1) { // we found more than one, exit
+          break;
+        }
+      }
+      if (sourceIDs.size() <= 1) {
+        LOGP(fatal, "Signal filtering cannot be enabled without embedding. Please fix the configuration either enabling the embedding, or turning off the signal filtering.");
+      }
+    }
 
     // count all parts
     int totalNParts = 0;
@@ -3311,7 +3354,7 @@ DataProcessorSpec getAODProducerWorkflowSpec(GID::mask_t src, bool enableSV, boo
       ConfigParamSpec{"trackqc-tpc-pt", VariantType::Float, 0.2f, {"Keep TPC standalone track with this pt"}},
       ConfigParamSpec{"with-streamers", VariantType::String, "", {"Bit-mask to steer writing of intermediate streamer files"}},
       ConfigParamSpec{"seed", VariantType::Int, 0, {"Set seed for random generator used for sampling (0 (default) means using a random_device)"}},
-    }};
+      ConfigParamSpec{"mc-signal-filt", VariantType::Bool, false, {"Enable usage of signal filtering (only for MC with embedding)"}}}};
 }
 
 } // namespace o2::aodproducer

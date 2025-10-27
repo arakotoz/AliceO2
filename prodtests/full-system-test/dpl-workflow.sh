@@ -205,7 +205,7 @@ workflow_has_parameter CALIB && [[ $CALIB_TPC_VDRIFTTGL == 1 ]] && SEND_ITSTPC_D
 
 PVERTEXING_CONFIG_KEY+="${ITSMFT_STROBES};"
 
-has_processing_step ENTROPY_ENCODER && has_detector_ctf TPC && GPU_OUTPUT+=",compressed-clusters-ctf"
+has_processing_step ENTROPY_ENCODER && has_detector_ctf TPC && GPU_OUTPUT+=",compressed-clusters-flat"
 
 if [[ $SYNCMODE == 1 ]] && workflow_has_parameter QC && has_detector_qc TPC; then
   GPU_OUTPUT+=",qa,error-qa"
@@ -222,6 +222,9 @@ has_detector_flp_processing CPV && CPV_INPUT=digits
 ! has_detector_flp_processing TOF && TOF_CONFIG+=" --local-cmp"
 
 if [[ $EPNSYNCMODE == 1 ]]; then
+  # dump raw data in case of GPU crash and set dump directory size limits; files are automatically cleaned by EPN after 60 days
+  GPU_CONFIG_KEY+="GPU_proc.debugOnFailure=1;GPU_proc.debugOnFailureDirectory=/data/tf/debug;GPU_proc.debugOnFailureMaxFiles=1000;GPU_proc.debugOnFailureMaxSize=500;GPU_proc.debugOnFailureSignalMask=2240;"
+
   EVE_OPT+=" --eve-dds-collection-index 0"
   MIDDEC_CONFIG+=" --feeId-config-file \"$MID_FEEID_MAP\""
   if [[ $EXTINPUT == 1 ]] && [[ $GPUTYPE != "CPU" ]] && [[ -z "$GPU_NUM_MEM_REG_CALLBACKS" ]]; then
@@ -231,6 +234,9 @@ if [[ $EPNSYNCMODE == 1 ]]; then
       GPU_NUM_MEM_REG_CALLBACKS=4
     fi
   fi
+fi
+if [[ $GPUTYPE != "CPU" && $NGPUS > 1 ]]; then
+  GPU_CONFIG_KEY+="GPU_global.dumpFolder=gpu_dump_[P];"
 fi
 if [[ $SYNCRAWMODE == 1 ]]; then
   GPU_CONFIG_KEY+="GPU_proc.tpcIncreasedMinClustersPerRow=500000;GPU_proc.ignoreNonFatalGPUErrors=1;GPU_proc.throttleAlarms=1;"
@@ -275,8 +281,13 @@ if [[ $GPUTYPE == "HIP" ]]; then
     GPU_CONFIG+=" --environment \"ROCR_VISIBLE_DEVICES={timeslice${TIMESLICEOFFSET}}\""
   fi
   # serialization workaround for MI100 nodes: remove it again if the problem will be fixed in ROCm, then also remove the DISABLE_MI100_SERIALIZATION flag in the O2DPG parse script
-  [[ $EPNSYNCMODE == 1 ]] && [[ ${EPN_NODE_MI100:-} == "1" ]] && [[ ${DISABLE_MI100_SERIALIZATION:-0} != 1 ]] && GPU_CONFIG_KEY+="GPU_proc.amdMI100SerializationWorkaround=1;"
-  [[ -n ${OPTIMIZED_PARALLEL_ASYNC:-} ]] && [[ ${EPN_NODE_MI100:-} == "1" ]] && [[ ${DISABLE_MI100_SERIALIZATION:-0} != 1 ]] && GPU_CONFIG_KEY+="GPU_proc.serializeGPU=3;"
+  if [[ ${EPN_NODE_MI100:-} == "1" && ${DISABLE_MI100_SERIALIZATION:-0} != 1 ]]; then
+    if [[ -n ${OPTIMIZED_PARALLEL_ASYNC:-} ]] || [[ $EPNSYNCMODE == 1 && ${FULL_MI100_SERIALIZATION:-0} == 1 ]]; then
+      GPU_CONFIG_KEY+="GPU_proc.serializeGPU=3;"
+    elif [[ $EPNSYNCMODE == 1 ]]; then
+      GPU_CONFIG_KEY+="GPU_proc.amdMI100SerializationWorkaround=1;"
+    fi
+  fi
   #export HSA_TOOLS_LIB=/opt/rocm/lib/librocm-debug-agent.so.2
 else
   GPU_CONFIG_KEY+="GPU_proc.deviceNum=-2;"
@@ -435,7 +446,7 @@ fi
 
 if [[ -n $INPUT_DETECTOR_LIST ]]; then
   if [[ $CTFINPUT == 1 ]]; then
-    GPU_INPUT=compressed-clusters-ctf
+    GPU_INPUT=compressed-clusters-flat
     TOF_INPUT=digits
     CTFName=`ls -t $RAWINPUTDIR/o2_ctf_*.root 2> /dev/null | head -n1`
     [[ -z $CTFName && $WORKFLOWMODE == "print" ]] && CTFName='$CTFName'
@@ -644,7 +655,7 @@ if has_processing_step ENTROPY_ENCODER && [[ -n "$WORKFLOW_DETECTORS_CTF" ]] && 
   has_detector_ctf TOF && add_W o2-tof-entropy-encoder-workflow "$RANS_OPT --mem-factor ${TOF_ENC_MEMFACT:-1.5} --pipeline $(get_N tof-entropy-encoder TOF CTF 1)"
   has_detector_ctf ITS && add_W o2-itsmft-entropy-encoder-workflow "$RANS_OPT --mem-factor ${ITS_ENC_MEMFACT:-1.5} --pipeline $(get_N its-entropy-encoder ITS CTF 1)"
   has_detector_ctf TRD && add_W o2-trd-entropy-encoder-workflow "$RANS_OPT --mem-factor ${TRD_ENC_MEMFACT:-1.5} --pipeline $(get_N trd-entropy-encoder TRD CTF 1 TRDENT)"
-  has_detector_ctf TPC && add_W o2-tpc-reco-workflow " $RANS_OPT --mem-factor ${TPC_ENC_MEMFACT:-1.} --input-type compressed-clusters-flat --output-type encoded-clusters,disable-writer --pipeline $(get_N tpc-entropy-encoder TPC CTF 1 TPCENT)"
+  has_detector_ctf TPC && add_W o2-tpc-reco-workflow " $RANS_OPT --mem-factor ${TPC_ENC_MEMFACT:-1.} --input-type compressed-clusters-flat-for-encode --output-type encoded-clusters,disable-writer --pipeline $(get_N tpc-entropy-encoder TPC CTF 1 TPCENT)"
   has_detector_ctf CTP && add_W o2-ctp-entropy-encoder-workflow "$RANS_OPT --mem-factor ${CTP_ENC_MEMFACT:-1.5} --pipeline $(get_N its-entropy-encoder CTP CTF 1)"
 
   if [[ $CREATECTFDICT == 1 && $WORKFLOWMODE == "run" ]] ; then

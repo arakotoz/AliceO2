@@ -1022,7 +1022,7 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
   fair::Logger::SetConsoleColor(false);
   fair::Logger::OnFatal([]() { throw runtime_error("Fatal error"); });
   DeviceSpec const& spec = runningWorkflow.devices[ref.index];
-  LOG(info) << "Spawing new device " << spec.id << " in process with pid " << getpid();
+  LOG(info) << "Spawning new device " << spec.id << " in process with pid " << getpid();
 
   fair::mq::DeviceRunner runner{argc, argv};
 
@@ -1052,6 +1052,7 @@ int doChild(int argc, char** argv, ServiceRegistry& serviceRegistry,
       ("signposts", bpo::value<std::string>()->default_value(defaultSignposts ? defaultSignposts : ""), "comma separated list of signposts to enable")                                             //
       ("expected-region-callbacks", bpo::value<std::string>()->default_value("0"), "how many region callbacks we are expecting")                                                                   //
       ("exit-transition-timeout", bpo::value<std::string>()->default_value(defaultExitTransitionTimeout), "how many second to wait before switching from RUN to READY")                            //
+      ("error-on-exit-transition-timeout", bpo::value<bool>()->zero_tokens()->default_value(false), "print error instead of warning when exit transition timer expires")                           //
       ("data-processing-timeout", bpo::value<std::string>()->default_value(defaultDataProcessingTimeout), "how many second to wait before stopping data processing and allowing data calibration") //
       ("timeframes-rate-limit", bpo::value<std::string>()->default_value("0"), "how many timeframe can be in fly at the same moment (0 disables)")                                                 //
       ("configuration,cfg", bpo::value<std::string>()->default_value("command-line"), "configuration backend")                                                                                     //
@@ -2202,8 +2203,11 @@ int runStateMachine(DataProcessorSpecs const& workflow,
           driverInfo.states.push_back(DriverState::RUNNING);
         }
         break;
-      case DriverState::QUIT_REQUESTED:
-        LOG(info) << "QUIT_REQUESTED";
+      case DriverState::QUIT_REQUESTED: {
+        std::time_t result = std::time(nullptr);
+        char buffer[32];
+        std::strncpy(buffer, std::ctime(&result), 26);
+        O2_SIGNPOST_EVENT_EMIT_INFO(driver, sid, "mainloop", "Quit requested at %{public}s", buffer);
         guiQuitRequested = true;
         // We send SIGCONT to make sure stopped children are resumed
         killChildren(infos, SIGCONT);
@@ -2215,6 +2219,7 @@ int runStateMachine(DataProcessorSpecs const& workflow,
         uv_timer_start(&force_step_timer, single_step_callback, 0, 300);
         driverInfo.states.push_back(DriverState::HANDLE_CHILDREN);
         break;
+      }
       case DriverState::HANDLE_CHILDREN: {
         // Run any pending libUV event loop, block if
         // any, so that we do not consume CPU time when the driver is

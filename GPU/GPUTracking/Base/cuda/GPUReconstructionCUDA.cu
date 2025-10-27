@@ -97,7 +97,9 @@ void GPUReconstructionCUDA::GetITSTraits(std::unique_ptr<o2::its::TrackerTraits<
     trackerTraits->reset(new o2::its::TrackerTraitsGPU);
   }
   if (vertexerTraits) {
-    vertexerTraits->reset(new o2::its::VertexerTraits<7>); // TODO gpu-code to be implemented
+    vertexerTraits->reset(new o2::its::VertexerTraits<7>);
+    // TODO gpu-code to be implemented then remove line above and uncomment line below
+    // vertexerTraits->reset(new o2::its::VertexerTraitsGPU<7>);
   }
   if (timeFrame) {
     timeFrame->reset(new o2::its::gpu::TimeFrameGPU);
@@ -111,7 +113,7 @@ int32_t GPUReconstructionCUDA::InitDevice_Runtime()
   constexpr int32_t reqVerMin = 0;
 #endif
   if (GetProcessingSettings().rtc.enable && GetProcessingSettings().rtctech.runTest == 2) {
-    mWarpSize = GPUCA_WARP_SIZE;
+    mWarpSize = GetProcessingSettings().rtc.overrideWarpSize != -1 ? GetProcessingSettings().rtc.overrideWarpSize : GPUCA_WARP_SIZE;
     genAndLoadRTC();
     exit(0);
   }
@@ -243,7 +245,7 @@ int32_t GPUReconstructionCUDA::InitDevice_Runtime()
       GPUInfo("\ttextureAlignment = %ld", (uint64_t)deviceProp.textureAlignment);
       GPUInfo(" ");
     }
-    if (deviceProp.warpSize != GPUCA_WARP_SIZE && !GetProcessingSettings().rtc.enable) {
+    if (GetProcessingSettings().rtc.enable ? (GetProcessingSettings().rtc.overrideWarpSize != -1 && deviceProp.warpSize != GetProcessingSettings().rtc.overrideWarpSize) : (deviceProp.warpSize != GPUCA_WARP_SIZE)) {
       throw std::runtime_error("Invalid warp size on GPU");
     }
     mWarpSize = deviceProp.warpSize;

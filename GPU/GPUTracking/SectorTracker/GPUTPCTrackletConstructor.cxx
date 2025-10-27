@@ -131,8 +131,10 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
       float x = row.X();
       float y = y0 + hh.x * stepY;
       float z = z0 + hh.y * stepZ;
-      if (iRow != r.mStartRow || !tracker.Param().par.continuousTracking) {
-        tParam.ConstrainZ(z, tracker.ISector(), z0, r.mLastZ);
+      if (iRow != r.mStartRow) {
+        if (tracker.Param().par.continuousTracking) {
+          tParam.ConstrainZ(z, tracker.ISector(), z0, r.mLastZ);
+        }
         tracker.GetConstantMem()->calibObjects.fastTransformHelper->TransformXYZ(tracker.ISector(), iRow, x, y, z);
       }
       if (iRow == r.mStartRow) {
@@ -262,7 +264,9 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
           rowHit = CALINK_INVAL;
           break;
         }
-        tParam.ConstrainZ(tmpZ, tracker.ISector(), z0, r.mLastZ);
+        if (tracker.Param().par.continuousTracking) {
+          tParam.ConstrainZ(tmpZ, tracker.ISector(), z0, r.mLastZ);
+        }
         tracker.GetConstantMem()->calibObjects.fastTransformHelper->InverseTransformYZtoX(tracker.ISector(), iRow, tmpY, tmpZ, x);
       }
 
@@ -274,7 +278,7 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
       }
       CADEBUG(printf("%14s: SEA PROP  ROW %3d X %8.3f -", "", iRow, tParam.X()); for (int32_t i = 0; i < 5; i++) { printf(" %8.3f", tParam.Par()[i]); } printf(" -"); for (int32_t i = 0; i < 15; i++) { printf(" %8.3f", tParam.Cov()[i]); } printf("\n"));
 
-      bool found = false;
+      [[maybe_unused]] bool found = false;
       float yUncorrected = tParam.GetY(), zUncorrected = tParam.GetZ();
       do {
         if (row.NHits() < 1) {
@@ -373,7 +377,6 @@ GPUdic(2, 1) void GPUTPCTrackletConstructor::UpdateTracklet(int32_t /*nBlocks*/,
           r.mFirstRow = iRow;
         }
       } while (false);
-      (void)found;
       if (!found && tracker.GetConstantMem()->calibObjects.dEdxCalibContainer) {
         uint32_t pad = CAMath::Float2UIntRn(GPUTPCGeometry::LinearY2Pad(tracker.ISector(), iRow, yUncorrected));
         if (pad < GPUTPCGeometry::NPads(iRow) && tracker.GetConstantMem()->calibObjects.dEdxCalibContainer->isDead(tracker.ISector(), iRow, pad)) {

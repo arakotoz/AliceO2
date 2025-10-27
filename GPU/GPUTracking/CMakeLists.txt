@@ -174,8 +174,6 @@ set(SRCS_NO_CINT ${SRCS_NO_CINT} display/GPUDisplayInterface.cxx)
 set(SRCS_NO_CINT ${SRCS_NO_CINT}
     Global/GPUChainITS.cxx
     dEdx/GPUdEdx.cxx
-    TPCConvert/GPUTPCConvert.cxx
-    TPCConvert/GPUTPCConvertKernel.cxx
     DataCompression/GPUTPCCompression.cxx
     DataCompression/GPUTPCCompressionTrackModel.cxx
     DataCompression/GPUTPCCompressionKernels.cxx
@@ -407,7 +405,7 @@ target_sources(${targetName}
                BASE_DIRS ${CMAKE_CURRENT_BINARY_DIR})
 
 make_directory(${CMAKE_CURRENT_BINARY_DIR}/genGPUArch)
-set(GPU_CONST_PARAM_ARCHITECTUES AMPERE TURING VEGA MI2xx)
+set(GPU_CONST_PARAM_ARCHITECTUES AMPERE TURING VEGA MI100)
 set(GPU_CONST_PARAM_FILES "")
 foreach(GPU_ARCH ${GPU_CONST_PARAM_ARCHITECTUES})
   set(PARAMFILE ${CMAKE_CURRENT_BINARY_DIR}/genGPUArch/gpu_const_param_${GPU_ARCH}.par)

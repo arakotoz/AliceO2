@@ -198,6 +198,7 @@ int32_t ReadConfiguration(int argc, char** argv)
   }
   if (configStandalone.QA.inputHistogramsOnly) {
     configStandalone.rundEdx = false;
+    configStandalone.noEvents = true;
   }
   if (configStandalone.QA.dumpToROOT) {
     configStandalone.proc.outputSharedClusterMap = true;
@@ -213,14 +214,13 @@ int32_t ReadConfiguration(int argc, char** argv)
     }
   }
   if (configStandalone.setO2Settings) {
-    if (!(configStandalone.inputcontrolmem && configStandalone.outputcontrolmem)) {
-      printf("setO2Settings requires the usage of --inputMemory and --outputMemory as in O2\n");
-      return 1;
-    }
-    if (configStandalone.runGPU) {
+    if (configStandalone.runGPU && configStandalone.proc.debugLevel <= 1) {
+      if (!(configStandalone.inputcontrolmem && configStandalone.outputcontrolmem)) {
+        printf("setO2Settings requires the usage of --inputMemory and --outputMemory as in O2\n");
+        return 1;
+      }
       configStandalone.proc.forceHostMemoryPoolSize = 1024 * 1024 * 1024;
     }
-    configStandalone.rec.tpc.nWaysOuter = 1;
     configStandalone.rec.tpc.trackReferenceX = 83;
     configStandalone.proc.outputSharedClusterMap = 1;
     configStandalone.proc.clearO2OutputFromGPU = 1;
@@ -331,8 +331,14 @@ int32_t SetupReconstruction()
       grp.grpContinuousMaxTimeBin = configStandalone.TF.timeFrameLen * ((double)GPUReconstructionTimeframe::TPCZ / (double)GPUReconstructionTimeframe::DRIFT_TIME) / chainTracking->GetTPCTransformHelper()->getCorrMap()->getVDrift();
     }
   }
-  if (configStandalone.cont && grp.grpContinuousMaxTimeBin == 0) {
+  if (configStandalone.setMaxTimeBin != -2) {
+    grp.grpContinuousMaxTimeBin = configStandalone.setMaxTimeBin;
+  } else if (configStandalone.cont && grp.grpContinuousMaxTimeBin == 0) {
     grp.grpContinuousMaxTimeBin = -1;
+  }
+  if (grp.grpContinuousMaxTimeBin < -1 && !configStandalone.noEvents) {
+    printf("Invalid maxTimeBin %d\n", grp.grpContinuousMaxTimeBin);
+    return 1;
   }
   if (rec->GetDeviceType() == GPUReconstruction::DeviceType::CPU) {
     printf("Standalone Test Framework for CA Tracker - Using CPU\n");
@@ -415,9 +421,6 @@ int32_t SetupReconstruction()
   steps.outputs.setBits(GPUDataTypes::InOutType::TPCClusters, steps.steps.isSet(GPUDataTypes::RecoStep::TPCClusterFinding));
 
   if (steps.steps.isSet(GPUDataTypes::RecoStep::TRDTracking)) {
-    if (recSet.tpc.nWays > 1) {
-      recSet.tpc.nWaysOuter = 1;
-    }
     if (procSet.createO2Output && !procSet.trdTrackModelO2) {
       procSet.createO2Output = 1; // Must not be 2, to make sure TPC GPU tracks are still available for TRD
     }
@@ -460,7 +463,6 @@ int32_t SetupReconstruction()
       procSet.tpcInputWithClusterRejection = 1;
     }
     recSet.tpc.disableRefitAttachment = 0xFF;
-    recSet.tpc.looperInterpolationInExtraPass = 0;
     recSet.maxTrackQPtB5 = CAMath::Min(recSet.maxTrackQPtB5, recSet.tpc.rejectQPtB5);
     recSet.useMatLUT = true;
     recAsync->SetSettings(&grp, &recSet, &procSet, &steps);
@@ -586,7 +588,7 @@ int32_t LoadEvent(int32_t iEvent, int32_t x)
     }
   }
 
-  if (!rec->GetParam().par.earlyTpcTransform && !chainTracking->mIOPtrs.clustersNative && !chainTracking->mIOPtrs.tpcPackedDigits && !chainTracking->mIOPtrs.tpcZS && !chainTracking->mIOPtrs.tpcCompressedClusters) {
+  if (!chainTracking->mIOPtrs.clustersNative && !chainTracking->mIOPtrs.tpcPackedDigits && !chainTracking->mIOPtrs.tpcZS && !chainTracking->mIOPtrs.tpcCompressedClusters) {
     printf("Need cluster native data for on-the-fly TPC transform\n");
     return 1;
   }
@@ -653,11 +655,6 @@ int32_t RunBenchmark(GPUReconstruction* recUse, GPUChainTracking* chainTrackingU
 
     if (tmpRetVal == 0 || tmpRetVal == 2) {
       OutputStat(chainTrackingUse, iRun == 0 ? nTracksTotal : nullptr, iRun == 0 ? nClustersTotal : nullptr);
-      if (configStandalone.memoryStat) {
-        recUse->PrintMemoryStatistics();
-      } else if (configStandalone.proc.debugLevel >= 2) {
-        recUse->PrintMemoryOverview();
-      }
     }
 
     if (tmpRetVal == 0 && configStandalone.testSyncAsync) {
@@ -689,9 +686,6 @@ int32_t RunBenchmark(GPUReconstruction* recUse, GPUChainTracking* chainTrackingU
       tmpRetVal = recAsync->RunChains();
       if (tmpRetVal == 0 || tmpRetVal == 2) {
         OutputStat(chainTrackingAsync, nullptr, nullptr);
-        if (configStandalone.memoryStat) {
-          recAsync->PrintMemoryStatistics();
-        }
       }
       recAsync->ClearAllocatedMemory();
     }
@@ -704,10 +698,10 @@ int32_t RunBenchmark(GPUReconstruction* recUse, GPUChainTracking* chainTrackingU
       configStandalone.noprompt = 1;
     }
     if (tmpRetVal == 3 && configStandalone.proc.ignoreNonFatalGPUErrors) {
-      printf("Non-FATAL GPU error occured, ignoring\n");
+      printf("GPU Standalone Benchmark: Non-FATAL GPU error occured, ignoring\n");
     } else if (tmpRetVal && !configStandalone.continueOnError) {
       if (tmpRetVal != 2) {
-        printf("Error occured\n");
+        printf("GPU Standalone Benchmark: Error occured\n");
       }
       return 1;
     }
@@ -847,7 +841,7 @@ int32_t main(int argc, char** argv)
       break;
     }
     if (configStandalone.runs2 > 1) {
-      printf("RUN2: %d\n", iRunOuter);
+      printf("\nRUN2: %d\n", iRunOuter);
     }
     int64_t nTracksTotal = 0;
     int64_t nClustersTotal = 0;

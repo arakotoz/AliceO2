@@ -17,7 +17,6 @@
 #include "GPUTPCTrack.h"
 #include "GPUCommonMath.h"
 
-#include "GPUTPCClusterData.h"
 #include "GPUO2DataTypes.h"
 #include "GPUTPCTrackParam.h"
 #include "GPUParam.inc"
@@ -85,10 +84,15 @@ void* GPUTPCTracker::SetPointersCommon(void* mem)
   return mem;
 }
 
+bool GPUTPCTracker::MemoryReuseAllowed()
+{
+  return !mRec->GetProcessingSettings().keepDisplayMemory && ((mRec->GetRecoStepsGPU() & GPUDataTypes::RecoStep::TPCSectorTracking) || mRec->GetProcessingSettings().inKernelParallel == 1 || mRec->GetProcessingSettings().nHostThreads == 1);
+}
+
 void GPUTPCTracker::RegisterMemoryAllocation()
 {
   AllocateAndInitializeLate();
-  bool reuseCondition = !mRec->GetProcessingSettings().keepDisplayMemory && ((mRec->GetRecoStepsGPU() & GPUDataTypes::RecoStep::TPCSectorTracking) || mRec->GetProcessingSettings().inKernelParallel == 1 || mRec->GetProcessingSettings().nHostThreads == 1);
+  bool reuseCondition = MemoryReuseAllowed();
   GPUMemoryReuse reLinks{reuseCondition, GPUMemoryReuse::REUSE_1TO1, GPUMemoryReuse::TrackerDataLinks, (uint16_t)(mISector % mRec->GetProcessingSettings().nStreams)};
   mMemoryResLinks = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersDataLinks, GPUMemoryResource::MEMORY_SCRATCH | GPUMemoryResource::MEMORY_STACK, "TPCSectorLinks", reLinks);
   mMemoryResSectorScratch = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersDataScratch, GPUMemoryResource::MEMORY_SCRATCH | GPUMemoryResource::MEMORY_STACK | GPUMemoryResource::MEMORY_CUSTOM, "TPCSectorScratch");
@@ -103,9 +107,9 @@ void GPUTPCTracker::RegisterMemoryAllocation()
   uint32_t type = GPUMemoryResource::MEMORY_SCRATCH;
   if (mRec->GetProcessingSettings().memoryAllocationStrategy == GPUMemoryResource::ALLOCATION_INDIVIDUAL) { // For individual scheme, we allocate tracklets separately, and change the type for the following allocations to custom
     type |= GPUMemoryResource::MEMORY_CUSTOM;
-    mMemoryResTracklets = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersTracklets, type, "TPCTrackerTracklets");
+    mMemoryResTracklets = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersTracklets, type | GPUMemoryResource::MEMORY_STACK, "TPCTrackerTracklets");
   }
-  mMemoryResOutput = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersOutput, type, "TPCTrackerTracks");
+  mMemoryResOutput = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersOutput, type, "TPCTrackerTracks"); // TODO: Ideally this should eventually go on the stack, so that we can free it after the first phase of track merging
 }
 
 GPUhd() void* GPUTPCTracker::SetPointersTracklets(void* mem)
@@ -143,6 +147,15 @@ void GPUTPCTracker::SetMaxData(const GPUTrackingInOutPointers& io)
   mNMaxTracklets = mRec->MemoryScalers()->NTPCTracklets(mData.NumberOfHits());
   mNMaxRowHits = mRec->MemoryScalers()->NTPCTrackletHits(mData.NumberOfHits());
   mNMaxTracks = mRec->MemoryScalers()->NTPCSectorTracks(mData.NumberOfHits());
+  if (io.clustersNative) {
+    uint32_t sectorOffset = mISector >= GPUCA_NSECTORS / 2 ? GPUCA_NSECTORS / 2 : 0;
+    uint32_t nextSector = (mISector + 1) % (GPUCA_NSECTORS / 2) + sectorOffset;
+    uint32_t prevSector = (mISector + GPUCA_NSECTORS - 1) % (GPUCA_NSECTORS / 2) + sectorOffset;
+    uint32_t nExtrapolationTracks = mRec->MemoryScalers()->NTPCSectorTracks((io.clustersNative->nClustersSector[nextSector] + io.clustersNative->nClustersSector[prevSector]) / 2) / 2;
+    if (nExtrapolationTracks > mNMaxTracks) {
+      mNMaxTracks = nExtrapolationTracks;
+    }
+  }
   mNMaxTrackHits = mRec->MemoryScalers()->NTPCSectorTrackHits(mData.NumberOfHits(), mRec->GetProcessingSettings().tpcInputWithClusterRejection);
 
   if (mRec->getGPUParameters(mRec->GetRecoStepsGPU() & GPUDataTypes::RecoStep::TPCSectorTracking).par_SORT_STARTHITS) {

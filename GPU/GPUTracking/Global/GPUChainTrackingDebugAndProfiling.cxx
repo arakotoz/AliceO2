@@ -70,7 +70,7 @@ int32_t GPUChainTracking::DoProfile()
   fwrite(&bmpFH, 1, sizeof(bmpFH), fp2);
   fwrite(&bmpIH, 1, sizeof(bmpIH), fp2);
 
-  int32_t nEmptySync = 0;
+  [[maybe_unused]] int32_t nEmptySync = 0;
   for (uint32_t i = 0; i < bmpheight * ConstructorBlockCount() * ConstructorThreadCount(); i += ConstructorBlockCount() * ConstructorThreadCount()) {
     int32_t fEmpty = 1;
     for (uint32_t j = 0; j < ConstructorBlockCount() * ConstructorThreadCount(); j++) {
@@ -103,7 +103,6 @@ int32_t GPUChainTracking::DoProfile()
     } else {
       nEmptySync = 0;
     }
-    (void)nEmptySync;
     // if (nEmptySync == GPUCA_SCHED_ROW_STEP + 2) break;
   }
 
@@ -143,8 +142,10 @@ void GPUChainTracking::PrintMemoryStatistics()
   std::map<std::string, GPUChainTrackingMemUsage> usageMap;
   for (int32_t i = 0; i < NSECTORS; i++) {
 #ifdef GPUCA_TPC_GEOMETRY_O2
-    addToMap("TPC Clusterer Sector Peaks", usageMap, processors()->tpcClusterer[i].mPmemory->counters.nPeaks, processors()->tpcClusterer[i].mNMaxPeaks);
-    addToMap("TPC Clusterer Sector Clusters", usageMap, processors()->tpcClusterer[i].mPmemory->counters.nClusters, processors()->tpcClusterer[i].mNMaxClusters);
+    if (processors()->tpcClusterer[i].mPmemory) {
+      addToMap("TPC Clusterer Sector Peaks", usageMap, processors()->tpcClusterer[i].mPmemory->counters.nPeaks, processors()->tpcClusterer[i].mNMaxPeaks);
+      addToMap("TPC Clusterer Sector Clusters", usageMap, processors()->tpcClusterer[i].mPmemory->counters.nClusters, processors()->tpcClusterer[i].mNMaxClusters);
+    }
 #endif
     addToMap("TPC Sector Start Hits", usageMap, *processors()->tpcTrackers[i].NStartHits(), processors()->tpcTrackers[i].NMaxStartHits());
     addToMap("TPC Sector Tracklets", usageMap, *processors()->tpcTrackers[i].NTracklets(), processors()->tpcTrackers[i].NMaxTracklets());
@@ -153,8 +154,10 @@ void GPUChainTracking::PrintMemoryStatistics()
     addToMap("TPC Sector TrackHits", usageMap, *processors()->tpcTrackers[i].NTrackHits(), processors()->tpcTrackers[i].NMaxTrackHits());
   }
   addToMap("TPC Clusterer Clusters", usageMap, mRec->MemoryScalers()->nTPCHits, mRec->MemoryScalers()->NTPCClusters(mRec->MemoryScalers()->nTPCdigits));
-  addToMap("TPC Tracks", usageMap, processors()->tpcMerger.NMergedTracks(), processors()->tpcMerger.NMaxTracks());
-  addToMap("TPC TrackHits", usageMap, processors()->tpcMerger.NMergedTrackClusters(), processors()->tpcMerger.NMaxMergedTrackClusters());
+  if (processors()->tpcMerger.Memory()) {
+    addToMap("TPC Tracks", usageMap, processors()->tpcMerger.NMergedTracks(), processors()->tpcMerger.NMaxTracks());
+    addToMap("TPC TrackHits", usageMap, processors()->tpcMerger.NMergedTrackClusters(), processors()->tpcMerger.NMaxMergedTrackClusters());
+  }
 
   if (mRec->GetProcessingSettings().createO2Output) {
     addToMap("TPC O2 Tracks", usageMap, processors()->tpcMerger.NOutputTracksTPCO2(), processors()->tpcMerger.NOutputTracksTPCO2());
@@ -162,9 +165,11 @@ void GPUChainTracking::PrintMemoryStatistics()
   }
 
 #ifdef GPUCA_TPC_GEOMETRY_O2
-  addToMap("TPC ComprCache HitsAttached", usageMap, processors()->tpcCompressor.mOutput->nAttachedClusters, processors()->tpcCompressor.mMaxTrackClusters);
-  addToMap("TPC ComprCache HitsUnattached", usageMap, processors()->tpcCompressor.mOutput->nUnattachedClusters, processors()->tpcCompressor.mMaxClustersInCache);
-  addToMap("TPC ComprCache Tracks", usageMap, processors()->tpcCompressor.mOutput->nTracks, processors()->tpcCompressor.mMaxTracks);
+  if (processors()->tpcCompressor.mOutput) {
+    addToMap("TPC ComprCache HitsAttached", usageMap, processors()->tpcCompressor.mOutput->nAttachedClusters, processors()->tpcCompressor.mMaxTrackClusters);
+    addToMap("TPC ComprCache HitsUnattached", usageMap, processors()->tpcCompressor.mOutput->nUnattachedClusters, processors()->tpcCompressor.mMaxClustersInCache);
+    addToMap("TPC ComprCache Tracks", usageMap, processors()->tpcCompressor.mOutput->nTracks, processors()->tpcCompressor.mMaxTracks);
+  }
 #endif
 
   for (auto& elem : usageMap) {
@@ -181,8 +186,10 @@ void GPUChainTracking::PrintMemoryRelations()
     GPUInfo("MEMREL SectorTracks NCl %d NTrk %d", processors()->tpcTrackers[i].NHitsTotal(), *processors()->tpcTrackers[i].NTracks());
     GPUInfo("MEMREL SectorTrackHits NCl %d NTrkH %d", processors()->tpcTrackers[i].NHitsTotal(), *processors()->tpcTrackers[i].NTrackHits());
   }
-  GPUInfo("MEMREL Tracks NCl %d NTrk %d", processors()->tpcMerger.NMaxClusters(), processors()->tpcMerger.NMergedTracks());
-  GPUInfo("MEMREL TrackHitss NCl %d NTrkH %d", processors()->tpcMerger.NMaxClusters(), processors()->tpcMerger.NMergedTrackClusters());
+  if (processors()->tpcMerger.Memory()) {
+    GPUInfo("MEMREL Tracks NCl %d NTrk %d", processors()->tpcMerger.NMaxClusters(), processors()->tpcMerger.NMergedTracks());
+    GPUInfo("MEMREL TrackHitss NCl %d NTrkH %d", processors()->tpcMerger.NMaxClusters(), processors()->tpcMerger.NMergedTrackClusters());
+  }
 }
 
 void GPUChainTracking::PrepareKernelDebugOutput()
@@ -217,7 +224,9 @@ void GPUChainTracking::PrintOutputStat()
   } else {
     for (uint32_t k = 0; k < mIOPtrs.nMergedTracks; k++) {
       if (mIOPtrs.mergedTracks[k].OK()) {
-        nTracks++;
+        if (!mIOPtrs.mergedTracks[k].MergedLooper()) {
+          nTracks++;
+        }
         nAttachedClusters += mIOPtrs.mergedTracks[k].NClusters();
         nAttachedClustersFitted += mIOPtrs.mergedTracks[k].NClustersFitted();
       }
@@ -250,7 +259,7 @@ void GPUChainTracking::PrintOutputStat()
   GPUInfo("Output Tracks: %d (%d / %d / %d / %d clusters (fitted / attached / adjacent / total) - %s format)%s", nTracks, nAttachedClustersFitted, nAttachedClusters, nAdjacentClusters, nCls, GetProcessingSettings().createO2Output > 1 ? "O2" : "GPU", trdText);
 }
 
-void GPUChainTracking::SanityCheck()
+void GPUChainTracking::OutputSanityCheck()
 {
   size_t nErrors = 0;
 
