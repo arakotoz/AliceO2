@@ -244,6 +244,7 @@ class TRKDPLDigitizerTask : BaseDPLDigitizer
       // if (oTRKParams::Instance().useDeadChannelMap) {
       //   pc.inputs().get<o2::itsmft::NoiseMap*>("TRK_dead"); // trigger final ccdb update
       // }
+      pc.inputs().get<o2::itsmft::AlpideSimResponse*>("TRK_aptsresp");
 
       // init digitizer
       mDigitizer.init();
@@ -264,6 +265,10 @@ class TRKDPLDigitizerTask : BaseDPLDigitizer
     //   mDigitizer.setDeadChannelsMap((o2::itsmft::NoiseMap*)obj);
     //   return;
     // }
+    if (matcher == ConcreteDataMatcher(mOrigin, "APTSRESP", 0)) {
+      LOG(info) << mID.getName() << " loaded APTSResponseData";
+      mDigitizer.getParams().setAlpSimResponse((const o2::itsmft::AlpideSimResponse*)obj);
+    }
   }
 
  private:
@@ -276,8 +281,8 @@ class TRKDPLDigitizerTask : BaseDPLDigitizer
   std::vector<o2::itsmft::Digit> mDigits{};
   std::vector<o2::itsmft::ROFRecord> mROFRecords{};
   std::vector<o2::itsmft::ROFRecord> mROFRecordsAccum{};
-  std::vector<o2::itsmft::Hit> mHits{};
-  std::vector<o2::itsmft::Hit>* mHitsP{&mHits};
+  std::vector<o2::trk::Hit> mHits{};
+  std::vector<o2::trk::Hit>* mHitsP{&mHits};
   o2::dataformats::MCTruthContainer<o2::MCCompLabel> mLabels{};
   o2::dataformats::MCTruthContainer<o2::MCCompLabel> mLabelsAccum{};
   std::vector<o2::itsmft::MC2ROFRecord> mMC2ROFRecordsAccum{};
@@ -297,6 +302,7 @@ DataProcessorSpec getTRKDigitizerSpec(int channel, bool mctruth)
   // if (oTRKParams::Instance().useDeadChannelMap) {
   //   inputs.emplace_back("TRK_dead", "TRK", "DEADMAP", 0, Lifetime::Condition, ccdbParamSpec("TRK/Calib/DeadMap"));
   // }
+  inputs.emplace_back("TRK_aptsresp", "TRK", "APTSRESP", 0, Lifetime::Condition, ccdbParamSpec("IT3/Calib/APTSResponse"));
 
   return DataProcessorSpec{detStr + "Digitizer",
                            inputs, makeOutChannels(detOrig, mctruth),

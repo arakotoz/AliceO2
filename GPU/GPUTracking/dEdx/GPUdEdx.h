@@ -23,6 +23,7 @@
 #include "CalibdEdxContainer.h"
 #include "GPUTPCGeometry.h"
 #include "GPUDebugStreamer.h"
+#include "GPUDataTypesIO.h"
 
 namespace o2::gpu
 {
@@ -35,6 +36,8 @@ class GPUdEdx
   GPUd() void fillCluster(float qtot, float qmax, int32_t padRow, uint8_t sector, float trackSnp, float trackTgl, const GPUCalibObjectsConst& calib, float z, float pad, float relTime);
   GPUd() void fillSubThreshold(int32_t padRow);
   GPUd() void computedEdx(GPUdEdxInfo& output, const GPUParam& param);
+
+  static constexpr size_t MAX_NCL = GPUCA_ROW_COUNT;
 
  private:
   GPUd() float GetSortTruncMean(GPUCA_PAR_DEDX_STORAGE_TYPE_A* array, int32_t count, int32_t trunclow, int32_t trunchigh);
@@ -60,8 +63,6 @@ class GPUdEdx
   };
 #endif
 
-  static constexpr int32_t MAX_NCL = GPUCA_ROW_COUNT; // Must fit in mNClsROC (uint8_t)!
-
   GPUCA_PAR_DEDX_STORAGE_TYPE_A mChargeTot[MAX_NCL]; // No need for default, just some memory
   GPUCA_PAR_DEDX_STORAGE_TYPE_A mChargeMax[MAX_NCL]; // No need for default, just some memory
   float mSubThreshMinTot = 0.f;
@@ -76,7 +77,7 @@ class GPUdEdx
 GPUdi() void GPUdEdx::checkSubThresh(int32_t roc)
 {
   if (roc != mLastROC) {
-    if (mNSubThresh && mCount + mNSubThresh <= MAX_NCL) {
+    if (mNSubThresh && mCount + mNSubThresh < MAX_NCL) {
       for (int32_t i = 0; i < mNSubThresh; i++) {
         mChargeTot[mCount] = (GPUCA_PAR_DEDX_STORAGE_TYPE_A)(mSubThreshMinTot * scalingFactor<GPUCA_PAR_DEDX_STORAGE_TYPE_A>::factor + scalingFactor<GPUCA_PAR_DEDX_STORAGE_TYPE_A>::round);
         mChargeMax[mCount++] = (GPUCA_PAR_DEDX_STORAGE_TYPE_A)(mSubThreshMinMax * scalingFactor<GPUCA_PAR_DEDX_STORAGE_TYPE_A>::factor + scalingFactor<GPUCA_PAR_DEDX_STORAGE_TYPE_A>::round);
@@ -94,16 +95,15 @@ GPUdi() void GPUdEdx::checkSubThresh(int32_t roc)
 
 GPUdnii() void GPUdEdx::fillCluster(float qtot, float qmax, int32_t padRow, uint8_t sector, float trackSnp, float trackTgl, const GPUCalibObjectsConst& calib, float z, float pad, float relTime)
 {
-  if (mCount >= MAX_NCL) {
-    return;
-  }
-
   // container containing all the dE/dx corrections
   auto calibContainer = calib.dEdxCalibContainer;
   constexpr GPUTPCGeometry geo;
 
   const int32_t roc = geo.GetROC(padRow);
   checkSubThresh(roc);
+  if (mCount >= MAX_NCL) {
+    return;
+  }
   float snp2 = trackSnp * trackSnp;
   if (snp2 > GPUCA_MAX_SIN_PHI_LOW) {
     snp2 = GPUCA_MAX_SIN_PHI_LOW;

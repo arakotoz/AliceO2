@@ -15,12 +15,16 @@
 #pragma link off all classes;
 #pragma link off all functions;
 
+#pragma link C++ class o2::trk::Hit + ;
+#pragma link C++ class std::vector < o2::trk::Hit> + ;
+
 #pragma link C++ class o2::trk::TRKLayer + ;
 #pragma link C++ class o2::trk::VDLayer + ;
 #pragma link C++ class o2::trk::TRKServices + ;
 #pragma link C++ class o2::trk::Detector + ;
 #pragma link C++ class o2::base::DetImpl < o2::trk::Detector> + ;
 #pragma link C++ class o2::trk::Digitizer + ;
+#pragma link C++ class o2::trk::ChipSimResponse + ;
 
 #pragma link C++ class o2::trk::DPLDigitizerParam < o2::detectors::DetID::TRK> + ;
 #pragma link C++ class o2::trk::DPLDigitizerParam < o2::detectors::DetID::FT3> + ;

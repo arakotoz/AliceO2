@@ -23,6 +23,12 @@ namespace o2
 namespace eventgen
 {
 
+GeneratorHybrid& GeneratorHybrid::Instance(const std::string& inputgens)
+{
+  static GeneratorHybrid instance(inputgens);
+  return instance;
+}
+
 GeneratorHybrid::GeneratorHybrid(const std::string& inputgens)
 {
   // This generator has trivial unit conversions
@@ -609,17 +615,23 @@ Bool_t GeneratorHybrid::confSetter(const auto& gen)
 
 Bool_t GeneratorHybrid::parseJSON(const std::string& path)
 {
+  auto expandedPath = o2::utils::expandShellVarsInFileName(path);
+  // Check if configuration file exists
+  if (gSystem->AccessPathName(expandedPath.c_str())) {
+    LOG(fatal) << "Configuration file " << expandedPath << " for hybrid generator does not exist";
+    return false;
+  }
   // Parse JSON file to build map
-  std::ifstream fileStream(path, std::ios::in);
+  std::ifstream fileStream(expandedPath, std::ios::in);
   if (!fileStream.is_open()) {
-    LOG(error) << "Cannot open " << path;
+    LOG(error) << "Cannot open " << expandedPath;
     return false;
   }
   rapidjson::IStreamWrapper isw(fileStream);
   rapidjson::Document doc;
   doc.ParseStream(isw);
   if (doc.HasParseError()) {
-    LOG(error) << "Error parsing provided json file " << path;
+    LOG(error) << "Error parsing provided json file " << expandedPath;
     LOG(error) << "  - Error -> " << rapidjson::GetParseError_En(doc.GetParseError());
     return false;
   }

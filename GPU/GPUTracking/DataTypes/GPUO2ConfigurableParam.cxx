@@ -9,12 +9,12 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// \file GPUO2InterfaceConfigurableParam.cxx
+/// \file GPUO2ConfigurableParam.cxx
 /// \author David Rohr
 
-#include "GPUO2InterfaceConfigurableParam.h"
-#include "GPUO2InterfaceConfiguration.h"
-#include "GPUDataTypes.h"
+#include "GPUO2ConfigurableParam.h"
+#include "Interface/GPUO2InterfaceConfiguration.h"
+#include "GPUDataTypesIO.h"
 #include "GPUConfigDump.h"
 
 using namespace o2::gpu;
@@ -122,7 +122,7 @@ GPUSettingsO2 GPUO2InterfaceConfiguration::ReadConfigurableParam(GPUO2InterfaceC
   if (obj.configReconstruction.tpc.trackReferenceX == 1000.f) {
     obj.configReconstruction.tpc.trackReferenceX = 83.f;
   }
-  obj.configDeviceBackend.deviceType = GPUDataTypes::GetDeviceType(global.deviceType.c_str());
+  obj.configDeviceBackend.deviceType = gpudatatypes::GetDeviceType(global.deviceType.c_str());
   obj.configDeviceBackend.forceDeviceType = global.forceDeviceType;
   return global;
 }

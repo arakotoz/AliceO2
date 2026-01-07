@@ -14,7 +14,7 @@
 #include "Framework/OutputSpec.h"
 #include "Framework/InputSpec.h"
 #include "Framework/DataProcessorSpec.h"
-#include "Framework/AnalysisContext.h"
+#include "Framework/DanglingEdgesContext.h"
 #include "Headers/DataHeader.h"
 #include <array>
 
@@ -39,11 +39,6 @@ struct AnalysisSupportHelpers {
                                          std::vector<InputSpec> const& requestedSpecials,
                                          std::vector<InputSpec>& requestedAODs,
                                          DataProcessorSpec& publisher);
-  static void addMissingOutputsToAnalysisCCDBFetcher(std::vector<OutputSpec> const& providedSpecials,
-                                                     std::vector<InputSpec> const& requestedSpecials,
-                                                     std::vector<InputSpec>& requestedAODs,
-                                                     std::vector<InputSpec>& requestedDYNs,
-                                                     DataProcessorSpec& publisher);
   static void addMissingOutputsToBuilder(std::vector<InputSpec> const& requestedSpecials,
                                          std::vector<InputSpec>& requestedAODs,
                                          std::vector<InputSpec>& requestedDYNs,

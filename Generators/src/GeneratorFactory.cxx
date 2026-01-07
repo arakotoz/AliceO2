@@ -279,13 +279,8 @@ void GeneratorFactory::setPrimaryGenerator(o2::conf::SimConfig const& conf, Fair
       LOG(fatal) << "No configuration file provided for hybrid generator";
       return;
     }
-    // check if file named config exists and it's not empty
-    else if (gSystem->AccessPathName(config.c_str())) {
-      LOG(fatal) << "Configuration file for hybrid generator does not exist";
-      return;
-    }
-    auto hybrid = new o2::eventgen::GeneratorHybrid(config);
-    primGen->AddGenerator(hybrid);
+    auto& hybrid = o2::eventgen::GeneratorHybrid::Instance(config);
+    primGen->AddGenerator(&hybrid);
 #endif
   } else {
     LOG(fatal) << "Invalid generator";

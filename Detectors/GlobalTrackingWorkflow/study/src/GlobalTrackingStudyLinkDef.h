@@ -40,4 +40,13 @@
 #pragma link C++ class std::vector < o2::trackstudy::TrackPairInfo> + ;
 #pragma ling C++ class o2::tpc::TPCClusSelector + ;
 
+#pragma link C++ class o2::trackstudy::ITSHitInfo + ;
+#pragma link C++ class std::vector < o2::trackstudy::ITSHitInfo> + ;
+
+#pragma link C++ class o2::checkresid::Point + ;
+#pragma link C++ class std::vector < o2::checkresid::Point> + ;
+#pragma link C++ class o2::checkresid::Track + ;
+#pragma link C++ class o2::checkresid::CheckResidConfig + ;
+#pragma link C++ class o2::conf::ConfigurableParamHelper < o2::checkresid::CheckResidConfig> + ;
+
 #endif

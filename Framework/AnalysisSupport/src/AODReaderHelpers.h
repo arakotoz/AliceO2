@@ -12,20 +12,16 @@
 #ifndef O2_FRAMEWORK_AODREADERHELPERS_H_
 #define O2_FRAMEWORK_AODREADERHELPERS_H_
 
-#include "Framework/TableBuilder.h"
 #include "Framework/AlgorithmSpec.h"
-#include "Framework/Logger.h"
-#include "Framework/RootMessageContext.h"
 #include <uv.h>
 
 namespace o2::framework::readers
 {
 
-
 struct AODReaderHelpers {
   static AlgorithmSpec rootFileReaderCallback();
-  static AlgorithmSpec aodSpawnerCallback(std::vector<InputSpec>& requested);
-  static AlgorithmSpec indexBuilderCallback(std::vector<InputSpec>& requested);
+  static AlgorithmSpec aodSpawnerCallback(ConfigContext const& /*ctx*/);
+  static AlgorithmSpec indexBuilderCallback(ConfigContext const& /*ctx*/);
 };
 
 } // namespace o2::framework::readers

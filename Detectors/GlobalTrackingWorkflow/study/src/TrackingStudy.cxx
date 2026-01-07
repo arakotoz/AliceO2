@@ -44,7 +44,7 @@
 #include "TPCCalibration/VDriftHelper.h"
 #include "TPCCalibration/CorrectionMapsLoader.h"
 #include "GPUO2InterfaceRefit.h"
-#include "GPUO2Interface.h" // Needed for propper settings in GPUParam.h
+#include "GPUO2ExternalUser.h" // Needed for propper settings in GPUParam.h
 #include "GPUParam.h"
 #include "GPUParam.inc"
 #include "GPUTPCGeometry.h"
@@ -67,7 +67,7 @@ using TBracket = o2::math_utils::Bracketf_t;
 
 using timeEst = o2::dataformats::TimeStampWithError<float, float>;
 
-class TrackingStudySpec : public Task
+class TrackingStudySpec final : public Task
 {
  public:
   TrackingStudySpec(std::shared_ptr<DataRequest> dr, std::shared_ptr<o2::base::GRPGeomRequest> gr, GTrackID::mask_t src, bool useMC, const o2::tpc::CorrectionMapsLoaderGloOpts& sclOpts)
@@ -444,7 +444,7 @@ void TrackingStudySpec::process(o2::globaltracking::RecoContainer& recoData)
         }
         bool ambig = vid.isAmbiguous();
         auto trc = recoData.getTrackParam(vid);
-        if (abs(trc.getEta()) > mMaxEta) {
+        if (fabs(trc.getEta()) > mMaxEta) {
           continue;
         }
         if (iv < nv - 1 && is == GTrackID::TPC && tpcTr && !tpcTr->hasBothSidesClusters()) { // for unconstrained TPC tracks correct track Z

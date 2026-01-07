@@ -12,6 +12,10 @@
 #define O2_FRAMEWORK_DATAPROCESSINGHELPERS_H_
 
 #include <cstddef>
+#include "Framework/TimesliceSlot.h"
+#include "Framework/TimesliceIndex.h"
+#include <fairmq/FwdDecls.h>
+#include <vector>
 
 namespace o2::framework
 {
@@ -21,6 +25,13 @@ struct ForwardChannelState;
 struct OutputChannelInfo;
 struct OutputChannelSpec;
 struct OutputChannelState;
+struct ProcessingPolicies;
+struct DeviceSpec;
+struct FairMQDeviceProxy;
+struct MessageSet;
+struct ChannelIndex;
+enum struct StreamingState;
+enum struct TransitionHandlingState;
 
 /// Generic helpers for DataProcessing releated functions.
 struct DataProcessingHelpers {
@@ -35,7 +46,15 @@ struct DataProcessingHelpers {
   static bool sendOldestPossibleTimeframe(ServiceRegistryRef const& ref, OutputChannelInfo const& info, OutputChannelState& state, size_t timeslice);
   /// Broadcast the oldest possible timeslice to all channels in output
   static void broadcastOldestPossibleTimeslice(ServiceRegistryRef const& ref, size_t timeslice);
+  /// change the device StreamingState to newState
+  static void switchState(ServiceRegistryRef const& ref, StreamingState newState);
+  /// check if spec is a source devide
+  static bool hasOnlyGenerated(DeviceSpec const& spec);
+  /// starts the EoS timers and returns the new TransitionHandlingState in case as new state is requested
+  static TransitionHandlingState updateStateTransition(ServiceRegistryRef const& ref, ProcessingPolicies const& policies);
+  /// Helper to route messages for forwarding
+  static std::vector<fair::mq::Parts> routeForwardedMessages(FairMQDeviceProxy& proxy, TimesliceSlot slot, std::vector<MessageSet>& currentSetOfInputs,
+                                                             TimesliceIndex::OldestOutputInfo oldestTimeslice, bool copy, bool consume);
 };
-
 } // namespace o2::framework
 #endif // O2_FRAMEWORK_DATAPROCESSINGHELPERS_H_

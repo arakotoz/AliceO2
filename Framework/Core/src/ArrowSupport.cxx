@@ -10,10 +10,10 @@
 // or submit itself to any jurisdiction.
 #include "ArrowSupport.h"
 
-#include "Framework/AODReaderHelpers.h"
 #include "Framework/ArrowContext.h"
 #include "Framework/ArrowTableSlicingCache.h"
 #include "Framework/DataProcessor.h"
+#include "Framework/CommonDataProcessors.h"
 #include "Framework/DataProcessingStats.h"
 #include "Framework/ServiceRegistry.h"
 #include "Framework/ConfigContext.h"
@@ -33,6 +33,7 @@
 #include "Framework/ServiceRegistryRef.h"
 #include "Framework/ServiceRegistryHelpers.h"
 #include "Framework/Signpost.h"
+#include "Framework/DefaultsHelpers.h"
 
 #include "CommonMessageBackendsHelpers.h"
 #include <Monitoring/Monitoring.h>
@@ -65,7 +66,7 @@ enum struct RateLimitingState {
 
 struct RateLimitConfig {
   int64_t maxMemory = 2000;
-  int64_t maxTimeframes = 0;
+  int64_t maxTimeframes = 1000;
 };
 
 struct MetricIndices {
@@ -77,6 +78,11 @@ struct MetricIndices {
   size_t shmOfferBytesConsumed = -1;
   size_t timeframesRead = -1;
   size_t timeframesConsumed = -1;
+  size_t timeframesExpired = -1;
+  // Timeslices counting
+  size_t timeslicesStarted = -1;
+  size_t timeslicesExpired = -1;
+  size_t timeslicesDone = -1;
 };
 
 std::vector<MetricIndices> createDefaultIndices(std::vector<DeviceMetricsInfo>& allDevicesMetrics)
@@ -84,23 +90,22 @@ std::vector<MetricIndices> createDefaultIndices(std::vector<DeviceMetricsInfo>& 
   std::vector<MetricIndices> results;
 
   for (auto& info : allDevicesMetrics) {
-    MetricIndices indices;
-    indices.arrowBytesCreated = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-bytes-created");
-    indices.arrowBytesDestroyed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-bytes-destroyed");
-    indices.arrowMessagesCreated = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-messages-created");
-    indices.arrowMessagesDestroyed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-messages-destroyed");
-    indices.arrowBytesExpired = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-bytes-expired");
-    indices.shmOfferBytesConsumed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "shm-offer-bytes-consumed");
-    indices.timeframesRead = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "df-sent");
-    indices.timeframesConsumed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "consumed-timeframes");
-    results.push_back(indices);
+    results.emplace_back(MetricIndices{
+      .arrowBytesCreated = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-bytes-created"),
+      .arrowBytesDestroyed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-bytes-destroyed"),
+      .arrowMessagesCreated = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-messages-created"),
+      .arrowMessagesDestroyed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-messages-destroyed"),
+      .arrowBytesExpired = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "arrow-bytes-expired"),
+      .shmOfferBytesConsumed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "shm-offer-bytes-consumed"),
+      .timeframesRead = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "df-sent"),
+      .timeframesConsumed = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "consumed-timeframes"),
+      .timeframesExpired = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "expired-timeframes"),
+      .timeslicesStarted = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "timeslices-started"),
+      .timeslicesExpired = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "timeslices-expired"),
+      .timeslicesDone = DeviceMetricsHelper::bookNumericMetric<uint64_t>(info, "timeslices-done"),
+    });
   }
   return results;
-}
-
-uint64_t calculateAvailableSharedMemory(ServiceRegistryRef registry)
-{
-  return registry.get<RateLimitConfig>().maxMemory;
 }
 
 struct ResourceState {
@@ -205,31 +210,45 @@ auto offerResources(ResourceState& resourceState,
   // unusedOfferedSharedMemory is the amount of memory which was offered and which we know it was
   // not used so far. So we need to account for the amount which got actually read (readerBytesCreated)
   // and the amount which we know was given back.
-  static int64_t lastShmOfferConsumed = 0;
-  static int64_t lastUnusedOfferedMemory = 0;
-  if (offerConsumedCurrentValue != lastShmOfferConsumed) {
+  static int64_t lastResourceOfferConsumed = 0;
+  static int64_t lastUnusedOfferedResource = 0;
+  if (offerConsumedCurrentValue != lastResourceOfferConsumed) {
     O2_SIGNPOST_EVENT_EMIT(rate_limiting, sid, "offer",
                            "Offer consumed so far %llu", offerConsumedCurrentValue);
-    lastShmOfferConsumed = offerConsumedCurrentValue;
+    lastResourceOfferConsumed = offerConsumedCurrentValue;
   }
-  int unusedOfferedMemory = (resourceState.offered - (offerExpiredCurrentValue + offerConsumedCurrentValue) / resourceSpec.metricOfferScaleFactor);
-  if (lastUnusedOfferedMemory != unusedOfferedMemory) {
+  int unusedOfferedResource = (resourceState.offered - (offerExpiredCurrentValue + offerConsumedCurrentValue) / resourceSpec.metricOfferScaleFactor);
+  if (lastUnusedOfferedResource != unusedOfferedResource) {
     O2_SIGNPOST_EVENT_EMIT(rate_limiting, sid, "offer",
-                           "unusedOfferedMemory:%{bytes}d = offered:%{bytes}llu - (expired:%{bytes}llu + consumed:%{bytes}llu) / %lli",
-                           unusedOfferedMemory, resourceState.offered,
+                           "unusedOfferedResource(%{public}s):%{bytes}d = offered:%{bytes}llu - (expired:%{bytes}llu + consumed:%{bytes}llu) / %lli",
+                           resourceSpec.name,
+                           unusedOfferedResource, resourceState.offered,
                            offerExpiredCurrentValue / resourceSpec.metricOfferScaleFactor,
                            offerConsumedCurrentValue / resourceSpec.metricOfferScaleFactor,
                            resourceSpec.metricOfferScaleFactor);
-    lastUnusedOfferedMemory = unusedOfferedMemory;
+    lastUnusedOfferedResource = unusedOfferedResource;
   }
   // availableSharedMemory is the amount of memory which we know is available to be offered.
   // We subtract the amount which we know was already offered but it's unused and we then balance how
   // much was created with how much was destroyed.
-  resourceState.available = resourceSpec.maxAvailable + ((disposedResourceCurrentValue - acquiredResourceCurrentValue) / resourceSpec.metricOfferScaleFactor) - unusedOfferedMemory;
+  resourceState.available = resourceSpec.maxAvailable + ((disposedResourceCurrentValue - acquiredResourceCurrentValue) / resourceSpec.metricOfferScaleFactor) - unusedOfferedResource;
   availableResourceMetric(driverMetrics, resourceState.available, timestamp);
-  unusedOfferedResourceMetric(driverMetrics, unusedOfferedMemory, timestamp);
+  unusedOfferedResourceMetric(driverMetrics, unusedOfferedResource, timestamp);
 
   offeredResourceMetric(driverMetrics, resourceState.offered, timestamp);
+};
+
+auto processTimeslices = [](size_t index, DeviceMetricsInfo& deviceMetrics, bool& changed,
+                            int64_t& totalMetricValue, size_t& lastTimestamp) {
+  assert(index < deviceMetrics.metrics.size());
+  changed |= deviceMetrics.changed[index];
+  MetricInfo info = deviceMetrics.metrics[index];
+  assert(info.storeIdx < deviceMetrics.uint64Metrics.size());
+  auto& data = deviceMetrics.uint64Metrics[info.storeIdx];
+  auto value = (int64_t)data[(info.pos - 1) % data.size()];
+  totalMetricValue += value;
+  auto const& timestamps = DeviceMetricsHelper::getTimestampsStore<uint64_t>(deviceMetrics)[info.storeIdx];
+  lastTimestamp = std::max(lastTimestamp, timestamps[(info.pos - 1) % data.size()]);
 };
 
 o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
@@ -258,17 +277,34 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
                        int64_t totalMessagesDestroyed = 0;
                        int64_t totalTimeframesRead = 0;
                        int64_t totalTimeframesConsumed = 0;
+                       int64_t totalTimeframesExpired = 0;
+                       int64_t totalTimeslicesStarted = 0;
+                       int64_t totalTimeslicesDone = 0;
+                       int64_t totalTimeslicesExpired = 0;
                        auto &driverMetrics = sm.driverMetricsInfo;
                        auto &allDeviceMetrics = sm.deviceMetricsInfos;
                        auto &specs = sm.deviceSpecs;
                        auto &infos = sm.deviceInfos;
 
+                       // Aggregated driver metrics for timeslice rate limiting
+                       auto createUint64DriverMetric = [&driverMetrics](char const*name) -> auto {
+                          return DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, name);
+                       };
+                       auto createIntDriverMetric = [&driverMetrics](char const*name) -> auto {
+                          return DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, name);
+                       };
+
                        static auto stateMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "rate-limit-state");
                        static auto totalBytesCreatedMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "total-arrow-bytes-created");
                        static auto shmOfferConsumedMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "total-shm-offer-bytes-consumed");
+                       // These are really to monitor the rate limiting
                        static auto unusedOfferedSharedMemoryMetric = DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, "total-unused-offered-shared-memory");
+                       static auto unusedOfferedTimeslicesMetric = DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, "total-unused-offered-timeslices");
                        static auto availableSharedMemoryMetric = DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, "total-available-shared-memory");
+                       static auto availableTimeslicesMetric = DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, "total-available-timeslices");
                        static auto offeredSharedMemoryMetric = DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, "total-offered-shared-memory");
+                       static auto offeredTimeslicesMetric = DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, "total-offered-timeslices");
+
                        static auto totalBytesDestroyedMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "total-arrow-bytes-destroyed");
                        static auto totalBytesExpiredMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "total-arrow-bytes-expired");
                        static auto totalMessagesCreatedMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "total-arrow-messages-created");
@@ -276,6 +312,12 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
                        static auto totalTimeframesReadMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "total-timeframes-read");
                        static auto totalTimeframesConsumedMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "total-timeframes-consumed");
                        static auto totalTimeframesInFlyMetric = DeviceMetricsHelper::createNumericMetric<int>(driverMetrics, "total-timeframes-in-fly");
+
+                       static auto totalTimeslicesStartedMetric = createUint64DriverMetric("total-timeslices-started");
+                       static auto totalTimeslicesExpiredMetric = createUint64DriverMetric("total-timeslices-expired");
+                       static auto totalTimeslicesDoneMetric = createUint64DriverMetric("total-timeslices-done");
+                       static auto totalTimeslicesInFlyMetric = createIntDriverMetric("total-timeslices-in-fly");
+
                        static auto totalBytesDeltaMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "arrow-bytes-delta");
                        static auto changedCountMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "changed-metrics-count");
                        static auto totalSignalsMetric = DeviceMetricsHelper::createNumericMetric<uint64_t>(driverMetrics, "aod-reader-signals");
@@ -390,6 +432,21 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
                            auto const& timestamps = DeviceMetricsHelper::getTimestampsStore<uint64_t>(deviceMetrics)[info.storeIdx];
                            lastTimestamp = std::max(lastTimestamp, timestamps[(info.pos - 1) % data.size()]);
                          }
+                         {
+                           size_t index = indices.timeframesExpired;
+                           assert(index < deviceMetrics.metrics.size());
+                           changed |= deviceMetrics.changed[index];
+                           MetricInfo info = deviceMetrics.metrics[index];
+                           assert(info.storeIdx < deviceMetrics.uint64Metrics.size());
+                           auto& data = deviceMetrics.uint64Metrics[info.storeIdx];
+                           auto value = (int64_t)data[(info.pos - 1) % data.size()];
+                           totalTimeframesExpired += value;
+                           auto const& timestamps = DeviceMetricsHelper::getTimestampsStore<uint64_t>(deviceMetrics)[info.storeIdx];
+                           lastTimestamp = std::max(lastTimestamp, timestamps[(info.pos - 1) % data.size()]);
+                         }
+                         processTimeslices(indices.timeslicesStarted, deviceMetrics, changed, totalTimeslicesStarted, lastTimestamp);
+                         processTimeslices(indices.timeslicesExpired, deviceMetrics, changed, totalTimeslicesExpired, lastTimestamp);
+                         processTimeslices(indices.timeslicesDone, deviceMetrics, changed, totalTimeslicesDone, lastTimestamp);
                        }
                        static uint64_t unchangedCount = 0;
                        if (changed) {
@@ -402,31 +459,54 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
                          totalTimeframesReadMetric(driverMetrics, totalTimeframesRead, timestamp);
                          totalTimeframesConsumedMetric(driverMetrics, totalTimeframesConsumed, timestamp);
                          totalTimeframesInFlyMetric(driverMetrics, (int)(totalTimeframesRead - totalTimeframesConsumed), timestamp);
+                         totalTimeslicesStartedMetric(driverMetrics, totalTimeslicesStarted, timestamp);
+                         totalTimeslicesExpiredMetric(driverMetrics, totalTimeslicesExpired, timestamp);
+                         totalTimeslicesDoneMetric(driverMetrics, totalTimeslicesDone, timestamp);
+                         totalTimeslicesInFlyMetric(driverMetrics, (int)(totalTimeslicesStarted - totalTimeslicesDone), timestamp);
                          totalBytesDeltaMetric(driverMetrics, totalBytesCreated - totalBytesExpired - totalBytesDestroyed, timestamp);
                        } else {
                          unchangedCount++;
                        }
                        changedCountMetric(driverMetrics, unchangedCount, timestamp);
-                       auto maxTimeframes = registry.get<RateLimitConfig>().maxTimeframes;
-                       if (maxTimeframes && (totalTimeframesRead - totalTimeframesConsumed) > maxTimeframes) {
-                         return;
-                       }
+
                        static const ResourceSpec shmResourceSpec{
                          .name = "shared memory",
                          .unit = "MB",
                          .api = "/shm-offer {}",
-                         .maxAvailable = (int64_t)calculateAvailableSharedMemory(registry),
+                         .maxAvailable = (int64_t)registry.get<RateLimitConfig>().maxMemory,
                          .maxQuantum = 100,
                          .minQuantum = 50,
                          .metricOfferScaleFactor = 1000000,
                        };
+                       static const ResourceSpec timesliceResourceSpec{
+                         .name = "timeslice",
+                         .unit = "timeslices",
+                         .api = "/timeslice-offer {}",
+                         .maxAvailable = (int64_t)registry.get<RateLimitConfig>().maxTimeframes,
+                         .maxQuantum = 1,
+                         .minQuantum = 1,
+                         .metricOfferScaleFactor = 1,
+                       };
                        static ResourceState shmResourceState{
                          .available = shmResourceSpec.maxAvailable,
+                       };
+                       static ResourceState timesliceResourceState{
+                         .available = timesliceResourceSpec.maxAvailable,
                        };
                        static ResourceStats shmResourceStats{
                          .enoughCount = shmResourceState.available - shmResourceSpec.minQuantum > 0 ? 1 : 0,
                          .lowCount = shmResourceState.available - shmResourceSpec.minQuantum > 0 ? 0 : 1
                        };
+                       static ResourceStats timesliceResourceStats{
+                         .enoughCount = shmResourceState.available - shmResourceSpec.minQuantum > 0 ? 1 : 0,
+                         .lowCount = shmResourceState.available - shmResourceSpec.minQuantum > 0 ? 0 : 1
+                       };
+
+                       offerResources(timesliceResourceState, timesliceResourceSpec, timesliceResourceStats,
+                                      specs, infos, manager, totalTimeframesConsumed, totalTimeslicesExpired,
+                                      totalTimeslicesStarted, totalTimeslicesDone, timestamp, driverMetrics,
+                                      availableTimeslicesMetric, unusedOfferedTimeslicesMetric, offeredTimeslicesMetric,
+                                      (void*)&sm);
 
                        offerResources(shmResourceState, shmResourceSpec, shmResourceStats,
                                       specs, infos, manager, shmOfferBytesConsumed, totalBytesExpired,
@@ -485,20 +565,20 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
                        if (dc.options.count("aod-memory-rate-limit") && dc.options["aod-memory-rate-limit"].defaulted() == false) {
                          config->maxMemory = std::stoll(dc.options["aod-memory-rate-limit"].as<std::string>()) / 1000000;
                        } else {
-                         config->maxMemory = readers * 500;
+                         config->maxMemory = readers * 2000;
                        }
-                       if (dc.options.count("timeframes-rate-limit") && dc.options["timeframes-rate-limit"].as<std::string>() == "readers") {
-                         config->maxTimeframes = readers;
-                       } else {
+                       if (dc.options.count("timeframes-rate-limit") && dc.options["timeframes-rate-limit"].defaulted() == false) {
                          config->maxTimeframes = std::stoll(dc.options["timeframes-rate-limit"].as<std::string>());
+                       } else {
+                         config->maxTimeframes = readers * DefaultsHelpers::pipelineLength();
                        }
                        static bool once = false;
                        // Until we guarantee this is called only once...
                        if (!once) {
                          O2_SIGNPOST_ID_GENERATE(sid, rate_limiting);
                          O2_SIGNPOST_EVENT_EMIT_INFO(rate_limiting, sid, "setup",
-                                                     "Rate limiting set up at %{bytes}llu MB distributed over %d readers",
-                                                     config->maxMemory, readers);
+                                                     "Rate limiting set up at %{bytes}llu MB and %llu timeframes distributed over %d readers",
+                                                     config->maxMemory, config->maxTimeframes, readers);
                          registry.registerService(ServiceRegistryHelpers::handleForService<RateLimitConfig>(config));
                          once = true;
                        } },
@@ -509,94 +589,76 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
       auto builder = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-index-builder"; });
       auto reader = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-reader"; });
       auto writer = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-writer"; });
-      auto &ac = ctx.services().get<AnalysisContext>();
-      ac.requestedAODs.clear();
-      ac.requestedDYNs.clear();
-      ac.providedDYNs.clear();
-      ac.providedTIMs.clear();
-      ac.requestedTIMs.clear();
-
+      auto& dec = ctx.services().get<DanglingEdgesContext>();
+      dec.requestedAODs.clear();
+      dec.requestedDYNs.clear();
+      dec.providedDYNs.clear();
+      dec.providedTIMs.clear();
+      dec.requestedTIMs.clear();
 
       auto inputSpecLessThan = [](InputSpec const& lhs, InputSpec const& rhs) { return DataSpecUtils::describe(lhs) < DataSpecUtils::describe(rhs); };
       auto outputSpecLessThan = [](OutputSpec const& lhs, OutputSpec const& rhs) { return DataSpecUtils::describe(lhs) < DataSpecUtils::describe(rhs); };
 
       if (builder != workflow.end()) {
         // collect currently requested IDXs
-        ac.requestedIDXs.clear();
-        for (auto& d : workflow) {
-          if (d.name == builder->name) {
-            continue;
-          }
-          for (auto& i : d.inputs) {
-            if (DataSpecUtils::partialMatch(i, header::DataOrigin{"IDX"})) {
-              auto copy = i;
-              DataSpecUtils::updateInputList(ac.requestedIDXs, std::move(copy));
-            }
-          }
+        dec.requestedIDXs.clear();
+        for (auto& d : workflow | views::exclude_by_name(builder->name)) {
+          d.inputs |
+            views::partial_match_filter(header::DataOrigin{"IDX"}) |
+            sinks::update_input_list{dec.requestedIDXs};
         }
         // recreate inputs and outputs
         builder->inputs.clear();
         builder->outputs.clear();
-        // replace AlgorithmSpec
-        //  FIXME: it should be made more generic, so it does not need replacement...
-        builder->algorithm = readers::AODReaderHelpers::indexBuilderCallback(ac.requestedIDXs);
-        AnalysisSupportHelpers::addMissingOutputsToBuilder(ac.requestedIDXs, ac.requestedAODs, ac.requestedDYNs, *builder);
+
+        // load real AlgorithmSpec before deployment
+        builder->algorithm = PluginManager::loadAlgorithmFromPlugin("O2FrameworkOnDemandTablesSupport", "IndexTableBuilder", ctx);
+        AnalysisSupportHelpers::addMissingOutputsToBuilder(dec.requestedIDXs, dec.requestedAODs, dec.requestedDYNs, *builder);
       }
 
       if (spawner != workflow.end()) {
         // collect currently requested DYNs
-        for (auto& d : workflow) {
-          if (d.name == spawner->name) {
-            continue;
-          }
-          for (auto const& i : d.inputs) {
-            if (DataSpecUtils::partialMatch(i, header::DataOrigin{"DYN"})) {
-              auto copy = i;
-              DataSpecUtils::updateInputList(ac.requestedDYNs, std::move(copy));
-            }
-          }
-          for (auto const& o : d.outputs) {
-            if (DataSpecUtils::partialMatch(o, header::DataOrigin{"DYN"})) {
-              ac.providedDYNs.emplace_back(o);
-            }
-          }
+        for (auto& d : workflow | views::exclude_by_name(spawner->name)) {
+          d.inputs |
+            views::partial_match_filter(header::DataOrigin{"DYN"}) |
+            sinks::update_input_list{dec.requestedDYNs};
+          d.outputs |
+            views::partial_match_filter(header::DataOrigin{"DYN"}) |
+            sinks::append_to{dec.providedDYNs};
         }
-        std::sort(ac.requestedDYNs.begin(), ac.requestedDYNs.end(), inputSpecLessThan);
-        std::sort(ac.providedDYNs.begin(), ac.providedDYNs.end(), outputSpecLessThan);
-        ac.spawnerInputs.clear();
-        for (auto& input : ac.requestedDYNs) {
-          if (std::none_of(ac.providedDYNs.begin(), ac.providedDYNs.end(), [&input](auto const& x) { return DataSpecUtils::match(input, x); })) {
-            ac.spawnerInputs.emplace_back(input);
-          }
-        }
+        std::sort(dec.requestedDYNs.begin(), dec.requestedDYNs.end(), inputSpecLessThan);
+        std::sort(dec.providedDYNs.begin(), dec.providedDYNs.end(), outputSpecLessThan);
+        dec.spawnerInputs.clear();
+        dec.requestedDYNs |
+          views::filter_not_matching(dec.providedDYNs) |
+          sinks::append_to{dec.spawnerInputs};
         // recreate inputs and outputs
         spawner->outputs.clear();
         spawner->inputs.clear();
-        // replace AlgorithmSpec
-        // FIXME: it should be made more generic, so it does not need replacement...
-        spawner->algorithm = readers::AODReaderHelpers::aodSpawnerCallback(ac.spawnerInputs);
-        AnalysisSupportHelpers::addMissingOutputsToSpawner({}, ac.spawnerInputs, ac.requestedAODs, *spawner);
+
+        // load real AlgorithmSpec before deployment
+        spawner->algorithm = PluginManager::loadAlgorithmFromPlugin("O2FrameworkOnDemandTablesSupport", "ExtendedTableSpawner", ctx);
+        AnalysisSupportHelpers::addMissingOutputsToSpawner({}, dec.spawnerInputs, dec.requestedAODs, *spawner);
       }
 
       if (analysisCCDB != workflow.end()) {
         for (auto& d : workflow | views::exclude_by_name(analysisCCDB->name)) {
-          d.inputs | views::partial_match_filter(header::DataOrigin{"ATIM"}) | sinks::update_input_list{ac.requestedTIMs};
-          d.outputs | views::partial_match_filter(header::DataOrigin{"ATIM"}) | sinks::append_to{ac.providedTIMs};
+          d.inputs | views::partial_match_filter(header::DataOrigin{"ATIM"}) | sinks::update_input_list{dec.requestedTIMs};
+          d.outputs | views::partial_match_filter(header::DataOrigin{"ATIM"}) | sinks::append_to{dec.providedTIMs};
         }
-        std::sort(ac.requestedTIMs.begin(), ac.requestedTIMs.end(), inputSpecLessThan);
-        std::sort(ac.providedTIMs.begin(), ac.providedTIMs.end(), outputSpecLessThan);
+        std::sort(dec.requestedTIMs.begin(), dec.requestedTIMs.end(), inputSpecLessThan);
+        std::sort(dec.providedTIMs.begin(), dec.providedTIMs.end(), outputSpecLessThan);
         // Use ranges::to<std::vector<>> in C++23...
-        ac.analysisCCDBInputs.clear();
-        ac.requestedTIMs | views::filter_not_matching(ac.providedTIMs) | sinks::append_to{ac.analysisCCDBInputs};
+        dec.analysisCCDBInputs.clear();
+        dec.requestedTIMs | views::filter_not_matching(dec.providedTIMs) | sinks::append_to{dec.analysisCCDBInputs};
 
         // recreate inputs and outputs
         analysisCCDB->outputs.clear();
         analysisCCDB->inputs.clear();
-        // replace AlgorithmSpec
-        // FIXME: it should be made more generic, so it does not need replacement...
+        // load real AlgorithmSpec before deployment
         // FIXME how can I make the lookup depend on DYN tables as well??
         analysisCCDB->algorithm = PluginManager::loadAlgorithmFromPlugin("O2FrameworkCCDBSupport", "AnalysisCCDBFetcherPlugin", ctx);
-        AnalysisSupportHelpers::addMissingOutputsToAnalysisCCDBFetcher({}, ac.analysisCCDBInputs, ac.requestedAODs, ac.requestedDYNs, *analysisCCDB);
+        AnalysisSupportHelpers::addMissingOutputsToBuilder(dec.analysisCCDBInputs, dec.requestedAODs, dec.requestedDYNs, *analysisCCDB);
       }
 
       if (writer != workflow.end()) {
@@ -607,26 +669,25 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
         // If reader and/or builder were adjusted, remove unneeded outputs
         // update currently requested AODs
         for (auto& d : workflow) {
-          for (auto const& i : d.inputs) {
-            if (DataSpecUtils::partialMatch(i, AODOrigins)) {
-              auto copy = i;
-              DataSpecUtils::updateInputList(ac.requestedAODs, std::move(copy));
-            }
-          }
+          d.inputs |
+            views::partial_match_filter(AODOrigins) |
+            sinks::update_input_list{dec.requestedAODs};
         }
 
         // remove unmatched outputs
         auto o_end = std::remove_if(reader->outputs.begin(), reader->outputs.end(), [&](OutputSpec const& o) {
-          return !DataSpecUtils::partialMatch(o, o2::header::DataDescription{"TFNumber"}) && !DataSpecUtils::partialMatch(o, o2::header::DataDescription{"TFFilename"}) && std::none_of(ac.requestedAODs.begin(), ac.requestedAODs.end(), [&](InputSpec const& i) { return DataSpecUtils::match(i, o); });
+          return !DataSpecUtils::partialMatch(o, o2::header::DataDescription{"TFNumber"}) && !DataSpecUtils::partialMatch(o, o2::header::DataDescription{"TFFilename"}) && std::none_of(dec.requestedAODs.begin(), dec.requestedAODs.end(), [&](InputSpec const& i) { return DataSpecUtils::match(i, o); });
         });
         reader->outputs.erase(o_end, reader->outputs.end());
         if (reader->outputs.empty()) {
           // nothing to read
           workflow.erase(reader);
+        } else {
+          // load reader algorithm before deployment
+          auto&& algo = PluginManager::loadAlgorithmFromPlugin("O2FrameworkAnalysisSupport", "ROOTFileReader", ctx);
+          reader->algorithm = CommonDataProcessors::wrapWithTimesliceConsumption(algo);
         }
       }
-
-
 
       // replace writer as some outputs may have become dangling and some are now consumed
       auto [outputsInputs, isDangling] = WorkflowHelpers::analyzeOutputs(workflow);
@@ -637,22 +698,22 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
       // select outputs of type AOD which need to be saved
       // ATTENTION: if there are dangling outputs the getGlobalAODSink
       // has to be created in any case!
-      ac.outputsInputsAOD.clear();
+      dec.outputsInputsAOD.clear();
 
       for (auto ii = 0u; ii < outputsInputs.size(); ii++) {
         if (DataSpecUtils::partialMatch(outputsInputs[ii], extendedAODOrigins)) {
           auto ds = dod->getDataOutputDescriptors(outputsInputs[ii]);
           if (!ds.empty() || isDangling[ii]) {
-            ac.outputsInputsAOD.emplace_back(outputsInputs[ii]);
+            dec.outputsInputsAOD.emplace_back(outputsInputs[ii]);
           }
         }
       }
 
       // file sink for any AOD output
-      if (!ac.outputsInputsAOD.empty()) {
+      if (!dec.outputsInputsAOD.empty()) {
         // add TFNumber and TFFilename as input to the writer
-        ac.outputsInputsAOD.emplace_back("tfn", "TFN", "TFNumber");
-        ac.outputsInputsAOD.emplace_back("tff", "TFF", "TFFilename");
+        dec.outputsInputsAOD.emplace_back("tfn", "TFN", "TFNumber");
+        dec.outputsInputsAOD.emplace_back("tff", "TFF", "TFFilename");
         workflow.push_back(AnalysisSupportHelpers::getGlobalAODSink(ctx));
       }
       // Move the dummy sink at the end, if needed

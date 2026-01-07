@@ -27,13 +27,12 @@
 #include <unordered_set>
 #include <atomic>
 
-#include "GPUDataTypes.h"
+#include "GPUDataTypesIO.h"
 #include "GPUMemoryResource.h"
 #include "GPUOutputControl.h"
-
-/*#include "GPUParam.h"
-#include "GPUSettings.h"
-#include "GPULogging.h"*/
+#include "GPUParam.h"
+#include "GPUConstantMem.h"
+#include "GPUDef.h"
 
 namespace o2::its
 {
@@ -84,12 +83,12 @@ class GPUReconstruction
   // General definitions
   constexpr static uint32_t NSECTORS = GPUCA_NSECTORS;
 
-  using GeometryType = GPUDataTypes::GeometryType;
-  using DeviceType = GPUDataTypes::DeviceType;
-  using RecoStep = GPUDataTypes::RecoStep;
-  using GeneralStep = GPUDataTypes::GeneralStep;
-  using RecoStepField = GPUDataTypes::RecoStepField;
-  using InOutTypeField = GPUDataTypes::InOutTypeField;
+  using GeometryType = gpudatatypes::GeometryType;
+  using DeviceType = gpudatatypes::DeviceType;
+  using RecoStep = gpudatatypes::RecoStep;
+  using GeneralStep = gpudatatypes::GeneralStep;
+  using RecoStepField = gpudatatypes::RecoStepField;
+  using InOutTypeField = gpudatatypes::InOutTypeField;
 
   static constexpr const char* const GEOMETRY_TYPE_NAMES[] = {"INVALID", "ALIROOT", "O2"};
 #ifdef GPUCA_TPC_GEOMETRY_O2
@@ -280,7 +279,7 @@ class GPUReconstruction
   static std::string getBackendVersions();
 
   // Private helper functions for memory management
-  size_t AllocateRegisteredMemoryHelper(GPUMemoryResource* res, void*& ptr, void*& memorypool, void* memorybase, size_t memorysize, void* (GPUMemoryResource::*SetPointers)(void*), void*& memorypoolend, const char* device);
+  size_t AllocateRegisteredMemoryHelper(GPUMemoryResource* res, void*& ptr, void*& memorypool, void* memorybase, size_t memorysize, void* (GPUMemoryResource::*SetPointers)(void*) const, void*& memorypoolend, const char* device);
   size_t AllocateRegisteredPermanentMemory();
 
   // Private helper functions for reading / writing / allocating IO buffer from/to file

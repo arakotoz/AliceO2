@@ -19,6 +19,7 @@
 #include "backend/GPUDisplayBackend.h"
 #include "GPUDisplayInterface.h"
 #include "GPUSettings.h"
+#include "GPUDefConstantsAndSettings.h"
 
 #include <array>
 #include <mutex>
@@ -36,6 +37,7 @@ class GPUTPCTracker;
 struct GPUParam;
 class GPUQA;
 class GPUTRDGeometry;
+class GPUTPCGMPropagator;
 
 class GPUDisplay : public GPUDisplayInterface
 {

@@ -12,10 +12,10 @@
 #add_compile_options(-O0 -g -fPIC -fsanitize=address)
 #add_link_options(-fsanitize=address)
 
-add_subdirectory(data)
 add_subdirectory(simulation)
 add_subdirectory(alignment)
 add_subdirectory(base)
 add_subdirectory(workflow)
 add_subdirectory(reconstruction)
 add_subdirectory(macros)
+add_subdirectory(study)

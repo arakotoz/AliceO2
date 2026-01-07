@@ -24,8 +24,8 @@
 #include "DataFormatsITSMFT/TopologyDictionary.h"
 #include "DataFormatsCalibration/MeanVertexObject.h"
 
-#include "GPUDataTypes.h"
-#include "GPUO2Interface.h"
+#include "GPUDataTypesIO.h"
+#include "GPUO2ExternalUser.h"
 #include "GPUChainITS.h"
 
 #include <oneapi/tbb/task_arena.h>

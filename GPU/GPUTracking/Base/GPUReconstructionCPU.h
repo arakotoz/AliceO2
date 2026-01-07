@@ -48,7 +48,7 @@ class GPUReconstructionCPU : public GPUReconstructionProcessing::KernelInterface
 
   int32_t RunChains() override;
 
-  void UpdateParamOccupancyMap(const uint32_t* mapHost, const uint32_t* mapGPU, uint32_t occupancyTotal, int32_t stream = -1);
+  void UpdateParamOccupancyMap(const uint32_t* mapHost, const uint32_t* mapGPU, uint32_t occupancyTotal, uint32_t mapSize, int32_t stream = -1, deviceEvent* ev = nullptr);
 
  protected:
   struct GPUProcessorProcessors : public GPUProcessor {
@@ -87,8 +87,6 @@ class GPUReconstructionCPU : public GPUReconstructionProcessing::KernelInterface
   int32_t InitDevice() override;
   int32_t ExitDevice() override;
   int32_t GetThread();
-
-  virtual int32_t DoStuckProtection(int32_t stream, deviceEvent event) { return 0; }
 
   // Pointers to tracker classes
   GPUProcessorProcessors mProcShadow; // Host copy of tracker objects that will be used on the GPU

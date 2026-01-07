@@ -16,6 +16,7 @@
 #define GPUQA_H
 
 #include "GPUSettings.h"
+#include "GPUDataTypesQA.h"
 struct AliHLTTPCClusterMCWeight;
 class TH1F;
 class TH2F;
@@ -62,6 +63,8 @@ class GPUQA
 #else
 
 #include "GPUTPCDef.h"
+#include "GPUDataTypesIO.h"
+#include <cstdio>
 #include <cmath>
 #include <vector>
 #include <memory>
@@ -86,6 +89,7 @@ namespace o2::gpu
 class GPUChainTracking;
 struct GPUParam;
 struct GPUTPCMCInfo;
+struct checkClusterStateResult;
 namespace internal
 {
 struct GPUQAGarbageCollection;
@@ -144,17 +148,7 @@ class GPUQA
 
   static constexpr int32_t MC_LABEL_INVALID = -1e9;
 
-  enum QA_TASKS {
-    taskTrackingEff = 1,
-    taskTrackingRes = 2,
-    taskTrackingResPull = 4,
-    taskClusterAttach = 8,
-    taskTrackStatistics = 16,
-    taskClusterCounts = 32,
-    taskDefault = 63,
-    taskDefaultPostprocess = 31,
-    tasksNoQC = 56
-  };
+  using enum gpudatatypes::gpuqa::gpuQATaskIds;
 
  private:
   struct additionalMCParameters {
@@ -172,12 +166,12 @@ class GPUQA
   void CopyO2MCtoIOPtr(GPUTrackingInOutPointers* ptr);
   template <class T>
   void SetAxisSize(T* e);
-  void SetLegend(TLegend* l);
+  void SetLegend(TLegend* l, bool bigText = false);
   double* CreateLogAxis(int32_t nbins, float xmin, float xmax);
   void ChangePadTitleSize(TPad* p, float size);
   void DrawHisto(TH1* histo, char* filename, char* options);
   void doPerfFigure(float x, float y, float size);
-  void GetName(char* fname, int32_t k);
+  void GetName(char* fname, int32_t k, bool noDash = false);
   template <class T>
   T* GetHist(T*& ee, std::vector<std::unique_ptr<TFile>>& tin, int32_t k, int32_t nNewInput);
 
@@ -230,13 +224,13 @@ class GPUQA
   const auto& GetClusterLabels();
   bool mcPresent();
 
+  template <bool COUNT = false, class T = void>
+  checkClusterStateResult checkClusterState(uint32_t attach, T* counts = nullptr) const;
+
   GPUChainTracking* mTracking;
   const GPUSettingsQA& mConfig;
   const GPUParam* mParam;
 
-  const char* str_perf_figure_1 = "ALICE Performance 2018/03/20";
-  // const char* str_perf_figure_2 = "2015, MC pp, #sqrt{s} = 5.02 TeV";
-  const char* str_perf_figure_2 = "2015, MC Pb-Pb, #sqrt{s_{NN}} = 5.02 TeV";
   //-------------------------
 
   std::vector<mcLabelI_t> mTrackMCLabels;
@@ -259,7 +253,7 @@ class GPUQA
   std::vector<additionalClusterParameters> mClusterParam;
   int32_t mNTotalFakes = 0;
 
-  TH1F* mEff[5][2][2][5]; // eff,clone,fake,all,all-fake - findable - secondaries - y,z,phi,eta,pt - work,result
+  TH1F* mEff[6][2][2][5]; // eff,clone,fake,all,all-fake - findable - secondaries - y,z,phi,eta,pt - work,result
   TGraphAsymmErrors* mEffResult[4][2][2][5];
   TCanvas* mCEff[6];
   TPad* mPEff[6][4];
@@ -315,6 +309,17 @@ class GPUQA
   TCanvas* mCClXY;
   TPad* mPClXY;
 
+  TH2F* mClRej[3];
+  TH1D* mClRejP;
+  TCanvas* mCClRej[3];
+  TCanvas* mCClRejP;
+  TPad* mPClRej[3];
+  TPad* mPClRejP;
+
+  TH2F* mPadRow[4];
+  TCanvas* mCPadRow[4];
+  TPad* mPPadRow[4];
+
   std::vector<TH2F*> mHistClusterCount;
 
   std::vector<TH1F>* mHist1D = nullptr;
@@ -353,6 +358,7 @@ class GPUQA
   int32_t mMCTrackMin = -1, mMCTrackMax = -1;
 
   const o2::tpc::ClusterNativeAccess* mClNative = nullptr;
+  FILE* mTextDump = nullptr;
 };
 
 inline bool GPUQA::SuppressTrack(int32_t iTrack) const { return (mConfig.matchMCLabels.size() && !mGoodTracks[mNEvents][iTrack]); }
