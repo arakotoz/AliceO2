@@ -16,6 +16,7 @@ o2_add_library(Framework
                        src/ArrowTableSlicingCache.cxx
                        src/AnalysisDataModel.cxx
                        src/AnalysisSupportHelpers.cxx
+                       src/AnalysisTask.cxx
                        src/ASoA.cxx
                        src/ASoAHelpers.cxx
                        src/AsyncQueue.cxx
@@ -108,6 +109,7 @@ o2_add_library(Framework
                        src/SimpleOptionsRetriever.cxx
                        src/O2ControlHelpers.cxx
                        src/O2ControlLabels.cxx
+                       src/CommonLabels.cxx
                        src/O2ControlParameters.cxx
                        src/O2DataModelHelpers.cxx
                        src/OutputSpec.cxx
@@ -253,6 +255,7 @@ add_executable(o2-test-framework-core
               test/test_TimeParallelPipelining.cxx
               test/test_TimesliceIndex.cxx
               test/test_TypeTraits.cxx
+              test/test_TypeToTaskName.cxx
               test/test_TopologyPolicies.cxx
               test/test_Variants.cxx
               test/test_WorkflowHelpers.cxx

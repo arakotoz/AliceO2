@@ -1,4 +1,4 @@
-// Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+// Copyright 2024-2025 CERN and copyright holders of ALICE O2.
 // See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
 // All rights not expressly granted are reserved.
 //
@@ -9,14 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-#include "ITSReconstruction/CookedConfigParam.h"
+/// \author M+Giacalone - September 2025
 
-namespace o2
-{
-namespace its
-{
-static auto& sITSCookedTrackerParam = o2::its::CookedConfigParam::Instance();
-
-O2ParamImpl(o2::its::CookedConfigParam);
-} // namespace its
-} // namespace o2
+#include "Generators/TPCLoopersParam.h"
+O2ParamImpl(o2::eventgen::GenTPCLoopersParam);

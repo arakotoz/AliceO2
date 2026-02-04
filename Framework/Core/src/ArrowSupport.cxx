@@ -531,13 +531,7 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
                                                   dh->dataOrigin.str, dh->dataDescription.str);
                            continue;
                          }
-                         bool forwarded = false;
-                         for (auto const& forward : ctx.services().get<DeviceSpec const>().forwards) {
-                           if (DataSpecUtils::match(forward.matcher, *dh)) {
-                             forwarded = true;
-                             break;
-                           }
-                         }
+                         bool forwarded = std::ranges::any_of(ctx.services().get<DeviceSpec const>().forwards, [&dh](auto const& forward) { return DataSpecUtils::match(forward.matcher, *dh); });
                          if (forwarded) {
                            O2_SIGNPOST_EVENT_EMIT(rate_limiting, sid, "offer",
                                                   "Message %{public}.4s/%{public}.16s is forwarded so we are not returning its memory.",
@@ -584,11 +578,11 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
                        } },
     .adjustTopology = [](WorkflowSpecNode& node, ConfigContext const& ctx) {
       auto& workflow = node.specs;
-      auto spawner = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-spawner"; });
-      auto analysisCCDB = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-ccdb"; });
-      auto builder = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-index-builder"; });
-      auto reader = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-reader"; });
-      auto writer = std::find_if(workflow.begin(), workflow.end(), [](DataProcessorSpec const& spec) { return spec.name == "internal-dpl-aod-writer"; });
+      auto spawner = std::ranges::find_if(workflow, [](DataProcessorSpec const& spec) { return spec.name.starts_with("internal-dpl-aod-spawner"); });
+      auto analysisCCDB = std::ranges::find_if(workflow, [](DataProcessorSpec const& spec) { return spec.name.starts_with("internal-dpl-aod-ccdb"); });
+      auto builder = std::ranges::find_if(workflow, [](DataProcessorSpec const& spec) { return spec.name.starts_with("internal-dpl-aod-index-builder"); });
+      auto reader = std::ranges::find_if(workflow, [](DataProcessorSpec const& spec) { return spec.name.starts_with("internal-dpl-aod-reader"); });
+      auto writer = std::ranges::find_if(workflow, [](DataProcessorSpec const& spec) { return spec.name.starts_with("internal-dpl-aod-writer"); });
       auto& dec = ctx.services().get<DanglingEdgesContext>();
       dec.requestedAODs.clear();
       dec.requestedDYNs.clear();
@@ -626,8 +620,8 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
             views::partial_match_filter(header::DataOrigin{"DYN"}) |
             sinks::append_to{dec.providedDYNs};
         }
-        std::sort(dec.requestedDYNs.begin(), dec.requestedDYNs.end(), inputSpecLessThan);
-        std::sort(dec.providedDYNs.begin(), dec.providedDYNs.end(), outputSpecLessThan);
+        std::ranges::sort(dec.requestedDYNs, inputSpecLessThan);
+        std::ranges::sort(dec.providedDYNs, outputSpecLessThan);
         dec.spawnerInputs.clear();
         dec.requestedDYNs |
           views::filter_not_matching(dec.providedDYNs) |
@@ -646,8 +640,8 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
           d.inputs | views::partial_match_filter(header::DataOrigin{"ATIM"}) | sinks::update_input_list{dec.requestedTIMs};
           d.outputs | views::partial_match_filter(header::DataOrigin{"ATIM"}) | sinks::append_to{dec.providedTIMs};
         }
-        std::sort(dec.requestedTIMs.begin(), dec.requestedTIMs.end(), inputSpecLessThan);
-        std::sort(dec.providedTIMs.begin(), dec.providedTIMs.end(), outputSpecLessThan);
+        std::ranges::sort(dec.requestedTIMs, inputSpecLessThan);
+        std::ranges::sort(dec.providedTIMs, outputSpecLessThan);
         // Use ranges::to<std::vector<>> in C++23...
         dec.analysisCCDBInputs.clear();
         dec.requestedTIMs | views::filter_not_matching(dec.providedTIMs) | sinks::append_to{dec.analysisCCDBInputs};
@@ -684,38 +678,15 @@ o2::framework::ServiceSpec ArrowSupport::arrowBackendSpec()
           workflow.erase(reader);
         } else {
           // load reader algorithm before deployment
-          auto&& algo = PluginManager::loadAlgorithmFromPlugin("O2FrameworkAnalysisSupport", "ROOTFileReader", ctx);
-          reader->algorithm = CommonDataProcessors::wrapWithTimesliceConsumption(algo);
+          auto mctracks2aod = std::find_if(workflow.begin(), workflow.end(), [](auto const& x) { return x.name == "mctracks-to-aod"; });
+          if (mctracks2aod == workflow.end()) { // add normal reader algorithm only if no on-the-fly generator is injected
+            reader->algorithm = CommonDataProcessors::wrapWithTimesliceConsumption(PluginManager::loadAlgorithmFromPlugin("O2FrameworkAnalysisSupport", "ROOTFileReader", ctx));
+          } // otherwise the algorithm was set in injectServiceDevices
         }
       }
 
-      // replace writer as some outputs may have become dangling and some are now consumed
-      auto [outputsInputs, isDangling] = WorkflowHelpers::analyzeOutputs(workflow);
+      WorkflowHelpers::injectAODWriter(workflow, ctx);
 
-      // create DataOutputDescriptor
-      std::shared_ptr<DataOutputDirector> dod = AnalysisSupportHelpers::getDataOutputDirector(ctx);
-
-      // select outputs of type AOD which need to be saved
-      // ATTENTION: if there are dangling outputs the getGlobalAODSink
-      // has to be created in any case!
-      dec.outputsInputsAOD.clear();
-
-      for (auto ii = 0u; ii < outputsInputs.size(); ii++) {
-        if (DataSpecUtils::partialMatch(outputsInputs[ii], extendedAODOrigins)) {
-          auto ds = dod->getDataOutputDescriptors(outputsInputs[ii]);
-          if (!ds.empty() || isDangling[ii]) {
-            dec.outputsInputsAOD.emplace_back(outputsInputs[ii]);
-          }
-        }
-      }
-
-      // file sink for any AOD output
-      if (!dec.outputsInputsAOD.empty()) {
-        // add TFNumber and TFFilename as input to the writer
-        dec.outputsInputsAOD.emplace_back("tfn", "TFN", "TFNumber");
-        dec.outputsInputsAOD.emplace_back("tff", "TFF", "TFFilename");
-        workflow.push_back(AnalysisSupportHelpers::getGlobalAODSink(ctx));
-      }
       // Move the dummy sink at the end, if needed
       for (size_t i = 0; i < workflow.size(); ++i) {
         if (workflow[i].name == "internal-dpl-injected-dummy-sink") {
@@ -751,7 +722,7 @@ o2::framework::ServiceSpec ArrowSupport::arrowTableSlicingCacheSpec()
       auto& caches = service->bindingsKeys;
       for (auto i = 0u; i < caches.size(); ++i) {
         if (caches[i].enabled && pc.inputs().getPos(caches[i].binding.c_str()) >= 0) {
-          auto status = service->updateCacheEntry(i, pc.inputs().get<TableConsumer>(caches[i].binding.c_str())->asArrowTable());
+          auto status = service->updateCacheEntry(i, pc.inputs().get<TableConsumer>(caches[i].matcher)->asArrowTable());
           if (!status.ok()) {
             throw runtime_error_f("Failed to update slice cache for %s/%s", caches[i].binding.c_str(), caches[i].key.c_str());
           }
@@ -760,7 +731,7 @@ o2::framework::ServiceSpec ArrowSupport::arrowTableSlicingCacheSpec()
       auto& unsortedCaches = service->bindingsKeysUnsorted;
       for (auto i = 0u; i < unsortedCaches.size(); ++i) {
         if (unsortedCaches[i].enabled && pc.inputs().getPos(unsortedCaches[i].binding.c_str()) >= 0) {
-          auto status = service->updateCacheEntryUnsorted(i, pc.inputs().get<TableConsumer>(unsortedCaches[i].binding.c_str())->asArrowTable());
+          auto status = service->updateCacheEntryUnsorted(i, pc.inputs().get<TableConsumer>(unsortedCaches[i].matcher)->asArrowTable());
           if (!status.ok()) {
             throw runtime_error_f("failed to update slice cache (unsorted) for %s/%s", unsortedCaches[i].binding.c_str(), unsortedCaches[i].key.c_str());
           }

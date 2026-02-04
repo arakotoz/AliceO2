@@ -357,7 +357,7 @@ void TrackerTraits<nLayers>::computeLayerCells(const int iteration)
               break;
             }
 
-            if (!track.correctForMaterial(mTrkParams[0].LayerxX0[iLayer + iC], mTrkParams[0].LayerxX0[iLayer] * constants::Radl * constants::Rho, true)) {
+            if (!track.correctForMaterial(mTrkParams[0].LayerxX0[iLayer + iC], mTrkParams[0].LayerxX0[iLayer + iC] * constants::Radl * constants::Rho, true)) {
               break;
             }
 
@@ -778,6 +778,22 @@ void TrackerTraits<nLayers>::findRoads(const int iteration)
         if (!fitSuccess || temporaryTrack.getPt() < mTrkParams[iteration].MinPt[mTrkParams[iteration].NLayers - temporaryTrack.getNClusters()]) {
           return 0;
         }
+        if (mTrkParams[0].RepeatRefitOut) { // repeat outward refit seeding and linearizing with the stable inward fit result
+          o2::track::TrackParCov saveInw{temporaryTrack};
+          linRef = saveInw; // use refitted track as lin.reference
+          float saveChi2 = temporaryTrack.getChi2();
+          temporaryTrack.resetCovariance();
+          temporaryTrack.setCov(temporaryTrack.getQ2Pt() * temporaryTrack.getQ2Pt() * temporaryTrack.getCov()[o2::track::CovLabels::kSigQ2Pt2], o2::track::CovLabels::kSigQ2Pt2);
+          temporaryTrack.setChi2(0);
+          fitSuccess = fitTrack(temporaryTrack, 0, mTrkParams[0].NLayers, 1, mTrkParams[0].MaxChi2ClusterAttachment, mTrkParams[0].MaxChi2NDF, o2::constants::math::VeryBig, 0, &linRef);
+          if (!fitSuccess) {
+            return 0;
+          }
+          temporaryTrack.getParamOut() = temporaryTrack.getParamIn();
+          temporaryTrack.getParamIn() = saveInw;
+          temporaryTrack.setChi2(saveChi2);
+        }
+
         if constexpr (decltype(Tag)::value == PassMode::OnePass::value) {
           tracks.push_back(temporaryTrack);
         } else if constexpr (decltype(Tag)::value == PassMode::TwoPassCount::value) {
@@ -1311,5 +1327,9 @@ void TrackerTraits<nLayers>::setNThreads(int n, std::shared_ptr<tbb::task_arena>
 }
 
 template class TrackerTraits<7>;
+// ALICE3 upgrade
+#ifdef ENABLE_UPGRADES
+template class TrackerTraits<11>;
+#endif
 
 } // namespace o2::its
